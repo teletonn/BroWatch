@@ -66,6 +66,10 @@
 #define LOAD_FONT2
 #define LOAD_FONT4
 #define SMOOTH_FONT
+// BroWatch: the GFX free-font renderer, for the Russian face (RuCyr8 in
+// include/ru_font.h, drawn via setFreeFont in Theme::printRU). See
+// cyd_user_setup.h for the cost/why.
+#define LOAD_GFXFF
 
 #define TFT_INVERSION_OFF
 #define TFT_RGB_ORDER TFT_RGB

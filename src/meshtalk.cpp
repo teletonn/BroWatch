@@ -1015,7 +1015,10 @@ bool takeRead(char* who, size_t cap) {
 const char* lineText(const Message& m) {
     if (m.text) return m.body;
     if (m.unknownLine) return "(a line this build doesn't know)";
-    return MeshMsg::CANNED[m.canned < MeshMsg::CANNED_N ? m.canned : 0];
+    const uint8_t idx = m.canned < MeshMsg::CANNED_N ? m.canned : 0;
+    // BroWatch: the air carries the index, so a RU board shows the same
+    // line in Russian. Typed (Latin-charset) bodies stay as they are.
+    return MeshMsg::cannedDisplay(idx, Settings::lang());
 }
 
 } // namespace MeshTalk

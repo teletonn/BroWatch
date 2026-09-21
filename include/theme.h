@@ -635,6 +635,19 @@ namespace Theme {
     uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
                      char lines[][48], uint8_t maxLines);
 
+    // ---- Russian text (BroWatch) ---------------------------------------------
+    // Mixed ASCII/Cyrillic output for UI strings when Settings::lang()==1.
+    // ASCII goes through the normal GLCD path, Cyrillic through RuCyr8
+    // (include/ru_font.h, U+0401..U+0451). Width/wrap mirror textWidth()/
+    // wrapText() but measure glyphs (RuText), not bytes: strlen lies 2x on
+    // Cyrillic. Callers branch on lang themselves, so the EN path stays
+    // pixel-identical. A Cyrillic codepoint with no glyph (gaps in the
+    // RuCyr8 range) prints as '?', never as nothing.
+    void    printRU(TFT_eSPI& t, const char* s);
+    int     textWidthRU(TFT_eSPI& t, const char* s);
+    uint8_t wrapTextRU(TFT_eSPI& t, const char* text, int maxW,
+                       char lines[][48], uint8_t maxLines);
+
     // Modal "MORE INFO" explanation panel -- shared by LOG's confirm
     // panel and ALERT's own MORE INFO button (the two screens are never
     // showing it at the same time, so one implementation is enough).

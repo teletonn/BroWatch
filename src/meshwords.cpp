@@ -156,6 +156,69 @@ const char* const CANNED[] = {
 };
 const uint8_t CANNED_N = (uint8_t)(sizeof(CANNED) / sizeof(CANNED[0]));
 
+// ---- Russian display strings (BroWatch) --------------------------------------
+// Same indices, same order as CANNED above -- the air carries the index, so
+// both languages always mean the same thing. Adapted, not translated word
+// for word: the same situation, the way it is said in a Russian chat.
+// Short on purpose: one speech-bubble line, one picker row.
+const char* const CANNED_RU[] = {
+    "Уже еду.",            // 0  On my way.
+    "Ты где?",             // 1  Where are you?
+    "У меня чисто.",       // 2  All clear here.
+    "Тут что-то есть.",    // 3  Something's nearby.
+    "Выхожу.",             // 4  Heading out.
+    "Ща вернусь.",         // 5  Be right back.
+    "Ага.",                // 6  Yes.
+    "Не-а.",               // 7  No.
+    "Может.",              // 8  Maybe.
+    "Жду у машины.",       // 9  Meet at the car.
+    "Смотри в оба.",       // 10 Watch your back.
+    "Камера слева.",       // 11 Camera on my left.
+    "Тут камера Флок.",    // 12 Found a Flock cam.
+    "Замри.",              // 13 Stay put.
+    "Давай ко мне.",       // 14 Come to me.
+    "Сваливаю.",           // 15 Leaving now.
+    "Пять минут.",         // 16 Five minutes.
+    "Опаздываю.",          // 17 Running late.
+    "Ха.",                 // 18 Ha.
+    "Найс.",               // 19 Nice.
+    "Спасибо.",            // 20 Thanks.
+    "Перекус?",            // 21 Snacks?
+    "Хвост за тобой?",     // 22 Is it following you?
+    "Ухожу в тень.",       // 23 Going dark.
+    "Копы впереди.",       // 24 Cop car ahead.
+    "Дрон сверху.",        // 25 Drone overhead.
+    "Камера на номера.",   // 26 ALPR on the pole.
+    "Их уже двое.",        // 27 Two of them now.
+    "Уже ушли.",           // 28 It's gone now.
+    "Я в порядке.",        // 29 I'm safe.
+    "Сюда не иди.",        // 30 Don't come here.
+    "Разворачивайся.",     // 31 Turn around.
+    "За мной хвост.",      // 32 Being followed.
+    "Ты в порядке?",       // 33 You okay?
+    "Ты на месте?",        // 34 Still there?
+    "Говорить можешь?",    // 35 Can you talk?
+    "Куда дальше?",        // 36 Which way?
+    "Сколько их?",         // 37 How many?
+    "Подвезти?",           // 38 Need a ride?
+    "Набери как сможешь.", // 39 Call when you can.
+    "Принял.",             // 40 Got it.
+    "Уже делаю.",          // 41 On it.
+    "Пока нет.",           // 42 Not yet.
+    "Вас понял.",          // 43 Copy that.
+    "Сквач, отбой.",       // 44 Squatch out.
+    "Мощно, если так.",    // 45 Big if true.
+    "Бип-буп.",            // 46 Beep boop.
+    "Будь сквачем.",       // 47 Stay squachy.
+};
+const uint8_t CANNED_RU_N = (uint8_t)(sizeof(CANNED_RU) / sizeof(CANNED_RU[0]));
+static_assert(sizeof(CANNED_RU) / sizeof(CANNED_RU[0]) == sizeof(CANNED) / sizeof(CANNED[0]),
+              "CANNED_RU must mirror CANNED index for index");
+
+const char* const CANNED_TAB_NAME_RU[CANNED_TABS] = {
+    "ПУТЬ", "ВИЖУ", "СТАТУС", "ВОПРОС", "ОТВЕТ", "СКВАЧ",
+};
+
 // ---- the picker's tabs -------------------------------------------------------
 // PRESENTATION ONLY. Unlike the indices above, nothing here goes on the air, so
 // these may be reordered, renamed or regrouped in any release without breaking

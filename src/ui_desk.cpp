@@ -198,10 +198,14 @@ constexpr uint16_t XP_CLOSE = 0xD2A6;    // #D65434
 
 // Three lines: a full 48-character message needs them on a portrait screen,
 // and wrapText runs the last row long rather than dropping words.
+// BroWatch RU: font 2 has no Cyrillic, so a RU board wraps/measures/prints
+// with the font-1 mixedface instead (see drawRedBubble's note).
 static uint8_t messageLines(TFT_eSPI& t, char rows[][48]) {
-    Theme::bubbleFontOn(t);
-    const uint8_t n = Theme::wrapText(t, MeshTalk::lineText(MeshTalk::inbox()), XP_W - 8 - 14, rows, 3);
-    Theme::bubbleFontOff(t);
+    const bool ru = Settings::lang() == 1;
+    if (!ru) Theme::bubbleFontOn(t);
+    const uint8_t n = ru ? Theme::wrapTextRU(t, MeshTalk::lineText(MeshTalk::inbox()), XP_W - 8 - 14, rows, 3)
+                         : Theme::wrapText(t, MeshTalk::lineText(MeshTalk::inbox()), XP_W - 8 - 14, rows, 3);
+    if (!ru) Theme::bubbleFontOff(t);
     return n;
 }
 
@@ -210,7 +214,8 @@ static uint8_t messageLines(TFT_eSPI& t, char rows[][48]) {
 static int messageBoxH(TFT_eSPI& t) {
     char rows[3][48];
     const uint8_t n = messageLines(t, rows);
-    return XP_TITLE + 6 + n * (Theme::bubbleTextH() + 1) + 10 + 2;
+    const int lineH = (Settings::lang() == 1) ? 10 : Theme::bubbleTextH() + 1;
+    return XP_TITLE + 6 + n * lineH + 10 + 2;
 }
 
 // The box drops out from behind the clock's plate when a message lands and
@@ -276,14 +281,15 @@ static void drawMessageBox(TFT_eSPI& t, int restTop, float p, uint32_t now) {
     }
     char rows[3][48];
     const uint8_t n = messageLines(t, rows);
-    Theme::bubbleFontOn(t);
-    const int lineH = Theme::bubbleTextH() + 1;
+    const bool ru = Settings::lang() == 1;
+    if (!ru) Theme::bubbleFontOn(t);
+    const int lineH = ru ? 10 : Theme::bubbleTextH() + 1;
     t.setTextColor(Theme::BLACK, XP_BODY);
     for (uint8_t i = 0; i < n; i++) {
-        t.setCursor(bx + 8, cy0 + 4 + i * lineH + Theme::bubbleAscent());
-        t.print(rows[i]);
+        t.setCursor(bx + 8, cy0 + 4 + i * lineH + (ru ? 0 : Theme::bubbleAscent()));
+        if (ru) Theme::printRU(t, rows[i]); else t.print(rows[i]);
     }
-    Theme::bubbleFontOff(t);
+    if (!ru) Theme::bubbleFontOff(t);
     // The time, bottom right of the body, in the orange of a film camera.
     t.setTextSize(1);
     t.setTextColor(XP_CLOSE, XP_BODY);

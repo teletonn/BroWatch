@@ -6,6 +6,8 @@
 #include "lil_guy.h"
 #include "detection.h"
 #include "bangers_font.h"
+#include "ru_font.h"
+#include "ru_text.h"
 #include "squachy.h"
 #include "settings.h"
 #include "security.h"
@@ -9313,6 +9315,80 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
     }
 
     drawButton(t, btnX, btnY, btnW, btnH, "[ GOT IT ]", false, 2);
+}
+
+// ---- Russian text (BroWatch) -------------------------------------------------
+// One codepoint's advance at the current text size, without drawing.
+static int ruAdvance(TFT_eSPI& t, uint16_t cp) {
+    const uint8_t sz = t.textsize ? t.textsize : 1;
+    if (cp >= 0x20 && cp < 0x7F) return 6 * sz;   // GLCD cell, same as print()
+    if (RuText::isCyrillic(cp)) {
+        const uint16_t i = cp - RuCyr8.first;
+        const uint8_t adv = pgm_read_byte(&RuCyr8.glyph[i].xAdvance);
+        if (adv) return adv * sz;
+    }
+    return 6 * sz;   // '?' fallback, same cell
+}
+
+void printRU(TFT_eSPI& t, const char* s) {
+    const char* p = s;
+    while (p && *p) {
+        const uint16_t cp = RuText::next(&p);
+        if (cp >= 0x20 && cp < 0x7F) {
+            t.write((uint8_t)cp);   // write, not print(char): the shim only has print(const char*)
+        } else if (RuText::isCyrillic(cp)) {
+            const uint16_t i = cp - RuCyr8.first;
+            if (pgm_read_byte(&RuCyr8.glyph[i].xAdvance)) {
+                t.setFreeFont(&RuCyr8);
+                const int16_t w = t.drawChar(cp, t.getCursorX(), t.getCursorY());
+                t.setCursor(t.getCursorX() + w, t.getCursorY());
+                t.setTextFont(1);
+            } else {
+                t.write('?');
+            }
+        } else {
+            t.write('?');
+        }
+    }
+}
+
+int textWidthRU(TFT_eSPI& t, const char* s) {
+    int w = 0;
+    const char* p = s;
+    while (p && *p) w += ruAdvance(t, RuText::next(&p));
+    return w;
+}
+
+uint8_t wrapTextRU(TFT_eSPI& t, const char* text, int maxW,
+                   char lines[][48], uint8_t maxLines) {
+    // Same greedy word-wrap as wrapText(), but measured with textWidthRU().
+    // strtok on 0x20 is UTF-8-safe (no multibyte sequence contains 0x20).
+    char buf[320];
+    strncpy(buf, text, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = 0;
+
+    uint8_t n = 0;
+    char lineBuf[48] = "";
+    char* word = strtok(buf, " ");
+    while (word) {
+        char trial[48];
+        if (lineBuf[0]) snprintf(trial, sizeof(trial), "%s %s", lineBuf, word);
+        else            snprintf(trial, sizeof(trial), "%s", word);
+        bool tooWide = lineBuf[0] &&
+                       (textWidthRU(t, trial) > maxW || strlen(trial) >= sizeof(lineBuf) - 1);
+        if (tooWide) {
+            if (n >= maxLines - 1) break;
+            strncpy(lines[n], lineBuf, sizeof(lines[n]) - 1); lines[n][sizeof(lines[n]) - 1] = 0; n++;
+            strncpy(lineBuf, word, sizeof(lineBuf) - 1); lineBuf[sizeof(lineBuf) - 1] = 0;
+        } else {
+            strncpy(lineBuf, trial, sizeof(lineBuf) - 1); lineBuf[sizeof(lineBuf) - 1] = 0;
+        }
+        word = strtok(nullptr, " ");
+    }
+    if (lineBuf[0] && n < maxLines) {
+        strncpy(lines[n], lineBuf, sizeof(lines[n]) - 1); lines[n][sizeof(lines[n]) - 1] = 0; n++;
+    }
+    return n;
 }
 
 }  // namespace Theme

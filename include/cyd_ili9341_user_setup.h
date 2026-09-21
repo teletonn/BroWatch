@@ -59,6 +59,10 @@
 // NOTE: editing this file does not rebuild the library -- delete
 // .pio/build/<env>/lib*/TFT_eSPI first, or the board runs the old config.
 #define LOAD_FONT2
+// BroWatch: the GFX free-font renderer, for the Russian face (RuCyr8 in
+// include/ru_font.h, drawn via setFreeFont in Theme::printRU). See
+// cyd_user_setup.h for the cost/why.
+#define LOAD_GFXFF
 
 // ILI9341 is normal (non-inverted) polarity, RGB order -- the two
 // lines that actually differ from cyd_user_setup.h's ST7789 config.

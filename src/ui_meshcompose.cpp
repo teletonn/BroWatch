@@ -40,7 +40,7 @@ uint16_t    s_statusCol = 0;
 // SEND sends it. One wrong tap on a list of two dozen small targets should
 // cost a second tap, not a message you did not mean.
 int8_t      s_sel = -1;
-char        s_confirm[40];
+char        s_confirm[64];
 // A typed message back from the keyboard, waiting to be sent -- the same
 // confirmation as a line, with the whole text shown large instead of quoted
 // on the status row, which is too narrow for forty-eight characters.
@@ -63,6 +63,13 @@ bool        s_fillOn = false;
 const char* const FILL_LINES[8] = {
     "MEET AT ", "I'M AT ", "BACK IN ", "CALL ME AT ",
     "HEADING TO ", "LOOK FOR THE ", "BRING THE ", "SAW A ",
+};
+// BroWatch RU: same eight openings, display only (the keyboard stays Latin,
+// and the air alphabet is Latin -- a RU opening travels only as far as the
+// web bridge, which is UTF-8 end to end).
+const char* const FILL_LINES_RU[8] = {
+    "ВСТРЕЧА В ", "Я НА ", "ВЕРНУСЬ ЧЕРЕЗ ", "ЗВОНИ В ",
+    "ЕДУ В ", "ИЩИ ", "ПРИХВАТИ ", "ВИДЕЛ ",
 };
 // Kept across visits to this screen, not across a reboot: whoever sends a lot
 // of pranks should find the pranks where they left them.
@@ -90,12 +97,21 @@ const char* const SEND_FAILED  = "Could not send. Try again.";
 const char* const NOBODY_HERE  = "Emotes need a visitor on screen.";
 const char* const STILL_ON_AIR = "Your message is still sending.";
 const char* const EMOTE_HINT   = "Tap one: you both act it out.";
+// BroWatch RU: same hints, display only.
+const char* const NEED_PHRASE_RU  = "Задай фразу: SQUACHMESH > PHRASE.";
+const char* const TRANSMIT_OFF_RU = "TRANSMIT выкл: читаю, не отвечаю.";
+const char* const SENDING_RU      = "Отправляю, 30 секунд.";
+const char* const SEND_FAILED_RU  = "Не ушло. Попробуй ещё.";
+const char* const NOBODY_HERE_RU  = "Эмоции — только при госте.";
+const char* const STILL_ON_AIR_RU = "Сообщение ещё летит.";
+const char* const EMOTE_HINT_RU   = "Жми: разыграете вдвоём.";
+static inline bool isRU() { return Settings::lang() == 1; }
 
 // The reasons a message could not go out, given BEFORE anything is chosen or
 // typed rather than after the person has confirmed it. Null when it can.
 const char* cannotSend() {
-    if (!MeshTalk::ready())             return NEED_PHRASE;
-    if (!Settings::meshTransmit())      return TRANSMIT_OFF;
+    if (!MeshTalk::ready())             return isRU() ? NEED_PHRASE_RU  : NEED_PHRASE;
+    if (!Settings::meshTransmit())      return isRU() ? TRANSMIT_OFF_RU : TRANSMIT_OFF;
     return nullptr;
 }
 
@@ -426,11 +442,13 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         int maxW = bw - 12;
         if (maxW > 47 * t.textWidth("M")) maxW = 47 * t.textWidth("M");
         char rows[2][48];
-        const uint8_t n = Theme::wrapText(t, line, maxW, rows, 2);
+        const bool ru = isRU();
+        const uint8_t n = ru ? Theme::wrapTextRU(t, line, maxW, rows, 2)
+                             : Theme::wrapText(t, line, maxW, rows, 2);
         t.setTextColor(Theme::WHITE, Theme::RED);
         for (uint8_t i = 0; i < n; i++) {
             t.setCursor(bx + 6, n == 1 ? by + (bh - 8) / 2 : by + 2 + i * 10);
-            t.print(rows[i]);
+            if (ru) Theme::printRU(t, rows[i]); else t.print(rows[i]);
         }
     } else {
         t.drawRoundRect(bx, by, bw, bh, 4, Theme::W95_SHADOW);
@@ -528,7 +546,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
             t.setTextSize(Theme::uiTextSize(t, 1));
             t.setTextColor(Theme::WHITE, Theme::BG);
             t.setCursor(x + 6, y + (ch - t.fontHeight()) / 2);
-            t.print(FILL_LINES[i]);
+            if (isRU()) Theme::printRU(t, FILL_LINES_RU[i]); else t.print(FILL_LINES[i]);
             t.setTextColor(Theme::W95_SHADOW, Theme::BG);
             t.print("___");
         }
@@ -543,10 +561,11 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
             s_lineTabRect[i] = { (int16_t)x, (int16_t)y0, (int16_t)ltw, (int16_t)LTH };
             t.fillRect(x, y0, ltw, LTH, on ? Theme::PURPLE : Theme::BG);
             t.drawRect(x, y0, ltw, LTH, on ? Theme::VAPOR_PINK : Theme::W95_SHADOW);
-            const char* nm = MeshMsg::CANNED_TAB_NAME[i];
+            const char* nm = MeshMsg::cannedTabName(i, Settings::lang());
             t.setTextColor(on ? Theme::labelOn(Theme::PURPLE) : Theme::W95_LIGHT, on ? Theme::PURPLE : Theme::BG);
-            t.setCursor(x + (ltw - t.textWidth(nm)) / 2, y0 + (LTH - t.fontHeight()) / 2);
-            t.print(nm);
+            const int nmw = isRU() ? Theme::textWidthRU(t, nm) : t.textWidth(nm);
+            t.setCursor(x + (ltw - nmw) / 2, y0 + (LTH - t.fontHeight()) / 2);
+            if (isRU()) Theme::printRU(t, nm); else t.print(nm);
         }
         const int ly0 = y0 + LTH + 5;
         for (int i = 0; i < MeshMsg::CANNED_PER_TAB; i++) {
@@ -563,7 +582,8 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
             t.setTextSize(Theme::uiTextSize(t, 1));
             t.setTextColor(sel ? Theme::labelOn(bg) : Theme::WHITE, bg);
             t.setCursor(x + 6, y + (ch - t.fontHeight()) / 2);
-            t.print(MeshMsg::CANNED[idx]);
+            if (isRU()) Theme::printRU(t, MeshMsg::cannedDisplay(idx, 1));
+            else        t.print(MeshMsg::CANNED[idx]);
         }
     }
 
@@ -571,12 +591,13 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
     const char* st = s_status;
     uint16_t sc = s_statusCol;
     if (!st && s_typedOn) {
-        st = "Send it?";
+        st = isRU() ? "Отправляем?" : "Send it?";
         sc = Theme::VAPOR_YELLOW;
     } else if (!st && s_sel >= 0) {
         // Quoted back in full, so what is about to go out is read once more
         // before it does.
-        snprintf(s_confirm, sizeof s_confirm, "Send \"%s\"?", MeshMsg::CANNED[s_sel]);
+        if (isRU()) snprintf(s_confirm, sizeof s_confirm, "Шлём \"%s\"?", MeshMsg::cannedDisplay((uint8_t)s_sel, 1));
+        else        snprintf(s_confirm, sizeof s_confirm, "Send \"%s\"?", MeshMsg::CANNED[s_sel]);
         st = s_confirm;
         sc = Theme::VAPOR_YELLOW;
     } else if (!st && s_emoteOn) {
@@ -584,7 +605,8 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         sc = Theme::AMBER;
         if (!st) {
             const bool here = uiClearGuest() != nullptr;
-            st = here ? EMOTE_HINT : NOBODY_HERE;
+            st = here ? (isRU() ? EMOTE_HINT_RU : EMOTE_HINT)
+                      : (isRU() ? NOBODY_HERE_RU : NOBODY_HERE);
             sc = here ? Theme::VAPOR_YELLOW : Theme::AMBER;
         }
     } else if (!st && !tut) {
@@ -592,12 +614,12 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         // would otherwise open with a warning about not having one.
         st = cannotSend();
         sc = Theme::AMBER;
-        if (!st && MeshTalk::sending(now)) { st = SENDING; sc = Theme::GREEN; }
+        if (!st && MeshTalk::sending(now)) { st = isRU() ? SENDING_RU : SENDING; sc = Theme::GREEN; }
     }
     if (st) {
         t.setTextColor(sc, Theme::BG);
         t.setCursor(8, h - BHof(t) - 6 - 12);
-        t.print(st);
+        if (isRU()) Theme::printRU(t, st); else t.print(st);
     }
 
     // ---- chrome -------------------------------------------------------------
@@ -674,9 +696,9 @@ ComposeHit uiMeshComposeTouch(int x, int y, uint32_t now) {
     auto sent = [](MeshTalk::Send r) {
         switch (r) {
             case MeshTalk::Send::OK:           return true;
-            case MeshTalk::Send::NOT_READY:    s_status = NEED_PHRASE;  s_statusCol = Theme::AMBER; break;
-            case MeshTalk::Send::TRANSMIT_OFF: s_status = TRANSMIT_OFF; s_statusCol = Theme::AMBER; break;
-            default:                           s_status = SEND_FAILED;  s_statusCol = Theme::RED;   break;
+            case MeshTalk::Send::NOT_READY:    s_status = isRU() ? NEED_PHRASE_RU  : NEED_PHRASE;  s_statusCol = Theme::AMBER; break;
+            case MeshTalk::Send::TRANSMIT_OFF: s_status = isRU() ? TRANSMIT_OFF_RU : TRANSMIT_OFF; s_statusCol = Theme::AMBER; break;
+            default:                           s_status = isRU() ? SEND_FAILED_RU  : SEND_FAILED;  s_statusCol = Theme::RED;   break;
         }
         return false;
     };
@@ -715,10 +737,10 @@ ComposeHit uiMeshComposeTouch(int x, int y, uint32_t now) {
                 if (inRect(s_emoteRect[i], x, y)) pick = (int)EmoteScript::atTab(s_tab, i);
             if (pick < 0) return ComposeHit::NONE;
             if (const char* why = cannotSend()) { s_status = why; s_statusCol = Theme::AMBER; return ComposeHit::NONE; }
-            if (!uiClearGuest())            { s_status = NOBODY_HERE;  s_statusCol = Theme::AMBER; return ComposeHit::NONE; }
+            if (!uiClearGuest())            { s_status = isRU() ? NOBODY_HERE_RU  : NOBODY_HERE;  s_statusCol = Theme::AMBER; return ComposeHit::NONE; }
             // An emote would take over the scan response and cut the
             // message short -- the one thing that should not happen.
-            if (MeshTalk::sendingMessage(now)) { s_status = STILL_ON_AIR; s_statusCol = Theme::AMBER; return ComposeHit::NONE; }
+            if (MeshTalk::sendingMessage(now)) { s_status = isRU() ? STILL_ON_AIR_RU : STILL_ON_AIR; s_statusCol = Theme::AMBER; return ComposeHit::NONE; }
             return sendEmoteNow((MeshMsg::Emote)pick, now, sent);
         }
         if (inRect(s_help, x, y)) return ComposeHit::HELP;

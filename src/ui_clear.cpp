@@ -1554,21 +1554,26 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
     t.setTextSize(1);
     t.setTextWrap(false);
     const int w = t.width();
+    // BroWatch RU: the bubble face (font 2) has no Cyrillic, so a RU board
+    // sets the message in the font-1 mixedface instead -- smaller in the
+    // box, but legible rather than garbage.
+    const bool ru = Settings::lang() == 1;
     // The message itself in font 2, the same face Squachy's own bubble uses
     // now; the sender's name stays in the small font above it, a caption.
     // A typed message runs to 48 characters, wider than a portrait screen:
     // it wraps to two lines, or three, rather than running off the edge.
-    Theme::bubbleFontOn(t);
-    const int lineH = Theme::bubbleTextH() + 1;
+    if (!ru) Theme::bubbleFontOn(t);
+    const int lineH = ru ? 10 : Theme::bubbleTextH() + 1;
     int maxW = w - 20;
     char rows[3][48];
-    const uint8_t n = Theme::wrapText(t, line, maxW, rows, 3);
+    const uint8_t n = ru ? Theme::wrapTextRU(t, line, maxW, rows, 3)
+                         : Theme::wrapText(t, line, maxW, rows, 3);
     int bw = 0;
     for (uint8_t i = 0; i < n; i++) {
-        const int rw = t.textWidth(rows[i]);
+        const int rw = ru ? Theme::textWidthRU(t, rows[i]) : t.textWidth(rows[i]);
         if (rw > bw) bw = rw;
     }
-    Theme::bubbleFontOff(t);
+    if (!ru) Theme::bubbleFontOff(t);
     if (t.textWidth(from) > bw) bw = t.textWidth(from);
     bw += 12;
     if (bw > w - 8) bw = w - 8;
@@ -1586,11 +1591,11 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
     t.setTextColor(Theme::W95_LIGHT, Theme::RED);
     t.setCursor(bx + 6, by + 3);
     t.print(from);
-    Theme::bubbleFontOn(t);
+    if (!ru) Theme::bubbleFontOn(t);
     t.setTextColor(Theme::WHITE, Theme::RED);
     for (uint8_t i = 0; i < n; i++) {
-        t.setCursor(bx + 6, by + 13 + i * lineH + Theme::bubbleAscent());
-        t.print(rows[i]);
+        t.setCursor(bx + 6, by + 13 + i * lineH + (ru ? 0 : Theme::bubbleAscent()));
+        if (ru) Theme::printRU(t, rows[i]); else t.print(rows[i]);
     }
     Theme::bubbleFontOff(t);
 }

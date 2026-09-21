@@ -360,6 +360,10 @@ public:
 
     // ---- text ------------------------------------------------------
     void setCursor(int32_t x, int32_t y) { cursor_x = x; cursor_y = y; }
+    // Mirror of the real library's cursor readers (TFT_eSPI.h) -- printRU
+    // needs them to advance past a GFX glyph the way print() does.
+    int16_t getCursorX() const { return (int16_t)cursor_x; }
+    int16_t getCursorY() const { return (int16_t)cursor_y; }
     void setTextColor(uint16_t fg) { textcolor = fg; textbgcolor = fg; transparent = true; }
     void setTextColor(uint16_t fg, uint16_t bg) { textcolor = fg; textbgcolor = bg; transparent = false; }
     void setTextSize(uint8_t s) { textsize = s ? s : 1; }
@@ -433,6 +437,10 @@ protected:
     std::vector<uint16_t> _buf;
     int32_t _winX0 = 0, _winY0 = 0, _winX1 = 0, _winY1 = 0, _winCurX = 0, _winCurY = 0;
 
+    // Text state is public here exactly as in the real library (its
+    // textcolor/textfont/textsize live under "Global variables"), so code
+    // that reads t.textsize for mixed-font measuring compiles on both.
+  public:
     int32_t cursor_x = 0, cursor_y = 0;
     uint16_t textcolor = 0xFFFF, textbgcolor = 0x0000;
     uint8_t textsize = 1;

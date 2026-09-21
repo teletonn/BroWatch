@@ -49,6 +49,23 @@ extern const char* const CANNED_TAB_NAME[CANNED_TABS];
 // The CANNED index at that slot, or 0xFF when the slot is empty.
 uint8_t cannedAtTab(uint8_t tab, uint8_t slot);
 
+// ---- Russian display strings (BroWatch) --------------------------------------
+// DISPLAY ONLY, like the tabs above: the air carries an index, so a board set
+// to RU shows CANNED_RU[N] for the same N an EN board shows CANNED[N] as.
+// Same order, same count -- meshwords.cpp static_asserts it. lang: 0 EN,
+// 1 RU (Settings::lang); anything else reads as EN.
+extern const char* const CANNED_RU[];
+extern const uint8_t     CANNED_RU_N;
+extern const char* const CANNED_TAB_NAME_RU[CANNED_TABS];
+inline const char* cannedDisplay(uint8_t idx, uint8_t lang) {
+    if (lang == 1) return CANNED_RU[idx < CANNED_RU_N ? idx : 0];
+    return CANNED[idx < CANNED_N ? idx : 0];
+}
+inline const char* cannedTabName(uint8_t tab, uint8_t lang) {
+    if (tab >= CANNED_TABS) return "?";
+    return (lang == 1) ? CANNED_TAB_NAME_RU[tab] : CANNED_TAB_NAME[tab];
+}
+
 // ---- phrases ---------------------------------------------------------------
 // A uniform index in [0, n). Rejection sampling rather than `rng() % n`, which
 // over-weights the low indices whenever n does not divide 2^32 -- slightly,

@@ -6,6 +6,7 @@
 #include "squachy.h"
 #include "squachmesh.h"
 #include "meshtalk.h"
+#include "settings.h"
 #include "detection.h"
 #include <Arduino.h>
 #include <stdio.h>
@@ -255,11 +256,13 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         char lines[2][48];
         int maxW = iw - 8;
         if (maxW > 47 * t.textWidth("M")) maxW = 47 * t.textWidth("M");
-        const uint8_t n = Theme::wrapText(t, MeshTalk::lineText(msg), maxW, lines, 2);
+        const bool ru = Settings::lang() == 1;
+        const uint8_t n = ru ? Theme::wrapTextRU(t, MeshTalk::lineText(msg), maxW, lines, 2)
+                             : Theme::wrapText(t, MeshTalk::lineText(msg), maxW, lines, 2);
         t.setTextColor(Theme::WHITE, Theme::BG);
         for (uint8_t k = 0; k < n; k++) {
             t.setCursor(ix + 4, y + 10 + k * 9);
-            t.print(lines[k]);
+            if (ru) Theme::printRU(t, lines[k]); else t.print(lines[k]);
         }
     }
 

@@ -208,6 +208,7 @@ int main(int argc, char** argv) {
     // delivers canned line N from the visitor, through the real receive path.
     bool msgs = false;
     int inboxLine = -1, phraseMode = -1;
+    int langFlag = 0;   // --lang 1: BroWatch RU strings + mixed RU render
     std::string sizeArg;   // --size WxH: render at another panel size
     int confirmRow = -1;   // settings screen: put a confirm panel up
     int scrollBy = 0;      // settings screen: scroll down N rows first
@@ -258,6 +259,7 @@ int main(int argc, char** argv) {
         if (a == "--portrait") portrait = true;
         else if (a == "--qwerty") qwerty = true;
         else if (a == "--msgs") msgs = true;
+        else if (a == "--lang" && i + 1 < argc) langFlag = atoi(argv[++i]);
         else if (a == "--inbox" && i + 1 < argc) inboxLine = atoi(argv[++i]);
         else if (a == "--phrase-mode" && i + 1 < argc) phraseMode = atoi(argv[++i]);
         else if (a == "--onboard") onboard = true;
@@ -320,6 +322,8 @@ int main(int argc, char** argv) {
 
     Settings::load();
     Clock::begin();
+    // Set, not toggled: the NVS shim may remember a previous run.
+    Settings::setLang(langFlag > 0 ? 1 : 0);
     // Settings' own cycle* mutators are the only public way in, so walk
     // them to the requested index rather than reaching past the API.
     if (themeIdx >= 0) while ((int)Settings::paletteIndex() != themeIdx % (int)Theme::PALETTE_COUNT) Settings::cyclePalette();
