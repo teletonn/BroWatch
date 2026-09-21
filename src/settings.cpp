@@ -107,7 +107,7 @@ static uint8_t s_lightBright = 2;    // of 5
 static bool    s_remoteUpdate = false;
 static bool    s_phraseShown  = true;
 static bool    s_updateCheck  = true;
-static uint8_t s_lang         = 0;   // 0 EN, 1 RU. SYSTEM page LANGUAGE row.
+static uint8_t s_lang         = 1;   // 0 EN, 1 RU (BroWatch default). SYSTEM page LANGUAGE row.
 static uint8_t s_timeZone     = 10;   // UTC in Clock's table
 static bool    s_tzChosen     = false;
 static const char* const LIGHT_IDLE_NAMES[]  = { "OFF", "BREATHE", "SOLID" };
@@ -304,8 +304,8 @@ void load() {
     s_remoteUpdate = s_prefs.getBool("rmtUpd", true);
     s_phraseShown  = s_prefs.getBool("phrShow", true);
     s_updateCheck  = s_prefs.getBool("updChk", true);
-    s_lang         = s_prefs.getUChar("lang", 0);
-    if (s_lang > 1) s_lang = 0;
+    s_lang         = s_prefs.getUChar("lang", 1);
+    if (s_lang > 1) s_lang = 1;
     s_timeZone     = s_prefs.getUChar("tz", 10);
     s_tzChosen     = s_prefs.getBool("tzSet", false);
     if (s_timeZone >= Clock::zoneCount()) s_timeZone = 10;

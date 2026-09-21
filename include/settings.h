@@ -243,10 +243,10 @@ namespace Settings {
     bool        updateCheck();
     void        toggleUpdateCheck();
 
-    // LANGUAGE: UI language. 0 EN (stock, the default every board has ever
-    // spoken), 1 RU. Persisted in NVS ("lang"); the strings dictionary
-    // (strings_en.h / strings_ru.h) reads this. Cycles on the SYSTEM page,
-    // settable over serial with LANG RU|EN.
+    // LANGUAGE: UI language. 0 EN, 1 RU (the BroWatch default: a fresh
+    // board speaks Russian until somebody cycles it). Persisted in NVS
+    // ("lang"); the strings dictionary (strings_en.h / strings_ru.h) reads
+    // this. Cycles on the SYSTEM page, settable over serial with LANG RU|EN.
     uint8_t     lang();
     const char* langName();
     void        cycleLang();

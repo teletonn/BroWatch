@@ -5,7 +5,7 @@
 
 ## Что уже работает
 
-- `Settings::lang` (NVS `lang`), строка `LANGUAGE` на SYSTEM-странице, команда `LANG RU|EN` по Serial.
+- `Settings::lang` (NVS `lang`, **по умолчанию RU — свежая плата говорит по-русски**), строка `LANGUAGE` на SYSTEM-странице, команда `LANG RU|EN` по Serial.
 - Шрифт **RuCyr8** (`include/ru_font.h`, Liberation Sans 8px, U+0401–U+0451, ~1 КБ flash) через `LOAD_GFXFF` во всех бордах; EN-путь попиксельно не изменился.
 - `Theme::printRU / textWidthRU / wrapTextRU` (`src/theme.cpp`) — смешанная ASCII/кириллица печать; `RuText` — UTF-8-декодер и счёт глифов.
 - **48 шаблонных сообщений + 6 вкладок + 8 FILL-заготовок + хинты** экрана сообщений — на русском при `lang==RU`, на английском при `lang==EN`. Эфир несёт индекс, так что RU-плата и EN-плата понимают друг друга.
