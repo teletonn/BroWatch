@@ -3,6 +3,7 @@
 #include "theme.h"
 #include "settings.h"
 #include "squachy.h"
+#include "type_names.h"
 #include <Arduino.h>
 
 // Stamped in by extra_script.py from `git describe` at build time — see
@@ -53,7 +54,9 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // 22 rather than 24: nine rows plus the hint is 226px, which fits a
     // 240px panel. At 24 the ninth row pushed the hint off the bottom.
     const int rowH = 22;
-    char buf[24];
+    // 32, not 24: a RU type name is UTF-8 (2 bytes a glyph), so
+    // "СМАРТТАГ 4294967295" needs the room.
+    char buf[32];
 
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)eng.lifetimeTotal());
     drawStat(t, w, top + 0 * rowH, rowH, Theme::tr("LIFETIME CATCHES", "ВСЕГО ПОЙМАНО"), buf);
@@ -75,7 +78,7 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
     DetectionType ft = Squachy::firstDetectionType();
     drawStat(t, w, top + 6 * rowH, rowH, Theme::tr("FIRST EVER CATCH", "ПЕРВАЯ ДОБЫЧА"),
-             ft == DetectionType::UNKNOWN ? Theme::tr("none yet", "пока пусто") : detectionTypeName(ft));
+             ft == DetectionType::UNKNOWN ? Theme::tr("none yet", "пока пусто") : TypeNames::display(ft));
 
     // Whichever type you have logged most, ever. The per-type lifetime
     // counters behind this persist independently of the live counts, which
@@ -91,7 +94,7 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         if (bestN == 0) {
             drawStat(t, w, top + 7 * rowH, rowH, Theme::tr("MOST CAUGHT", "ЧАЩЕ ВСЕХ"), Theme::tr("none yet", "пока пусто"));
         } else {
-            snprintf(buf, sizeof(buf), "%s %lu", detectionTypeName(best),
+            snprintf(buf, sizeof(buf), "%s %lu", TypeNames::display(best),
                      (unsigned long)bestN);
             drawStat(t, w, top + 7 * rowH, rowH, Theme::tr("MOST CAUGHT", "ЧАЩЕ ВСЕХ"), buf);
         }

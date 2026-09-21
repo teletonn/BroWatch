@@ -2,6 +2,7 @@
 #include "detection_info.h"
 #include "detection.h"
 #include "device_info.h"
+#include "type_names.h"
 #include <stdio.h>
 
 namespace DetectionInfo {
@@ -97,7 +98,9 @@ const char* explainFor(DetectionType t, const char* vendor, const char* name,
 
 const char* titleFor(DetectionType t, const char* vendor, const char* name) {
     const DeviceInfo::Device* d = DeviceInfo::find(t, vendor, name);
-    return d ? d->title : detectionTypeName(t);
+    // A device page keeps its product-name title (ASCII, Bangers);
+    // the bare type falls back to the language-aware display name.
+    return d ? d->title : TypeNames::display(t);
 }
 
 const char* rssiConfidencePrimer() {

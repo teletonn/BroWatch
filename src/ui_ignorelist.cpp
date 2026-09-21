@@ -3,6 +3,7 @@
 #include "ui_scroll.h"
 #include "theme.h"
 #include "ignore_list.h"
+#include "type_names.h"
 #include <Arduino.h>
 #include <stdio.h>
 
@@ -46,7 +47,7 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, uint8_t idx) {
     t.setTextSize(Theme::uiMenuTextSize(t));
     t.setTextColor(Theme::colorFor(ty), Theme::BG);
     t.setCursor(6, y + 3);
-    t.print(detectionTypeName(ty));
+    Theme::printRU(t, TypeNames::display(ty));
 
     char buf[20];
     snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",

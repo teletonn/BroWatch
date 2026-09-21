@@ -123,11 +123,11 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     Theme::printRU(t, q);
 
     t.setTextColor(Theme::WHITE, Theme::BG);
-    int lw = t.textWidth(label);
+    int lw = Theme::textWidthRU(t, label);
     int maxLw = pw - 16;
     int lx = px + (pw - (lw < maxLw ? lw : maxLw)) / 2;
     t.setCursor(lx, py + 24);
-    t.print(label);
+    Theme::printRU(t, label);
 
     // Toggling, so the button names the next tap: "WATCH" on something
     // already being watched would be a lie, and pressed state is how every
@@ -327,7 +327,8 @@ switch (Settings::background()) {
             t.setTextSize(2);
             t.setTextColor(Theme::CYAN, Theme::BG);
             t.setCursor(4, y + topPad);
-            t.print(r->name[0] ? r->name : "(unnamed)");
+            if (r->name[0]) t.print(r->name);
+            else Theme::printRU(t, Theme::tr("(unnamed)", "(без имени)"));
 
             t.setTextSize(1);
             t.setTextColor(Theme::WHITE, Theme::BG);

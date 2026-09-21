@@ -6,6 +6,7 @@
 #include "settings.h"
 #include "blackbox.h"
 #include "detection.h"
+#include "type_names.h"
 #include <Arduino.h>
 #include <ctype.h>
 #include <string.h>
@@ -163,15 +164,28 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     // null, drawBangersPass() skips it), which is why a real device
     // label like "Apple" rendered as just "A". Upper-case a local copy
     // before measuring/drawing rather than touching the caller's label.
-    char upperLabel[32];
-    uint8_t li = 0;
-    for (; label[li] && li < sizeof(upperLabel) - 1; li++) upperLabel[li] = toupper((unsigned char)label[li]);
-    upperLabel[li] = 0;
-
-    int lw = Theme::bangersTextWidth(upperLabel, Theme::BangersSize::MD);
+    // RU labels ("Без имени", "(скрыта)") skip this entirely: toupper()
+    // would corrupt UTF-8 bytes and Bangers has no Cyrillic anyway --
+    // they go in font 1 size 2 via printRU instead.
     int maxLw = pw - 16;
-    if (lw > maxLw) lw = maxLw; // clipped, not shrunk -- real labels fit comfortably as-is
-    Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26, upperLabel, Theme::RED, Theme::BangersSize::MD);
+    if (Settings::lang() == 1) {
+        t.setTextSize(2);
+        int lw = Theme::textWidthRU(t, label);
+        if (lw > maxLw) lw = maxLw;
+        t.setTextColor(Theme::RED, Theme::BG);
+        t.setCursor(px + (pw - lw) / 2, py + 26);
+        Theme::printRU(t, label);
+        t.setTextSize(1);
+    } else {
+        char upperLabel[32];
+        uint8_t li = 0;
+        for (; label[li] && li < sizeof(upperLabel) - 1; li++) upperLabel[li] = toupper((unsigned char)label[li]);
+        upperLabel[li] = 0;
+
+        int lw = Theme::bangersTextWidth(upperLabel, Theme::BangersSize::MD);
+        if (lw > maxLw) lw = maxLw; // clipped, not shrunk -- real labels fit comfortably as-is
+        Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26, upperLabel, Theme::RED, Theme::BangersSize::MD);
+    }
 
     // See ui_rawscan.cpp's copy of this panel: toggling, so the label names
     // the next tap rather than the thing already done.
@@ -327,8 +341,8 @@ switch (Settings::background()) {
         t.setTextSize(2);
         t.setTextColor(kept ? dim : Theme::colorFor(d->type), Theme::BG);
         t.setCursor(8, y + topPad);
-        t.print(detectionTypeName(d->type));
-        const int labelEnd = 8 + t.textWidth(detectionTypeName(d->type));
+        Theme::printRU(t, TypeNames::display(d->type));
+        const int labelEnd = 8 + Theme::textWidthRU(t, TypeNames::display(d->type));
 
         // MAC + RSSI line
         t.setTextSize(1);

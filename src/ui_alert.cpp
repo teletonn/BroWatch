@@ -5,9 +5,13 @@
 #include "signatures.h"
 #include "detection.h"
 #include "ignore_list.h"
+#include "type_names.h"
 #include <Arduino.h>
 
 static const char* targetLabel(DetectionType t) {
+    // RU headline names live in TypeNames (adapted forms, common
+    // abbreviations); EN keeps the original labels pixel-identical.
+    if (Settings::lang() == 1) return TypeNames::headlineRu(t);
     switch (t) {
         case DetectionType::FLOCK:   return "FLOCK CAM";
         case DetectionType::AXON:    return "AXON BODY";
@@ -375,17 +379,24 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         // Bangers face, at 151px -- into the built-in fallback. On the 240px
         // rotation the budget is now 154, so it clears by 3.
         const int avail = ibx - 10 - 6;
-        const int tw = Theme::bangersTextWidth(tgt, Theme::BangersSize::MD);
-        if (tw <= avail) {
+        // Bangers has no Cyrillic: the RU label always takes the
+        // built-in-font fallback path below (measured with textWidthRU,
+        // drawn with printRU), EN keeps the Bangers headline.
+        const bool ruTgt = Settings::lang() == 1;
+        const int tw = ruTgt ? Theme::textWidthRU(t, tgt)
+                             : Theme::bangersTextWidth(tgt, Theme::BangersSize::MD);
+        if (!ruTgt && tw <= avail) {
             Theme::drawBangersText(t, 10, 4, tgt, Theme::BG, Theme::BangersSize::MD);
         } else {
             // No smaller Bangers exists, so step down through the built-in
             // font rather than clip.
             t.setTextSize(wideAlert(w) ? 3 : 2);
-            if (t.textWidth(tgt) > avail) t.setTextSize(wideAlert(w) ? 2 : 1);
+            const int plainW = ruTgt ? Theme::textWidthRU(t, tgt) : t.textWidth(tgt);
+            if (plainW > avail) t.setTextSize(wideAlert(w) ? 2 : 1);
             t.setTextColor(Theme::BG, typeCol);
             t.setCursor(10, (stripHOf(w) - t.fontHeight()) / 2);
-            t.print(tgt);
+            if (ruTgt) Theme::printRU(t, tgt);
+            else       t.print(tgt);
         }
     }
 

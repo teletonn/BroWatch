@@ -3,6 +3,7 @@
 #include "ui_scroll.h"
 #include "theme.h"
 #include "settings.h"
+#include "type_names.h"
 #include <Arduino.h>
 
 static const int TOP_MARGIN = 16;
@@ -42,7 +43,7 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, DetectionType type) {
     t.setTextSize(Theme::uiMenuTextSize(t));
     t.setTextColor(Theme::AMBER, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(detectionTypeName(type));
+    Theme::printRU(t, TypeNames::display(type));
 
     const char* value = on ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
     t.setTextColor(on ? Theme::WHITE : Theme::RED, Theme::BG);

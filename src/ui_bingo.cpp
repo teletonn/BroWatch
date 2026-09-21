@@ -4,6 +4,7 @@
 #include "theme.h"
 #include "settings.h"
 #include "detection_info.h"
+#include "type_names.h"
 #include "clock.h"
 #include <Arduino.h>
 
@@ -31,8 +32,10 @@ void geom(TFT_eSPI& t, int w, int h, int& gx, int& gy, int& cw, int& ch) {
 
 // The counters' short names, not detectionTypeName()'s: "SAMSUNG_TAG" and
 // "EVIL TWIN" do not fit a quarter of a 240px screen, and the squares are
-// the same four-letter shorthand the main screen's counters use.
+// the same four-letter shorthand the main screen's counters use. RU takes
+// the adapted cell codes from TypeNames.
 const char* shortName(DetectionType t) {
+    if (Settings::lang() == 1) return TypeNames::cellRu(t);
     switch (t) {
         case DetectionType::FLOCK:       return "FLOCK";
         case DetectionType::AXON:        return "AXON";
@@ -108,10 +111,10 @@ void drawCard(TFT_eSPI& t, int w, int h) {
 
         const char* name = shortName(type);
         t.setTextColor(line ? Theme::AMBER : (got ? Theme::GREEN : Theme::W95_LIGHT), Theme::BG);
-        int tw = t.textWidth(name);
+        int tw = Theme::textWidthRU(t, name);
         if (tw > cw - 4) tw = cw - 4;
         t.setCursor(x + (cw - tw) / 2, y + ch - t.fontHeight() - 2);
-        t.print(name);
+        Theme::printRU(t, name);
 
         if (got) {
             const char* d = dayName(Bingo::markDay(i));
@@ -266,7 +269,7 @@ void uiBingoTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     if (s_confirm) drawConfirm(t, w, h);
     else if (s_openCell >= 0) {
         const DetectionType type = Bingo::typeAt((uint8_t)s_openCell);
-        Theme::drawInfoPanel(t, w, h, now, detectionTypeName(type), DetectionInfo::explain(type));
+        Theme::drawInfoPanel(t, w, h, now, TypeNames::display(type), DetectionInfo::explain(type));
         // The panel covers the card, so the veil above it does not matter here.
     }
 }

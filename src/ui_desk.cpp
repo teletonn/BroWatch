@@ -3,8 +3,11 @@
 #include "clock.h"
 #include "theme.h"
 #include "squachy.h"
+#include "ru_text.h"
+#include "type_names.h"
 #include <Arduino.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #if SQUACH_MESH
 #include "meshtalk.h"
@@ -392,8 +395,8 @@ static void drawAlertCard(TFT_eSPI& t, int barY, uint32_t now, bool compact, int
         t.setCursor(right - t.textWidth(s), ty);
         t.print(s);
     };
-    char ty[13];
-    snprintf(ty, sizeof ty, compact ? "%.7s" : "%.11s", detectionTypeName(d.type));
+    char ty[32];
+    snprintf(ty, sizeof ty, "%s", TypeNames::display(d.type));
     printRight(ty, y + 4, c);
     // The device's own name where it has one, else the vendor; what fits.
     char who[13];

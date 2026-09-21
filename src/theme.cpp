@@ -5,6 +5,7 @@
 #include "caustic_tile.h"
 #include "lil_guy.h"
 #include "detection.h"
+#include "type_names.h"
 #include "bangers_font.h"
 #include "ru_font.h"
 #include "ru_text.h"
@@ -8175,7 +8176,7 @@ void drawGibson(TFT_eSPI& t, uint32_t now, int yStart, int yEnd,
         if (i == 0 && locked) {
             t.setTextColor(lockCol);
             t.print("> ");
-            t.print(detectionTypeName(lockType));
+            t.print(TypeNames::display(lockType));
             t.print(" :: LOCKED");
         } else {
             t.setTextColor(blend(BG, GREEN, (uint16_t)(256 - i * 60)));
@@ -9312,10 +9313,29 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
     // No heading during the one-time RSSI/confidence primer page --
     // typeName is null then since that page isn't about any one type.
     if (typeName) {
-        int tw = bangersTextWidth(typeName, BangersSize::MD);
-        int maxTw = pw - 16;
-        if (tw > maxTw) tw = maxTw; // clipped, not shrunk -- every real type name fits comfortably as-is
-        drawBangersText(t, px + (pw - tw) / 2, headingY, typeName, VAPOR_PINK, BangersSize::MD);
+        // Bangers has no Cyrillic: a RU heading (the type display
+        // name) goes in font 1 size 2 instead -- the same fallback
+        // the bingo headline and the watch alert use. Pure-ASCII
+        // headings (device product names) keep the Bangers face.
+        bool cyr = false;
+        for (const char* p = typeName; *p; ) {
+            if (RuText::isCyrillic(RuText::next(&p))) { cyr = true; break; }
+        }
+        if (cyr) {
+            t.setTextSize(2);
+            int tw = textWidthRU(t, typeName);
+            int maxTw = pw - 16;
+            if (tw > maxTw) tw = maxTw;
+            t.setTextColor(VAPOR_PINK, BG);
+            t.setCursor(px + (pw - tw) / 2, headingY);
+            printRU(t, typeName);
+            t.setTextSize(1);
+        } else {
+            int tw = bangersTextWidth(typeName, BangersSize::MD);
+            int maxTw = pw - 16;
+            if (tw > maxTw) tw = maxTw; // clipped, not shrunk -- every real type name fits comfortably as-is
+            drawBangersText(t, px + (pw - tw) / 2, headingY, typeName, VAPOR_PINK, BangersSize::MD);
+        }
     }
 
     Squachy::drawWaving(t, squachyCx, squachyBaseY, now, squachyScale, nullptr, true, squachyWander);
