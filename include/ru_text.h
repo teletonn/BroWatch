@@ -50,6 +50,9 @@ inline uint16_t next(const char** p) {
     }
     *p += 1 + n;
     // Non-BMP does not fit uint16_t and has no glyphs here anyway.
+    // Whitespace controls pass through untouched so printRU() can stand in
+    // for print() anywhere; anything else down here becomes '?'.
+    if (cp == '\n' || cp == '\r' || cp == '\t') return cp;
     if (cp < 0x20) return (uint16_t)'?';
     return cp;
 }

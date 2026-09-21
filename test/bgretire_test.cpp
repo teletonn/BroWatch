@@ -16,7 +16,7 @@
 #include <cstdlib>
 
 // The two things settings.cpp reaches for that are not under test.
-namespace Theme { void applyPalette(uint8_t) {} }
+namespace Theme { void applyPalette(uint8_t) {} const char* tr(const char* en, const char*) { return en; } }
 namespace Clock {
 uint8_t     zoneCount()        { return 1; }
 const char* zoneName(uint8_t)  { return "UTC"; }

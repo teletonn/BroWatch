@@ -454,14 +454,14 @@ void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
     uint8_t ts = uiTextSize(t, textSize);
     if (ts != textSize) {
         t.setTextSize(ts);
-        if (t.textWidth(label) > w - 6) ts = textSize;
+        if (textWidthRU(t, label) > w - 6) ts = textSize;
     }
     t.setTextSize(ts);
     t.setTextColor(fg, fill);
-    int tw = t.textWidth(label);
+    int tw = textWidthRU(t, label);
     int th = t.fontHeight();
     t.setCursor(x + (w - tw) / 2, y + (h - th) / 2);
-    t.print(label);
+    printRU(t, label);
 }
 
 void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
@@ -499,12 +499,12 @@ void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
     t.setTextSize(1);
     t.setTextWrap(false);
     t.setTextColor(BLACK, W95_FACE);
-    const int tw = t.textWidth(label);
+    const int tw = textWidthRU(t, label);
     const int th = t.fontHeight();
     const int ox = sunken ? 1 : 0;
     t.setCursor(x + 2 + (w - 4 - tw) / 2 + ox,
                 y + 2 + (h - 4 - th) / 2 + ox);
-    t.print(label);
+    printRU(t, label);
 }
 
 ButtonBarGeom computeButtonBar(int screenW, int screenH) {
@@ -529,12 +529,12 @@ void drawButtonBar(TFT_eSPI& t, ButtonId highlighted, ButtonBarMode mode) {
     if (mode == ButtonBarMode::SCAN_PICKER) {
         drawButton(t, g.x[0], g.y, g.w[0], g.h, "[ BLE ]",  highlighted == ButtonId::SCAN);
         drawButton(t, g.x[1], g.y, g.w[1], g.h, "[ WIFI ]", highlighted == ButtonId::LOG);
-        drawButton(t, g.x[2], g.y, g.w[2], g.h, "[ BACK ]", highlighted == ButtonId::CLR);
+        drawButton(t, g.x[2], g.y, g.w[2], g.h, tr("[ BACK ]", "[ НАЗАД ]"), highlighted == ButtonId::CLR);
         return;
     }
-    drawButton(t, g.x[0], g.y, g.w[0], g.h, "[ SCAN ]", highlighted == ButtonId::SCAN);
-    drawButton(t, g.x[1], g.y, g.w[1], g.h, "[ LOG ]",  highlighted == ButtonId::LOG);
-    drawButton(t, g.x[2], g.y, g.w[2], g.h, mode == ButtonBarMode::LOG ? "[ CLR ]" : "[ DESK ]",
+    drawButton(t, g.x[0], g.y, g.w[0], g.h, tr("[ SCAN ]", "[ СКАН ]"), highlighted == ButtonId::SCAN);
+    drawButton(t, g.x[1], g.y, g.w[1], g.h, tr("[ LOG ]", "[ ЖУРНАЛ ]"),  highlighted == ButtonId::LOG);
+    drawButton(t, g.x[2], g.y, g.w[2], g.h, mode == ButtonBarMode::LOG ? tr("[ CLR ]", "[ СТЕРЕТЬ ]") : tr("[ DESK ]", "[ ЧАСЫ ]"),
                highlighted == ButtonId::CLR);
 }
 
@@ -9318,23 +9318,42 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
 }
 
 // ---- Russian text (BroWatch) -------------------------------------------------
-// One codepoint's advance at the current text size, without drawing.
-static int ruAdvance(TFT_eSPI& t, uint16_t cp) {
+// Ink extent of one Cyrillic glyph at the current text size: advances the
+// pen and reports the furthest ink pixel. Liberation's caps overhang their
+// advance (Л, Д start left of the pen, wide glyphs run past it), so summing
+// advances alone puts right-aligned text under the panel edge -- measure
+// the ink instead, the way the renderer draws it.
+static void ruInk(TFT_eSPI& t, uint16_t cp, int& pen, int& right) {
     const uint8_t sz = t.textsize ? t.textsize : 1;
-    if (cp >= 0x20 && cp < 0x7F) return 6 * sz;   // GLCD cell, same as print()
+    if (cp >= 0x20 && cp < 0x7F) { pen += 6 * sz; right = pen; return; }  // GLCD cell
     if (RuText::isCyrillic(cp)) {
         const uint16_t i = cp - RuCyr8.first;
         const uint8_t adv = pgm_read_byte(&RuCyr8.glyph[i].xAdvance);
-        if (adv) return adv * sz;
+        if (adv) {
+            const int8_t xo = (int8_t)pgm_read_byte(&RuCyr8.glyph[i].xOffset);
+            const uint8_t gw = pgm_read_byte(&RuCyr8.glyph[i].width);
+            const int edge = pen + (adv > (int)(xo + gw) ? adv : (xo + gw)) * sz;
+            if (edge > right) right = edge;
+            pen += adv * sz;
+            return;
+        }
     }
-    return 6 * sz;   // '?' fallback, same cell
+    pen += 6 * sz; right = pen;   // '?' fallback, same cell
+}
+
+// All BroWatch UI translation picks its string through tr(), defined here
+// next to the mixed-font printer that draws the RU half.
+const char* tr(const char* en, const char* ru) {
+    return (Settings::lang() == 1) ? ru : en;
 }
 
 void printRU(TFT_eSPI& t, const char* s) {
     const char* p = s;
     while (p && *p) {
         const uint16_t cp = RuText::next(&p);
-        if (cp >= 0x20 && cp < 0x7F) {
+        if (cp == '\n' || cp == '\r' || cp == '\t') {
+            t.write((uint8_t)cp);   // control chars behave exactly like print()
+        } else if (cp >= 0x20 && cp < 0x7F) {
             t.write((uint8_t)cp);   // write, not print(char): the shim only has print(const char*)
         } else if (RuText::isCyrillic(cp)) {
             const uint16_t i = cp - RuCyr8.first;
@@ -9353,10 +9372,10 @@ void printRU(TFT_eSPI& t, const char* s) {
 }
 
 int textWidthRU(TFT_eSPI& t, const char* s) {
-    int w = 0;
+    int pen = 0, right = 0;
     const char* p = s;
-    while (p && *p) w += ruAdvance(t, RuText::next(&p));
-    return w;
+    while (p && *p) ruInk(t, RuText::next(&p), pen, right);
+    return right;
 }
 
 uint8_t wrapTextRU(TFT_eSPI& t, const char* text, int maxW,

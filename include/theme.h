@@ -648,6 +648,12 @@ namespace Theme {
     uint8_t wrapTextRU(TFT_eSPI& t, const char* text, int maxW,
                        char lines[][48], uint8_t maxLines);
 
+    // Pick the EN or RU string by Settings::lang() (0 EN, 1 RU). All
+    // BroWatch UI translation goes through this one function, so the
+    // language switch lives in exactly one place. Both pointers must be
+    // valid statics; the return is used (never stored) within the frame.
+    const char* tr(const char* en, const char* ru);
+
     // Modal "MORE INFO" explanation panel -- shared by LOG's confirm
     // panel and ALERT's own MORE INFO button (the two screens are never
     // showing it at the same time, so one implementation is enough).

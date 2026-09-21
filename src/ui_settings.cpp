@@ -149,8 +149,12 @@ static bool isSquachyOnlyRow(SettingsRow r) {
 
 enum class RowGroupId : uint8_t { APPEARANCE, BEHAVIOR, SQUACHY, SYSTEM, DESK, SQUAD };
 
-static RowGroupId groupFor(SettingsRow r) {
-    // Appearance sits with the Squachy rows because that is where it was asked
+// BroWatch RU: every settings string goes through Theme::tr(). Short local
+// shorthands so the translated rowContent() below stays readable.
+static inline const char* tr(const char* en, const char* ru) { return Theme::tr(en, ru); }
+static inline const char* onOff(bool v) { return Theme::tr(v ? "ON" : "OFF", v ? "ВКЛ" : "ВЫКЛ"); }
+
+static RowGroupId groupFor(SettingsRow r) {    // Appearance sits with the Squachy rows because that is where it was asked
     // for and where a thumb opening this screen will not hit it by accident.
     // Boring mode filters every OTHER row in that group, though, and a lone
     // "APPEARANCE" under a SQUACHY heading in a mode with no Squachy reads as
@@ -211,12 +215,12 @@ static RowGroupId groupFor(SettingsRow r) {
 
 static const char* groupName(RowGroupId g) {
     switch (g) {
-        case RowGroupId::APPEARANCE: return "APPEARANCE";
-        case RowGroupId::BEHAVIOR:   return "BEHAVIOR";
-        case RowGroupId::SQUACHY:    return "SQUACHY";
-        case RowGroupId::DESK:       return "DESK";
-        case RowGroupId::SQUAD:      return "SQUAD";
-        default:                     return "SYSTEM";
+        case RowGroupId::APPEARANCE: return tr("APPEARANCE", "ОФОРМЛЕНИЕ");
+        case RowGroupId::BEHAVIOR:   return tr("BEHAVIOR", "ПОВЕДЕНИЕ");
+        case RowGroupId::SQUACHY:    return tr("SQUACHY", "СКВАЧ");
+        case RowGroupId::DESK:       return tr("DESK", "ЧАСЫ");
+        case RowGroupId::SQUAD:      return tr("SQUAD", "ОТРЯД");
+        default:                     return tr("SYSTEM", "СИСТЕМА");
     }
 }
 
@@ -563,15 +567,17 @@ static void drawPinnedBack(TFT_eSPI& t, int screenW, int screenH) {
     if (s_page == SettingsPage::DESK) {
         const int half = w / 2;
         t.drawFastVLine(x + half, y + 4, h - 8, Theme::PURPLE);
-        t.setCursor(x + (half - t.textWidth("[ OK ]")) / 2, y + (h - t.fontHeight()) / 2);
-        t.print("[ OK ]");
-        t.setCursor(x + half + (half - t.textWidth("[ UP ]")) / 2, y + (h - t.fontHeight()) / 2);
-        t.print("[ UP ]");
+        const char* ok = tr("[ OK ]", "[ ОК ]");
+        const char* up = tr("[ UP ]", "[ ВВЕРХ ]");
+        t.setCursor(x + (half - Theme::textWidthRU(t, ok)) / 2, y + (h - t.fontHeight()) / 2);
+        Theme::printRU(t, ok);
+        t.setCursor(x + half + (half - Theme::textWidthRU(t, up)) / 2, y + (h - t.fontHeight()) / 2);
+        Theme::printRU(t, up);
         return;
     }
-    const char* lbl = (s_page == SettingsPage::MAIN) ? "[ BACK ]" : "[ UP ]";
-    t.setCursor(x + (w - t.textWidth(lbl)) / 2, y + (h - t.fontHeight()) / 2);
-    t.print(lbl);
+    const char* lbl = (s_page == SettingsPage::MAIN) ? tr("[ BACK ]", "[ НАЗАД ]") : tr("[ UP ]", "[ ВВЕРХ ]");
+    t.setCursor(x + (w - Theme::textWidthRU(t, lbl)) / 2, y + (h - t.fontHeight()) / 2);
+    Theme::printRU(t, lbl);
 }
 
 bool uiSettingsTapPinnedOk(int x, int y, int screenW, int screenH) {
@@ -594,7 +600,7 @@ static void drawHeader(TFT_eSPI& t, int w, int y, int hgt, RowGroupId g) {
     t.setTextSize(Theme::uiTextSize(t, 1));
     t.setTextColor(groupColor(g), Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(groupName(g));
+    Theme::printRU(t, groupName(g));
 }
 
 // `compact` drops the row text from size 2 to size 1. Used in portrait,
@@ -652,14 +658,14 @@ static void drawTwoLineRow(TFT_eSPI& t, int w, int y, int hgt, const char* label
     t.setTextSize(1);
     t.setTextColor(labelColor, Theme::BG);
     t.setCursor(8, y + 2);
-    t.print(label);
+    Theme::printRU(t, label);
     const int lineY = y + 2 + t.fontHeight() + 1;
 
     t.setTextSize(2);
-    const int chev = t.textWidth(">");
+    const int chev = Theme::textWidthRU(t, ">");
     const int lo = 8 + chev + 4;
     const int hi = w - 18 - chev - 4;
-    const int vw = value ? t.textWidth(value) : 0;
+    const int vw = value ? Theme::textWidthRU(t, value) : 0;
     // Centred between the arrows rather than in the row, so the longest name
     // still cannot slide underneath one of them.
     int vx = lo + ((hi - lo) - vw) / 2;
@@ -667,12 +673,12 @@ static void drawTwoLineRow(TFT_eSPI& t, int w, int y, int hgt, const char* label
     if (value) {
         t.setTextColor(Theme::WHITE, Theme::BG);
         t.setCursor(vx, lineY);
-        t.print(value);
+        Theme::printRU(t, value);
     }
     t.setTextColor(Theme::PURPLE, Theme::BG);
-    if (cycles) { t.setCursor(8, lineY); t.print("<"); }
+    if (cycles) { t.setCursor(8, lineY); Theme::printRU(t, "<"); }
     t.setCursor(w - 18 - chev, lineY);
-    t.print(">");
+    Theme::printRU(t, ">");
 
     t.setTextSize(1);
 }
@@ -687,15 +693,15 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, const char* label,
     t.setTextSize(compact ? 1 : Theme::uiMenuTextSize(t));
     t.setTextColor(danger ? Theme::RED : labelColor, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(label);
+    Theme::printRU(t, label);
     if (value) {
         t.setTextColor(Theme::WHITE, Theme::BG);
-        int vw = t.textWidth(value);
+        int vw = Theme::textWidthRU(t, value);
         // 18px, not 8px, reserved on the right -- leaves room for the
         // scroll indicator without it overlapping right-aligned value
         // text.
         t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
-        t.print(value);
+        Theme::printRU(t, value);
     }
 }
 
@@ -708,74 +714,74 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
     value  = nullptr;
     switch (r) {
         case SettingsRow::THEME:
-            label = "THEME"; value = Theme::kPalettes[Settings::paletteIndex()].name;
+            label = tr("THEME", "ТЕМА"); value = Theme::kPalettes[Settings::paletteIndex()].name;
             break;
         case SettingsRow::SYSTEM:
-            label = "SYSTEM"; value = OtaCore::availableVersion()[0] ? "UPDATE >" : ">";
+            label = tr("SYSTEM", "СИСТЕМА"); value = OtaCore::availableVersion()[0] ? tr("UPDATE >", "ОБНОВА >") : ">";
             break;
         // The tracking rows. Their whole reason to exist is naming the thing,
         // so the value is the target's own label rather than a state word.
         case SettingsRow::WATCH_TARGET:
-            label = "WATCHING"; value = s_watchLabel;
+            label = tr("WATCHING", "СЛЕЖУ"); value = s_watchLabel;
             break;
         case SettingsRow::HUNT_TARGET:
-            label = "HUNTING"; value = s_huntLabel;
+            label = tr("HUNTING", "ИЩУ"); value = s_huntLabel;
             break;
         case SettingsRow::BACKGROUND:
-            label = "BACKGROUND"; value = Settings::backgroundName(Settings::background());
+            label = tr("BACKGROUND", "ФОН"); value = Settings::backgroundName(Settings::background());
             break;
         case SettingsRow::DESK_OPEN:
-            label = "OPEN DESK"; value = ">";
+            label = tr("OPEN DESK", "ОТКРЫТЬ"); value = ">";
             break;
         case SettingsRow::DESK_BACKGROUND:
-            label = "BACKGROUND"; value = Settings::backgroundName(Settings::deskBackground());
+            label = tr("BACKGROUND", "ФОН"); value = Settings::backgroundName(Settings::deskBackground());
             break;
         case SettingsRow::CLOCK_FONT:
-            label = "CLOCK FONT"; value = Settings::clockFontName();
+            label = tr("CLOCK FONT", "ШРИФТ"); value = Settings::clockFontName();
             break;
         case SettingsRow::CLOCK_SIZE:
-            label = "CLOCK SIZE"; value = Settings::clockSizeName();
+            label = tr("CLOCK SIZE", "РАЗМЕР"); value = Settings::clockSizeName();
             break;
         case SettingsRow::CLOCK_BACKDROP:
-            label = "CLOCK BG"; value = Settings::clockBackdropName();
+            label = tr("CLOCK BG", "ФОН ЦИФР"); value = Settings::clockBackdropName();
             break;
 #if SQUACH_MESH
         case SettingsRow::DESK_SQUAD:
-            label = "SQUAD ON DESK"; value = Settings::deskSquad() ? "ON" : "OFF";
+            label = tr("SQUAD ON DESK", "ОТРЯД ТУТ"); value = onOff(Settings::deskSquad());
             break;
         case SettingsRow::DESK_CROWD:
-            label = "HOW MANY"; value = Settings::deskCrowdLabel();
+            label = tr("HOW MANY", "СКОЛЬКО"); value = Settings::deskCrowdLabel();
             break;
         // With one visitor. A crowd of them always chats, as on the main screen.
         case SettingsRow::DESK_VISIT:
-            label = "VISITOR"; value = Settings::deskFullVisit() ? "FULL VISIT" : "CHATS";
+            label = tr("VISITOR", "ГОСТЬ"); value = Settings::deskFullVisit() ? tr("FULL VISIT", "ВИЗИТ") : tr("CHATS", "БОЛТОВНЯ");
             break;
 #endif
         case SettingsRow::BACKGROUND_LOCK:
-            label = "LOCK BACKGROUND"; value = Settings::backgroundLocked() ? "ON" : "OFF";
+            label = tr("LOCK BACKGROUND", "ФИКС. ФОН"); value = onOff(Settings::backgroundLocked());
             break;
         case SettingsRow::BRIGHTNESS:
-            label = "BRIGHT -  +";
+            label = tr("BRIGHT -  +", "ЯРКОСТЬ -  +");
             snprintf(valBuf, valBufN, "%u%%", (unsigned)(Settings::brightness() * 100 / 255));
             value = valBuf;
             break;
         case SettingsRow::INVERT:
-            label = "INVERT COLORS"; value = Settings::inverted() ? "ON" : "OFF";
+            label = tr("INVERT COLORS", "ИНВЕРСИЯ"); value = onOff(Settings::inverted());
             break;
         case SettingsRow::RGB_SWAP:
-            label = "COLOR ORDER"; value = Settings::rgbSwapped() ? "SWAPPED" : "NORMAL";
+            label = tr("COLOR ORDER", "ПОРЯДОК ЦВЕТА"); value = Settings::rgbSwapped() ? tr("SWAPPED", "BGR") : tr("NORMAL", "RGB");
             break;
         case SettingsRow::ROTATION_LOCK:
-            label = "ROTATION LOCK"; value = Settings::rotationLocked() ? "ON" : "OFF";
+            label = tr("ROTATION LOCK", "БЛОК ПОВОРОТА"); value = onOff(Settings::rotationLocked());
             break;
         case SettingsRow::BORING_MODE:
-            label = "BORING MODE"; value = Settings::boringMode() ? "ON" : "OFF";
+            label = tr("BORING MODE", "СКУЧНЫЙ РЕЖИМ"); value = onOff(Settings::boringMode());
             break;
         case SettingsRow::CONFIDENCE:
-            label = "ALERT FILTER"; value = Settings::minConfidenceLabel();
+            label = tr("ALERT FILTER", "ФИЛЬТР ТРЕВОГ"); value = Settings::minConfidenceLabel();
             break;
         case SettingsRow::AUTO_QUIET:
-            label = "AUTO SNOOZE"; value = Settings::autoQuietLabel();
+            label = tr("AUTO SNOOZE", "АВТОТИХО"); value = Settings::autoQuietLabel();
             break;
         case SettingsRow::DETECTION_FILTER:
             // "DETECTION FILTER" (the row's own screen title, no width
@@ -784,7 +790,7 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             // confirmed with the emulator before ever touching
             // hardware. Shortened here only; the destination screen
             // keeps the full name in its title bar.
-            label = "TYPE FILTER";
+            label = tr("TYPE FILTER", "ФИЛЬТР ТИПОВ");
             snprintf(valBuf, valBufN, "%u/%u", (unsigned)Settings::enabledTypeCount(),
                      (unsigned)DetectionType::COUNT - 1);
             value = valBuf;
@@ -794,63 +800,63 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             // itself is shortened for the same reason TYPE FILTER above is
             // -- the full name collides with its own value on the 240px
             // portrait rotation at this row's size-2 text.
-            label = "IGNORED";
+            label = tr("IGNORED", "ИГНОР");
             snprintf(valBuf, valBufN, "%u", (unsigned)IgnoreList::count());
             value = valBuf;
             break;
         case SettingsRow::POWER_SAVER:
-            label = "POWER SAVER"; value = Settings::powerSaver() ? "ON" : "OFF";
+            label = tr("POWER SAVER", "ЭКОРЕЖИМ"); value = onOff(Settings::powerSaver());
             break;
         case SettingsRow::STATUS_LIGHT:
-            label = "STATUS LIGHT"; value = Settings::lightOn() ? "ON" : "OFF";
+            label = tr("STATUS LIGHT", "СВЕТОДИОД"); value = onOff(Settings::lightOn());
             break;
         case SettingsRow::SECURITY:
-            label = "SECURITY"; value = Security::enabled() ? "PIN ON" : "OFF";
+            label = tr("SECURITY", "ЗАЩИТА"); value = Security::enabled() ? tr("PIN ON", "PIN ВКЛ") : tr("OFF", "ВЫКЛ");
             break;
         case SettingsRow::CALIBRATE:
-            label = "CALIBRATE TOUCH";
+            label = tr("CALIBRATE TOUCH", "КАЛИБРОВКА");
             break;
         case SettingsRow::CHECK_COLORS:
-            label = "CHECK COLORS";
+            label = tr("CHECK COLORS", "ПРОВЕРКА ЦВЕТА");
             break;
         case SettingsRow::DIAGNOSTICS:
-            label = "DIAGNOSTICS";
+            label = tr("DIAGNOSTICS", "ДИАГНОСТИКА");
             break;
         case SettingsRow::UPDATE_FIRMWARE:
             // The row names the newer version when one is known, so the boot
             // check and a member's hello have somewhere to point.
-            label = "UPDATE FIRMWARE";
+            label = tr("UPDATE FIRMWARE", "ПРОШИВКА");
             if (OtaCore::availableVersion()[0]) { snprintf(valBuf, valBufN, "v%s >", OtaCore::availableVersion()); value = valBuf; }
             else value = ">";
             break;
         case SettingsRow::UPDATE_CHECK:
-            label = "UPDATE CHECK"; value = Settings::updateCheck() ? "AT BOOT" : "OFF";
+            label = tr("UPDATE CHECK", "АВТОПРОВЕРКА"); value = Settings::updateCheck() ? tr("AT BOOT", "ПРИ СТАРТЕ") : tr("OFF", "ВЫКЛ");
             break;
         case SettingsRow::LANGUAGE:
-            label = "LANGUAGE"; value = Settings::langName();
+            label = tr("LANGUAGE", "ЯЗЫК"); value = Settings::langName();
             break;
         case SettingsRow::WIFI_NETWORKS:
-            label = "WIFI NETWORKS";
-            if (OtaWifi::savedCount()) { snprintf(valBuf, valBufN, "%u SAVED >", (unsigned)OtaWifi::savedCount()); value = valBuf; }
-            else value = "NONE >";
+            label = tr("WIFI NETWORKS", "СЕТИ WIFI");
+            if (OtaWifi::savedCount()) { snprintf(valBuf, valBufN, tr("%u SAVED >", "%u СОХР. >"), (unsigned)OtaWifi::savedCount()); value = valBuf; }
+            else value = tr("NONE >", "НЕТ >");
             break;
         case SettingsRow::TIME_ZONE:
-            label = "TIME ZONE"; value = Settings::timeZoneName();
+            label = tr("TIME ZONE", "ЧАСОВОЙ ПОЯС"); value = Settings::timeZoneName();
             break;
         case SettingsRow::REPLAY_INTRO:
-            label = "REPLAY INTRO";
+            label = tr("REPLAY INTRO", "ИНТРО СНОВА");
             break;
         case SettingsRow::SHOW_OFF:
-            label = "SHOW OFF";
+            label = tr("SHOW OFF", "ПОНТЫ");
             break;
         case SettingsRow::SHADES_COLOR:
-            label = "SHADES COLOR"; value = Squachy::shadesColorName();
+            label = tr("SHADES COLOR", "ЦВЕТ ОЧКОВ"); value = Squachy::shadesColorName();
             break;
         // "SIZE" rather than "SQUACHY SIZE": this row is already under the
         // SQUACHY heading, and the longer label plus "MEDIUM" overruns a
         // 240px portrait row by two pixels at text size 2.
         case SettingsRow::SQUACHY_SIZE:
-            label = "SIZE"; value = Settings::squachySizeLabel();
+            label = tr("SIZE", "РАЗМЕР"); value = Settings::squachySizeLabel();
             break;
 #if SQUACH_MESH
         case SettingsRow::SQUACHY_NAME: {
@@ -859,7 +865,7 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             // this row cannot disagree with the nameplate. There used to be
             // a second row, NICKNAME, cycling the curated list on its own;
             // once a name was typed it changed something nothing showed.
-            label = "NAME";
+            label = tr("NAME", "ИМЯ");
             value = Squachy::nickname();
             break;
         }
@@ -869,21 +875,21 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             break;
 #endif
         case SettingsRow::OUTFIT:
-            label = "OUTFIT";
+            label = tr("OUTFIT", "КОСТЮМ");
             snprintf(valBuf, valBufN, "%s (%u/%u)", Squachy::outfitName(),
                      (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
             value = valBuf;
             break;
         case SettingsRow::PET:
-            label = "PET";
+            label = tr("PET", "ПИТОМЕЦ");
             value = Squachy::petName();
             break;
         case SettingsRow::BANTER:
-            label = "BANTER";
+            label = tr("BANTER", "БОЛТОВНЯ");
             value = Settings::banterName();
             break;
         case SettingsRow::VIEW_DIARY:
-            label = "SQUACHY'S DIARY";
+            label = tr("SQUACHY'S DIARY", "ДНЕВНИК СКВАЧА");
             break;
         case SettingsRow::BINGO: {
             label = "BINGO";
@@ -893,23 +899,23 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             break;
         }
         case SettingsRow::DESK_MODE:
-            label = "DESK MODE";
+            label = tr("DESK MODE", "ЧАСЫ");
             value = ">";
             break;
         case SettingsRow::RESET_STATS:
-            label = "RESET STATS";
-            snprintf(valBuf, valBufN, "%lu total", (unsigned long)eng.lifetimeTotal());
+            label = tr("RESET STATS", "СБРОС СТАТИСТ.");
+            snprintf(valBuf, valBufN, tr("%lu total", "%lu всего"), (unsigned long)eng.lifetimeTotal());
             value = valBuf;
             danger = true;
             break;
         case SettingsRow::APPEARANCE:
-            label = "APPEARANCE"; value = ">";
+            label = tr("APPEARANCE", "ОФОРМЛЕНИЕ"); value = ">";
             break;
         case SettingsRow::TOP_HAT:
-            label = "TOP HAT"; value = Settings::topHatShown() ? "SHOWN" : "HIDDEN";
+            label = tr("TOP HAT", "ЦИЛИНДР"); value = Settings::topHatShown() ? tr("SHOWN", "НАДЕТ") : tr("HIDDEN", "СНЯТ");
             break;
         case SettingsRow::BACK:
-            label = "< BACK";
+            label = tr("< BACK", "< НАЗАД");
             break;
         default:
             label = "?";
@@ -964,10 +970,10 @@ switch (Settings::background()) {
     }
     Theme::restorePalette(saved);
 
-    const char* pageTitle = ">> SETTINGS <<";
-    if (s_page == SettingsPage::APPEARANCE) pageTitle = ">> APPEARANCE <<";
-    else if (s_page == SettingsPage::SYSTEM) pageTitle = ">> SYSTEM <<";
-    else if (s_page == SettingsPage::DESK)   pageTitle = ">> DESK MODE <<";
+    const char* pageTitle = tr(">> SETTINGS <<", ">> НАСТРОЙКИ <<");
+    if (s_page == SettingsPage::APPEARANCE) pageTitle = tr(">> APPEARANCE <<", ">> ОФОРМЛЕНИЕ <<");
+    else if (s_page == SettingsPage::SYSTEM) pageTitle = tr(">> SYSTEM <<", ">> СИСТЕМА <<");
+    else if (s_page == SettingsPage::DESK)   pageTitle = tr(">> DESK MODE <<", ">> ЧАСЫ <<");
     Theme::drawTitleBar(t, pageTitle);
 
     // +6, not +4: four group headers plus the two tracking rows.
@@ -996,7 +1002,7 @@ switch (Settings::background()) {
             // value goes, rather than gone. See isSquachyOnlyRow().
             const bool off = Settings::boringMode() && isSquachyOnlyRow(items[idx].row);
             if (off) {
-                drawRow(t, w, y, itemH, label, "boring mode", false, Theme::W95_SHADOW, h > w);
+                drawRow(t, w, y, itemH, label, tr("boring mode", "скучный режим"), false, Theme::W95_SHADOW, h > w);
             } else if (isTwoLineRow(items[idx].row)) {
                 drawTwoLineRow(t, w, y, itemH, label, value, groupColor(items[idx].group),
                                items[idx].row == SettingsRow::BACKGROUND ||
