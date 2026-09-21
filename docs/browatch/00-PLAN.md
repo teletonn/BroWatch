@@ -18,25 +18,30 @@
 - В апстриме `SquachWatch-CYD/wiki/` уже есть RU-вики (`01-obzor-i-gayd.md`, `02-shkolniki-it-ai.md`) — берём как основу для `docs/browatch/`, переименовывая SquachWatch → BroWatch.
 - Оригинал: `github.com/skizzophrenic/SquachWatch-CYD`, наш форк: `github.com/teletonn/BroWatch` (origin), статус апстрима Shipping, лицензия README — GPL-3.0 (в DESIGN/FAQ встречается MIT — зафиксировать GPL-3.0 для форка).
 
-## 1. Вики BroWatch — [x] каркас, [ ] наполнение
+## 1. Вики BroWatch — [x] готово
 
-1. [x] `docs/browatch/README.md` — индекс вики. — [x] `docs/browatch/01-obzor.md` — обзор + железо + детекции + SquachMesh (адаптация апстрим-вики под BroWatch).
-2. [ ] `docs/browatch/02-rusifikaciya.md` — план RU/EN (этот план, раздел 2).
-3. [ ] `docs/browatch/03-web-most.md` — архитектура шлюза USB/Serial + API.
-4. [ ] `docs/browatch/04-android.md` — архитектура Kotlin BLE.
-5. [ ] Проверка: все ссылки на файлы/строки кликабельны, скриншоты/gif из `docs/` переиспользованы.
+1. [x] `docs/browatch/README.md` — индекс вики.
+2. [x] `docs/browatch/01-obzor.md` — обзор + железо + детекции + BroMesh.
+3. [x] `docs/browatch/02-rusifikaciya.md` — RU/EN режим, шрифт, что переведено, таблица шаблонов.
+4. [x] `docs/browatch/03-web-most.md` — архитектура шлюза USB/Serial + API.
+5. [x] `docs/browatch/04-android.md` — архитектура Kotlin BLE.
+6. [x] `docs/browatch/05-rebrand.md` — BroWatch/BroMesh: что переименовано, что оставлено.
 
-## 2. Русификация прошивки (RU/EN toggle)
+## 2. Русификация прошивки — [x] готово, прошито, проверено на железе
 
-1. [ ] Инвентаризация строк: скрипт `tools/extract_strings.py` — собрать все литералы из `src/ui_*.cpp`, `src/squachy.cpp`, `src/detection_info.cpp`, `src/signatures.cpp`, `src/settings.cpp` в `include/strings_en.h` (ключи, без изменения поведения).
-2. [ ] `Settings::lang` (0=EN, 1=RU) в NVS + пункт `LANGUAGE / ЯЗЫК` в `src/ui_settings.cpp` + сериал-команда `LANG RU|EN`.
-3. [ ] Шрифты (по возрастанию сложности):
-   - a. `font 1` RU: GLCD-таблица кириллицы 5x7 (А-Я, а-я, Ёё) в шиме `sim/glcdfont_data.h` + кастомный рендер через `TFT_eSPI.setAttribute(CP437)`/UTF-8→CP1251 маппинг; проверить `wrapText` буфер `lines[][48]` (UTF-8 = 2 байта/символ → считать глифы, не байты).
-   - b. `font 2` RU: расширить `Font16` глифами кириллицы (генератор `tools/ttf2gfx.py` расширить до `range(32,127)+range(0x410,0x44F)`).
-   - c. `BangersFont` RU: оставить латиницу для заголовков на первом этапе (ALERT/LOG/часы — собственные имена/цифры), транслитерировать заголовки; полный RU Bangers — отдельный этап (рисовать 33+33 глифа 1bpp).
-4. [ ] Перевод: `include/strings_ru.h` — меню, кнопки `[ SCAN ]→[ СКАН ]` и т.д., реплики Squachy, `EXPLAIN_TEXT`, единицы времени; цифры/MAC/RSSI не трогать.
-5. [ ] Проверка: `make -C sim` + `make shots` до/после (скриншоты RU), `pio run` (cyd, cyd-ili9341, awok), `make -C test`.
-6. Критерий готовности: переключение языка на живой плате без перезагрузки, весь главный путь (SCAN/LOG/DESK/ALERT/сообщения) читаем на RU, эмулятор рендерит RU без мусора.
+Фактический путь (отличается от чернового плана выше — план сохранён как история):
+
+1. [x] Инвентаризация: `tools/extract_strings.py` → `tools/strings_inventory.txt` (3704 литерала).
+2. [x] `Settings::lang` (0=EN, 1=RU, **по умолчанию RU**) в NVS + `LANGUAGE / ЯЗЫК` на SYSTEM-странице + команда `LANG RU|EN` по Serial (`src/settings.cpp`, `src/clock.cpp`, `src/main.cpp`, `test/lang_test.cpp`).
+3. [x] Шрифт: вместо GLCD-таблицы — отдельный GFX-шрифт **RuCyr8** (Liberation Sans Bold 9px + суперсемплинг, U+0401–U+0451, `include/ru_font.h`, ~300 байт) + собственный попиксельный рендерер `drawRuGlyph` в `src/theme.cpp` (FreeFont на железе врал — проверено `RUTEST` с платы; свой рендерер даёт одинаковые пиксели в sim и на железе). Базовая линия `RU_YSHIFT=+6`, замер ширины по чернилам (`ruInk`). Генератор: `tools/ttf2gfx.py --codes … [--supersample N] [--thresh N]`.
+4. [x] Перевод через `Theme::tr()` + `printRU/textWidthRU/wrapTextRU`: кнопки, всё меню настроек и подэкраны, тосты, 48 шаблонов + эмоции + FILL + хинты, входящие, ~300 реплик Сквачи, туториал, инвайт, фраза, обновление, дневник, бинго, деск, журнал, алерт, охота, скан, сети, PIN/телефон, бут-скрин, дата. Сознательно EN: коды типов, слова фразы/клавиатуры (протокол), динамика (имена/MAC/SSID), имена костюмов/палитр/зон, диагностика, Bangers-заголовки, OTA-домен, консольные теги. Детали — в `02-rusifikaciya.md`.
+5. [x] Проверки: `make -C test` 23/23; `make -C sim` + скриншоты RU (`compose`, `clear --inbox`, `roster`, `settings`, `boot`, `log`); `pio run` — `cyd`, `cyd-ili9341`, `awok` SUCCESS (Flash 88.0%, RAM 27.7%); плата перепрошита (`cyd-ili9341`), отвечает `[lang] RU`.
+6. Критерий готовности закрыт: русский по умолчанию после прошивки, главный путь читаем на RU.
+
+## 2b. Ребренд — [x] готово (детали — в `05-rebrand.md`)
+
+Видимые имена BroWatch/BroMesh (UI, BLE-имя `BroWatch-XXXX`, SD-лог `browatch-*.log`, README).
+Протокол (SQM1, соль фразы, NVS-ключи, идентификаторы) не тронут — совместимость сохранена.
 
 ## 3. Протокол моста прошивка ↔ шлюз (нужен для этапов 4–5)
 
