@@ -6,6 +6,10 @@
 which is how include/fonts/ is used: theme.cpp owns the bubble face). The
 emulator builds the same header, PROGMEM being empty there. Glyphs 32..126, 1-bit, rendered by FreeType
 through Pillow and thresholded.
+
+--codes A,B-C,... restricts/extends the codepoint set, e.g.
+    python tools/ttf2gfx.py font.ttf 8 RuCyr out.h --codes 1025,1040-1103,1105
+The header then covers first..last contiguously (gaps become empty glyphs).
 """
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -35,8 +39,29 @@ if axes:
 X0, Y0 = 32, 64
 bitmaps = bytearray()
 glyphs = []
+codes = None
+if '--codes' in args:
+    spec = args[args.index('--codes') + 1]
+    codes = []
+    for part in spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            a, b = part.split('-', 1)
+            codes.extend(range(int(a), int(b) + 1))
+        else:
+            codes.append(int(part))
 ascent = font.getmetrics()[0]
-for code in range(32, 127):
+if codes is None:
+    codes = list(range(32, 127))
+want = set(codes)
+first, last = codes[0], codes[-1]
+for code in range(first, last + 1):
+    if code not in want:
+        glyphs.append((0, 0, 0, 0, 0, 0))  # gap: empty glyph, keeps glyph[c-first] dense
+        continue
+    ch = chr(code)
     ch = chr(code)
     img = Image.new('L', (size * 4 + 64, size * 4 + 96), 0)
     ImageDraw.Draw(img).text((X0, Y0), ch, font=font, fill=255, anchor='ls')
@@ -72,8 +97,13 @@ for i in range(0, len(bitmaps), 12):
 lines.append('};')
 lines.append('%sconst GFXglyph %sGlyphs[]%s = {' % (st, cname, q))
 for i, g in enumerate(glyphs):
-    lines.append('  { %5d, %3d, %3d, %3d, %4d, %4d },   // 0x%02X %s' % (g + (32 + i, repr(chr(32 + i)))))
+    cp = first + i
+    try:
+        cm = repr(chr(cp))
+    except ValueError:
+        cm = "'?'"
+    lines.append('  { %5d, %3d, %3d, %3d, %4d, %4d },   // U+%04X %s' % (g + (cp, cm)))
 lines.append('};')
-lines.append('%sconst GFXfont %s%s = { (uint8_t*)%sBitmaps, (GFXglyph*)%sGlyphs, 0x20, 0x7E, %d };' % (st, cname, q, cname, cname, y_adv))
+lines.append('%sconst GFXfont %s%s = { (uint8_t*)%sBitmaps, (GFXglyph*)%sGlyphs, 0x%X, 0x%X, %d };' % (st, cname, q, cname, cname, first, last, y_adv))
 open(out, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines) + '\n')
 print('%s: ascent %d descent %d, %d glyph bytes' % (cname, asc, desc, len(bitmaps)))
