@@ -4201,6 +4201,7 @@ void loop() {
                         case SettingsRow::BACKGROUND: Settings::cycleBackground(); break;
                         case SettingsRow::BACKGROUND_LOCK: Settings::toggleBackgroundLocked(); break;
                         case SettingsRow::UPDATE_CHECK:    Settings::toggleUpdateCheck();     break;
+                        case SettingsRow::LANGUAGE:         Settings::cycleLang();               break;
                         case SettingsRow::TIME_ZONE:       Settings::cycleTimeZone();         break;
                         case SettingsRow::INVERT:
                             Settings::toggleInvert();

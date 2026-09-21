@@ -107,6 +107,7 @@ static uint8_t s_lightBright = 2;    // of 5
 static bool    s_remoteUpdate = false;
 static bool    s_phraseShown  = true;
 static bool    s_updateCheck  = true;
+static uint8_t s_lang         = 0;   // 0 EN, 1 RU. SYSTEM page LANGUAGE row.
 static uint8_t s_timeZone     = 10;   // UTC in Clock's table
 static bool    s_tzChosen     = false;
 static const char* const LIGHT_IDLE_NAMES[]  = { "OFF", "BREATHE", "SOLID" };
@@ -303,6 +304,8 @@ void load() {
     s_remoteUpdate = s_prefs.getBool("rmtUpd", true);
     s_phraseShown  = s_prefs.getBool("phrShow", true);
     s_updateCheck  = s_prefs.getBool("updChk", true);
+    s_lang         = s_prefs.getUChar("lang", 0);
+    if (s_lang > 1) s_lang = 0;
     s_timeZone     = s_prefs.getUChar("tz", 10);
     s_tzChosen     = s_prefs.getBool("tzSet", false);
     if (s_timeZone >= Clock::zoneCount()) s_timeZone = 10;
@@ -522,6 +525,15 @@ bool phraseShown()          { return s_phraseShown; }
 void togglePhraseShown()    { s_phraseShown = !s_phraseShown; s_prefs.putBool("phrShow", s_phraseShown); }
 bool updateCheck()          { return s_updateCheck; }
 void toggleUpdateCheck()    { s_updateCheck = !s_updateCheck; s_prefs.putBool("updChk", s_updateCheck); }
+uint8_t     lang()          { return s_lang; }
+const char* langName()      { return s_lang ? "RU" : "EN"; }
+void        cycleLang()     { s_lang = (uint8_t)((s_lang + 1) % 2); s_prefs.putUChar("lang", s_lang); }
+void        setLang(uint8_t v) {
+    if (v > 1) return;
+    if (s_lang == v) return;
+    s_lang = v;
+    s_prefs.putUChar("lang", s_lang);
+}
 uint8_t     timeZone()      { return s_timeZone; }
 const char* timeZoneName()  { return Clock::zoneName(s_timeZone); }
 bool        timeZoneChosen(){ return s_tzChosen; }

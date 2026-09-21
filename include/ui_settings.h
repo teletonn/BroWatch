@@ -54,6 +54,9 @@ enum class SettingsRow : uint8_t {
     CLOCK_SIZE,      // on the DESK MODE page: small, medium, large
     CLOCK_BACKDROP,  // on the DESK MODE page: what plays inside the clock
     BACK,
+    // LANGUAGE sits AFTER BACK on purpose: SettingsRow values before it stay
+    // exactly what they were, so nothing persisted or compared by value moves.
+    LANGUAGE,      // on the SYSTEM page: EN / RU
     COUNT,
     NONE = 255
 };

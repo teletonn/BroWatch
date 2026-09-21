@@ -445,6 +445,23 @@ void pollSerial() {
             OtaWifi::printSaved();
             continue;
         }
+        if (strncasecmp(line, "LANG ", 5) == 0 || strcasecmp(line, "LANG") == 0) {
+            // LANG RU | LANG EN | LANG: BroWatch UI language (Settings::lang).
+            const char* arg = line + (strcasecmp(line, "LANG") == 0 ? 4 : 5);
+            while (*arg == ' ') arg++;
+            if (*arg == '\0') {
+                Serial.printf("[lang] %s\n", Settings::langName());
+            } else if (strcasecmp(arg, "RU") == 0 || strcasecmp(arg, "1") == 0) {
+                Settings::setLang(1);
+                Serial.println("[lang] RU");
+            } else if (strcasecmp(arg, "EN") == 0 || strcasecmp(arg, "0") == 0) {
+                Settings::setLang(0);
+                Serial.println("[lang] EN");
+            } else {
+                Serial.println("[lang] unknown. One of: RU, EN");
+            }
+            continue;
+        }
         if (strncasecmp(line, "ZONE ", 5) == 0) {
             // ZONE US EASTERN, or ZONE 4: the flasher sends the name it
             // worked out from the browser's own zone.

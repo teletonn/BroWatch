@@ -99,7 +99,7 @@ static const SettingsRow APPEARANCE_ROWS[] = {
 static const SettingsRow SYSTEM_ROWS[] = {
     SettingsRow::CALIBRATE, SettingsRow::CHECK_COLORS,
     SettingsRow::DIAGNOSTICS, SettingsRow::UPDATE_FIRMWARE, SettingsRow::UPDATE_CHECK, SettingsRow::WIFI_NETWORKS,
-    SettingsRow::RESET_STATS,
+    SettingsRow::LANGUAGE, SettingsRow::RESET_STATS,
 };
 static const uint8_t SYSTEM_ROWS_N = sizeof(SYSTEM_ROWS) / sizeof(SYSTEM_ROWS[0]);
 
@@ -825,6 +825,9 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             break;
         case SettingsRow::UPDATE_CHECK:
             label = "UPDATE CHECK"; value = Settings::updateCheck() ? "AT BOOT" : "OFF";
+            break;
+        case SettingsRow::LANGUAGE:
+            label = "LANGUAGE"; value = Settings::langName();
             break;
         case SettingsRow::WIFI_NETWORKS:
             label = "WIFI NETWORKS";
