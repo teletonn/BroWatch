@@ -24,4 +24,11 @@ ComposeHit uiMeshComposeTouch(int x, int y, uint32_t now);
 void        uiMeshComposeSetTyped(const char* text);
 // What the keyboard should start from ("" for a new message).
 const char* uiMeshComposeTyped();
+
+// A reaction to the message being read: LIKE or DISLIKE as an ordinary
+// canned message (CANNED_REACT_*), sent from the incoming bubble's own
+// buttons on CLEAR and on the desk. True when it went out. Feedback is a
+// toast -- the bubble and the letter have no status line the way this
+// screen does -- and a sent reaction counts as read.
+bool uiMessageSendReaction(uint8_t canned, uint32_t now);
 #endif

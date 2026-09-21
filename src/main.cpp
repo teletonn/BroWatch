@@ -3359,6 +3359,13 @@ void loop() {
                 lastTouch = now;
 #if SQUACH_MESH
             } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
+                       uiClearReactTap(tp.x, tp.y, now)) {
+                // The LIKE/DISLIKE keys under an incoming bubble. Ahead of
+                // the bubble itself: they sit on top of it, and a tap on
+                // them must answer, never open the message screen behind.
+                lastTouch = now;
+                sqActive  = false;
+            } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                        uiClearBubbleHit(tp.x, tp.y)) {
                 // The message bubble. Ahead of the background and the edge
                 // zones: it can sit over the right-hand one, and a tap on it
@@ -5156,7 +5163,12 @@ void loop() {
                 const int ez = tft.width() / 10;
                 const bool edge = (tp.x < ez || tp.x >= tft.width() - ez) && tp.y >= 16 &&
                                   tp.y < Theme::computeButtonBar(tft.width(), tft.height()).y;
-                if (uiDeskHitMessage(tp.x, tp.y)) {
+                if (uiDeskReactTap(tp.x, tp.y, now)) {
+                    // The letter's LIKE/DISLIKE keys. Ahead of the letter
+                    // itself: they sit on top of it, and a tap on them must
+                    // answer, never just read.
+                    lastTouch = now;
+                } else if (uiDeskHitMessage(tp.x, tp.y)) {
                     lastTouch = now;
                 } else if (uiDeskHitAlert(tp.x, tp.y, now)) {
                     lastTouch = now;

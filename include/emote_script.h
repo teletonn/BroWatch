@@ -103,13 +103,17 @@ constexpr uint32_t MAX_MS = 9000;
 constexpr uint8_t VARIANTS = 3;
 uint8_t     lineCount();                        // pools, index 0 included
 const char* line(uint8_t pool, uint8_t variant);
+// BroWatch RU: the same pool, the way it sounds in Russian. lang: 0 EN,
+// 1 RU (Settings::lang); anything else reads as EN.
+const char* lineL(uint8_t pool, uint8_t variant, uint8_t lang);
 // Lines built from the setup byte, written into `out`.
 constexpr uint8_t DYN_COIN_CALL = 0xF0;   // the receiver calls it: "HEADS!"
 constexpr uint8_t DYN_COIN_SIDE = 0xF1;   // how it landed
 constexpr uint8_t DYN_DICE      = 0xF2;   // the winner's gloat, or a tie
 constexpr uint8_t DYN_SPOTTED   = 0xF3;   // "See that FLOCK?!"
 bool isDyn(uint8_t code);
-void dynLine(uint8_t code, MeshMsg::Emote e, uint8_t setup, char* out, size_t cap);
+void dynLine(uint8_t code, MeshMsg::Emote e, uint8_t setup, char* out, size_t cap,
+             uint8_t lang = 0);
 
 // ---- the setup byte --------------------------------------------------------------
 // Rolled once, by the sender, and sent: both boards act out the same result.

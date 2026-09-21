@@ -782,4 +782,38 @@ ComposeHit uiMeshComposeTouch(int x, int y, uint32_t now) {
     return ComposeHit::NONE;
 }
 
+bool uiMessageSendReaction(uint8_t canned, uint32_t now) {
+    // A reaction is an ordinary canned message to the squad's broadcast --
+    // the protocol has no addressing, so everyone holding the phrase hears
+    // it, the sender's board showing it in its own bubble like any message.
+    if (canned != MeshMsg::CANNED_REACT_LIKE && canned != MeshMsg::CANNED_REACT_DISLIKE)
+        return false;
+    if (const char* why = cannotSend()) {
+        Theme::showToast(isRU() ? "НЕ МОГУ СЛАТЬ" : "CAN'T SEND", why, Theme::AMBER);
+        return false;
+    }
+    // A reaction must not cut our own message short off the air -- the same
+    // rule the emote picker keeps (see above).
+    if (MeshTalk::sendingMessage(now)) {
+        Theme::showToast(isRU() ? "НЕ МОГУ СЛАТЬ" : "CAN'T SEND",
+                         isRU() ? STILL_ON_AIR_RU : STILL_ON_AIR, Theme::AMBER);
+        return false;
+    }
+    const MeshTalk::Send r = MeshTalk::send(canned, now);
+    if (r != MeshTalk::Send::OK) {
+        Theme::showToast(isRU() ? "НЕ МОГУ СЛАТЬ" : "CAN'T SEND",
+                         isRU() ? SEND_FAILED_RU : SEND_FAILED, Theme::RED);
+        return false;
+    }
+    // Reacting is reading: the receipt goes back and the bubble's "!" comes
+    // off, the same as opening the message would have done.
+    MeshTalk::markRead();
+    const bool like = (canned == MeshMsg::CANNED_REACT_LIKE);
+    Theme::showToast(isRU() ? (like ? "ЛАЙК ОТПРАВЛЕН" : "ДИЗЛАЙК ОТПРАВЛЕН")
+                            : (like ? "LIKE SENT" : "DISLIKE SENT"),
+                     isRU() ? "Увидят все с той же фразой" : "Everyone holding the phrase sees it",
+                     Theme::CYAN);
+    return true;
+}
+
 #endif // SQUACH_MESH

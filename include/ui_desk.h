@@ -46,6 +46,14 @@ bool             uiDeskHitAlert(int x, int y, uint32_t now);
 // card reads it (and sends the read receipt), the same as opening the
 // inbox would.
 bool uiDeskHitMessage(int x, int y);
+// The LIKE/DISLIKE keys in the letter's bottom strip: 0 for a miss,
+// 1 for LIKE, 2 for DISLIKE. Their rectangles are filled in by the draw,
+// once the box is at rest.
+int  uiDeskReactHit(int x, int y);
+// A tap on one: sends the reaction as an ordinary message and dismisses
+// the answered letter. True when the tap landed on a key, whether or not
+// the send went out.
+bool uiDeskReactTap(int x, int y, uint32_t now);
 
 // True for a few seconds after a focus block ends: main.cpp lights the LED
 // green off this, the same way HUNT's CAUGHT does.

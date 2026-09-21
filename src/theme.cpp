@@ -464,6 +464,25 @@ void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
     printRU(t, label);
 }
 
+void drawThumbButton(TFT_eSPI& t, int x, int y, int w, int h,
+                     bool thumbsUp, uint16_t fg, uint16_t bg) {
+    t.fillRoundRect(x, y, w, h, 3, bg);
+    t.drawRoundRect(x, y, w, h, 3, fg);
+    // A mitten in a 14x14 cell: a rounded fist with a thumb rising off it,
+    // and a seam so it reads as a hand and not a blob. The down thumb is
+    // the up one flipped top-for-bottom, so they are unmistakably a pair.
+    const int gx = x + (w - 14) / 2, gy = y + (h - 14) / 2;
+    if (thumbsUp) {
+        t.fillRoundRect(gx + 3, gy + 1, 4, 8, 2, fg);    // thumb, pointing up
+        t.fillRoundRect(gx + 1, gy + 7, 10, 7, 2, fg);   // fist
+        t.drawFastHLine(gx + 3, gy + 10, 7, bg);         // knuckle seam
+    } else {
+        t.fillRoundRect(gx + 3, gy + 5, 4, 8, 2, fg);    // thumb, pointing down
+        t.fillRoundRect(gx + 1, gy, 10, 7, 2, fg);       // fist
+        t.drawFastHLine(gx + 3, gy + 4, 7, bg);          // knuckle seam
+    }
+}
+
 void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
                      const char* label, bool sunken) {
     // Face first, inset by the two bevel rings so the edges below draw over

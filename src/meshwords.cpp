@@ -153,6 +153,14 @@ const char* const CANNED[] = {
     "Big if true.",
     "Beep boop.",
     "Stay squachy.",
+    // ---- 48..49, reactions (BroWatch) -----------------------------------------
+    // Answers, not openers: sent from an incoming message's own buttons, so
+    // they live in NO picker's tab on purpose (see cannedAtTab below and
+    // the tab test). Appended like everything else -- an older build reads
+    // them as UNKNOWN_LINE: recorded, shown as unknown, never crashed on.
+    // Twenty characters max like every other line: the other board's bubble.
+    "Liked it.",
+    "Didn't like it.",
 };
 const uint8_t CANNED_N = (uint8_t)(sizeof(CANNED) / sizeof(CANNED[0]));
 
@@ -210,6 +218,8 @@ const char* const CANNED_RU[] = {
     "Мощно, если так.",    // 45 Big if true.
     "Бип-буп.",            // 46 Beep boop.
     "Будь сквачем.",       // 47 Stay squachy.
+    "Понравилось.",        // 48 Liked it.
+    "Не понравилось.",     // 49 Didn't like it.
 };
 const uint8_t CANNED_RU_N = (uint8_t)(sizeof(CANNED_RU) / sizeof(CANNED_RU[0]));
 static_assert(sizeof(CANNED_RU) / sizeof(CANNED_RU[0]) == sizeof(CANNED) / sizeof(CANNED[0]),

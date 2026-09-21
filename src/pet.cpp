@@ -41,6 +41,37 @@ static const char* const QUIPS[] = {
 };
 static const uint8_t QUIPS_N = sizeof(QUIPS) / sizeof(QUIPS[0]);
 
+// BroWatch RU parallels: the lil guy heckles in Russian. Same count, same
+// order, same roll -- display only.
+static inline bool isRU() { return Settings::lang() == 1; }
+static const char* const QUIPS_RU[] = {
+    "крутые очки",
+    "PCBWAY!",
+    "как ты вообще ходишь",
+    "из тебя стул хороший",
+    "вид отсюда класс",
+    "я тут теперь живу",
+    "это мой трон",
+    "отсюда мой дом видно",
+    "он со мной",
+    "всё сканируешь?",
+    "просканируй меня, трус",
+    "неотслеживаемый",
+    "флок кто?",
+    "меня нет ни в одном списке",
+    "теперь слежка — это мы",
+    "смотри сюда",
+    "джеронимо",
+    "я так и задумал",
+    "в яблочко",
+    "ну ты и криптид",
+    "я бы лучше спрятался",
+    "видел тебя на плакате",
+    "восьмидесятые звонили",
+};
+static_assert(sizeof(QUIPS_RU) / sizeof(QUIPS_RU[0]) == QUIPS_N,
+              "QUIPS_RU must mirror QUIPS line for line");
+
 // ---- the arc ------------------------------------------------------------
 // One parabola, paused at the top. That is the whole trick, and it is why
 // he comes down exactly the way he went up: the ascent and the descent are
@@ -105,6 +136,16 @@ static const char* const YETI_QUIPS[] = {
     "DARK GOOD.", "YETI GO.", "BYE. HUNGRY.", "YETI BACK SOON",
 };
 static const uint8_t YETI_QUIPS_N = sizeof(YETI_QUIPS) / sizeof(YETI_QUIPS[0]);
+// BroWatch RU: the yeti's register, kept -- all caps, one to three words.
+// Same count, same order.
+static const char* const YETI_QUIPS_RU[] = {
+    "ЙЕТИ ТУТ.", "ЙЕТИ! ЙЕТИ!", "СНЕГ? НЕТ СНЕГА.", "ЙЕТИ СКУЧНО.",
+    "ГДЕ СНЕГ?", "КОМНАТА ТИХАЯ.", "ЙЕТИ ГОЛОДНЫЙ.", "МАЛЫЙ ДРУГ.",
+    "ТЫ МНОГО ГОВОРИШЬ.", "ХВАТИТ МАХАТЬ.", "НИКОГО. ХОРОШО.", "ЙЕТИ СПАТЬ?",
+    "ТЕМНО ХОРОШО.", "ЙЕТИ УЙТИ.", "ПОКА. ГОЛОДНЫЙ.", "ЙЕТИ СКОРО",
+};
+static_assert(sizeof(YETI_QUIPS_RU) / sizeof(YETI_QUIPS_RU[0]) == YETI_QUIPS_N,
+              "YETI_QUIPS_RU must mirror YETI_QUIPS line for line");
 
 // He walks on, stands, says one thing and leaves. No climbing: he is three
 // times the lil guy's weight and the joke is that he does not do tricks.
@@ -134,19 +175,32 @@ static const uint32_t YETI_FLINCH_MS = 700;
 // would plainly have an opinion about -- the rest fall back to the general
 // set, because a line for every one of them would be eleven jokes thin.
 static const char* placeLine(uint8_t pick) {
+    const bool ru = isRU();
     switch (Settings::background()) {
     case Settings::Background::SNOWFALL:
-        { static const char* const L[3] = { "SNOW! GOOD.", "YETI HOME.", "MY HILL." };        return L[pick % 3]; }
+        { static const char* const L[3] = { "SNOW! GOOD.", "YETI HOME.", "MY HILL." };
+          static const char* const R[3] = { "СНЕГ! ХОРОШО.", "ЙЕТИ ДОМ.", "МОЙ ХОЛМ." };
+          return ru ? R[pick % 3] : L[pick % 3]; }
     case Settings::Background::FIRE:
-        { static const char* const L[3] = { "TOO HOT.", "YETI MELT.", "NO. NO. NO." };        return L[pick % 3]; }
+        { static const char* const L[3] = { "TOO HOT.", "YETI MELT.", "NO. NO. NO." };
+          static const char* const R[3] = { "СЛИШКОМ ЖАРКО.", "ЙЕТИ ТАЮ.", "НЕТ. НЕТ. НЕТ." };
+          return ru ? R[pick % 3] : L[pick % 3]; }
     case Settings::Background::AQUARIUM:
-        { static const char* const L[3] = { "WET.", "FISH SMALL.", "YETI NO SWIM." };         return L[pick % 3]; }
+        { static const char* const L[3] = { "WET.", "FISH SMALL.", "YETI NO SWIM." };
+          static const char* const R[3] = { "МОКРО.", "РЫБА МАЛА.", "ЙЕТИ НЕ ПЛАВАТЬ." };
+          return ru ? R[pick % 3] : L[pick % 3]; }
     case Settings::Background::TOASTERS:
-        { static const char* const L[3] = { "BREAD FLY?", "CATCH TOAST.", "WHAT THAT." };     return L[pick % 3]; }
+        { static const char* const L[3] = { "BREAD FLY?", "CATCH TOAST.", "WHAT THAT." };
+          static const char* const R[3] = { "ХЛЕБ ЛЕТАТЬ?", "ЛОВИ ТОСТ.", "ЧТО ЭТО." };
+          return ru ? R[pick % 3] : L[pick % 3]; }
     case Settings::Background::STARFIELD:
-        { static const char* const L[3] = { "SKY MOVING.", "STARS COLD.", "YETI DIZZY." };    return L[pick % 3]; }
+        { static const char* const L[3] = { "SKY MOVING.", "STARS COLD.", "YETI DIZZY." };
+          static const char* const R[3] = { "НЕБО ЕДЕТ.", "ЗВЁЗДЫ ХОЛОД.", "ЙЕТИ КРУЖИТСЯ." };
+          return ru ? R[pick % 3] : L[pick % 3]; }
     case Settings::Background::TERMINAL:
-        { static const char* const L[3] = { "WORDS FALL.", "YETI NO READ.", "GREEN. HUH." };  return L[pick % 3]; }
+        { static const char* const L[3] = { "WORDS FALL.", "YETI NO READ.", "GREEN. HUH." };
+          static const char* const R[3] = { "СЛОВА ПАДАТЬ.", "ЙЕТИ НЕ ЧИТАТЬ.", "ЗЕЛЁНО. АГА." };
+          return ru ? R[pick % 3] : L[pick % 3]; }
     default: return nullptr;
     }
 }
@@ -170,6 +224,25 @@ static const char* const NAP_REPLY[3] = {
     "right there. sure.",
     "he's out cold",
 };
+// BroWatch RU parallels: Squachy talking to YOU about the yeti.
+static const char* const YETI_REPLY_RU[] = {
+    "он всегда так",
+    "не смотри на него",
+    "это мой друг",
+    "он безобидный",
+    "не встречайся взглядом",
+    "он опять нашёл лестницу",
+    "большой. слов мало.",
+    "мы об этом не говорим",
+};
+static const char* const NAP_REPLY_RU[3] = {
+    "располагайся",
+    "вот тут. ага.",
+    "он вырубился",
+};
+static_assert(sizeof(YETI_REPLY_RU) / sizeof(YETI_REPLY_RU[0]) ==
+              sizeof(YETI_REPLY) / sizeof(YETI_REPLY[0]),
+              "YETI_REPLY_RU must mirror YETI_REPLY line for line");
 
 void reset() {
     s_phase  = Phase::AWAY;
@@ -189,7 +262,10 @@ void reset() {
 // interruption, not as the device speaking.
 static void bubble(TFT_eSPI& t, int x, int y, int screenW, const char* s) {
     t.setTextSize(1);
-    const int w = t.textWidth(s) + 8;
+    // BroWatch: font 1 holds no Cyrillic bitmaps, so both the measure and
+    // the print go through the mixedface helpers -- ASCII behaves exactly
+    // as before, a Russian line just renders instead of turning to dust.
+    const int w = Theme::textWidthRU(t, s) + 8;
     const int h = t.fontHeight() + 5;
     if (x + w > screenW - 2) x = screenW - 2 - w;
     if (x < 2) x = 2;
@@ -197,7 +273,7 @@ static void bubble(TFT_eSPI& t, int x, int y, int screenW, const char* s) {
     t.drawRect(x, y, w, h, Theme::VAPOR_PINK);
     t.setTextColor(Theme::WHITE, Theme::BG);
     t.setCursor(x + 4, y + 3);
-    t.print(s);
+    Theme::printRU(t, s);
 }
 
 // One visit: in from the left, a beat standing beside Squachy, and out the
@@ -216,7 +292,8 @@ static void yetiTick(TFT_eSPI& t, uint32_t now, int screenW, int cx, int halfW, 
         // A third of the time, if he has something to say about where he is,
         // he says that instead of a line from the general set.
         const char* place = placeLine((uint8_t)random(0, 3));
-        s_yLine  = (place && random(0, 3) == 0) ? place : YETI_QUIPS[s_yQuip];
+        s_yLine  = (place && random(0, 3) == 0) ? place
+                   : (isRU() ? YETI_QUIPS_RU[s_yQuip] : YETI_QUIPS[s_yQuip]);
         s_yAnswered = false;
         s_yFlinchAt = 0;
         s_yX     = -(float)Theme::YETI_W;
@@ -232,7 +309,7 @@ static void yetiTick(TFT_eSPI& t, uint32_t now, int screenW, int cx, int halfW, 
             s_yX = target;
             s_yPhase = s_yNap ? YPhase::NAP : YPhase::TALK;
             s_yAt = now;
-            if (s_yNap) s_yLine = "YETI NAP.";
+            if (s_yNap) s_yLine = isRU() ? "ЙЕТИ СПАТЬ." : "YETI NAP.";
         }
         break;
     }
@@ -267,8 +344,10 @@ static void yetiTick(TFT_eSPI& t, uint32_t now, int screenW, int cx, int halfW, 
         if (roll < 30) {
             Squachy::visitLaugh(now);
         } else {
-            Squachy::visitSay(s_yNap ? NAP_REPLY[random(0, 3)]
-                                     : YETI_REPLY[random(0, YETI_REPLY_N)]);
+            if (s_yNap) Squachy::visitSay(isRU() ? NAP_REPLY_RU[random(0, 3)]
+                                                 : NAP_REPLY[random(0, 3)]);
+            else        Squachy::visitSay(isRU() ? YETI_REPLY_RU[random(0, YETI_REPLY_N)]
+                                                 : YETI_REPLY[random(0, YETI_REPLY_N)]);
             // And it makes him jump. Not at you -- at the small one who
             // just started talking next to him.
             if (!s_yNap) s_yFlinchAt = now;
@@ -486,7 +565,8 @@ void tick(TFT_eSPI& t, uint32_t now, int screenW, int bandTop, int bandBottom) {
     // on whichever side has the room.
     if (s_phase == Phase::PERCH || s_phase == Phase::HECKLE) {
         t.setTextSize(1);
-        const int bw = t.textWidth(QUIPS[s_quip]) + 8;
+        const char* quip = isRU() ? QUIPS_RU[s_quip] : QUIPS[s_quip];
+        const int bw = Theme::textWidthRU(t, quip) + 8;
         const int bx = ((int)s_x + SPR + 4 + bw <= screenW - 2)
                        ? (int)s_x + SPR + 4
                        : (int)s_x - bw - 4;
@@ -506,7 +586,7 @@ void tick(TFT_eSPI& t, uint32_t now, int screenW, int bandTop, int bandBottom) {
                                            : (int)s_y - 18;
         if (by < 22) by = 22;
         (void)bandTop;
-        bubble(t, bx, by, screenW, QUIPS[s_quip]);
+        bubble(t, bx, by, screenW, quip);
     }
 }
 

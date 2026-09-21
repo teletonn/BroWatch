@@ -11,6 +11,7 @@
 #include "squachmesh.h"
 #include "settings.h"
 #include "ui_clear.h"   // the crowd is drawn by the main screen's renderer
+#include "ui_meshcompose.h"   // reactions send from the letter's own buttons
 #endif
 
 namespace {
@@ -159,6 +160,10 @@ bool uiDeskHitAlert(int x, int y, uint32_t now) {
 #if SQUACH_MESH
 constexpr uint32_t MSG_HOLD_MS = 20000;   // shown at least this long, and while unread
 int s_msgX0 = 0, s_msgY0 = 0, s_msgX1 = 0, s_msgY1 = 0;   // the card's hit box
+// The LIKE/DISLIKE keys in the letter's bottom strip, LIKE on the left.
+// Filled by drawMessageBox once the box is at rest, read by uiDeskReactHit.
+int s_deskLikeX = 0, s_deskLikeY = 0, s_deskDisX = 0, s_deskDisY = 0;
+static const int D_REACT_W = 26, D_REACT_H = 17, D_REACT_GAP = 4, D_REACT_ROW = 19;
 uint32_t s_msgSeenAt = 0;   // m.at of the message a tap dismissed, so it stays down
 bool     s_msgSeen   = false;
 
@@ -212,12 +217,13 @@ static uint8_t messageLines(TFT_eSPI& t, char rows[][48]) {
 }
 
 // Rows the box takes, from its top edge to its bottom: title bar, the
-// message, the time's row.
+// message, the time's row -- and the reaction strip, whose keys answer the
+// letter without leaving the desk for the message screen.
 static int messageBoxH(TFT_eSPI& t) {
     char rows[3][48];
     const uint8_t n = messageLines(t, rows);
     const int lineH = (Settings::lang() == 1) ? 11 : Theme::bubbleTextH() + 1;
-    return XP_TITLE + 6 + n * lineH + 10 + 2;
+    return XP_TITLE + 6 + n * lineH + 10 + 2 + D_REACT_ROW;
 }
 
 // The box drops out from behind the clock's plate when a message lands and
@@ -297,6 +303,21 @@ static void drawMessageBox(TFT_eSPI& t, int restTop, float p, uint32_t now) {
     t.setTextColor(XP_CLOSE, XP_BODY);
     t.setCursor(bx + bw - 6 - t.textWidth(stamp), by + bh - 11);
     t.print(stamp);
+    // The reaction strip, bottom left: LIKE then DISLIKE, white faces with
+    // blue thumbs on the beige body. Only at rest -- a sliding box is not
+    // a tap target, and the tick below reads these rects as drawn.
+    s_deskLikeX = s_deskLikeY = s_deskDisX = s_deskDisY = 0;
+    if (p >= 1.0f) {
+        const int ry = by + bh - D_REACT_ROW + 2;
+        Theme::drawThumbButton(t, bx + 8, ry, D_REACT_W, D_REACT_H, true,
+                               XP_BLUE, Theme::WHITE);
+        Theme::drawThumbButton(t, bx + 8 + D_REACT_W + D_REACT_GAP, ry,
+                               D_REACT_W, D_REACT_H, false, XP_BLUE, Theme::WHITE);
+        s_deskLikeX = bx + 8;
+        s_deskLikeY = ry;
+        s_deskDisX  = bx + 8 + D_REACT_W + D_REACT_GAP;
+        s_deskDisY  = ry;
+    }
     // The tap target: the box where it will come to rest, plus the polaroid.
     s_msgX0 = 0; s_msgY0 = restTop; s_msgX1 = bx + bw; s_msgY1 = restTop + bh;
 }
@@ -387,7 +408,8 @@ void uiDeskTapTimer(uint32_t now) {
     if (s_timer == Timer::IDLE) {
         s_timer = Timer::FOCUS;
         s_timerEnd = now + FOCUS_MS;
-        sayFocus("Twenty-five minutes. I'll keep the time. You keep the focus.", now);
+        sayFocus(Theme::tr("Twenty-five minutes. I'll keep the time. You keep the focus.",
+                           "Двадцать пять минут. Время веду я. Ты веди фокус."), now);
     } else {
         // A running block is stopped by a tap, no confirmation: the cost of
         // a stray tap is one more tap.
@@ -420,7 +442,8 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
         if (s_timer == Timer::FOCUS) {
             s_timer = Timer::BREAK;
             s_timerEnd = now + BREAK_MS;
-            sayFocus("Time. Stand up, look at something far away. Five minutes.", now);
+            sayFocus(Theme::tr("Time. Stand up, look at something far away. Five minutes.",
+                               "Время. Встань, посмотри вдаль. Пять минут."), now);
         } else {
             s_timer = Timer::IDLE;
             Squachy::announce(Theme::tr("Break's over. Back to it, or don't, I'm a screen.", "Перерыв окончен. За дело. Или нет, я же экран."));
@@ -740,6 +763,39 @@ bool uiDeskHitMessage(int x, int y) {
     (void)x; (void)y;
 #endif
     return false;
+}
+
+// 0 for a miss, 1 for LIKE, 2 for DISLIKE.
+int uiDeskReactHit(int x, int y) {
+#if SQUACH_MESH
+    if (s_deskLikeX && x >= s_deskLikeX && x < s_deskLikeX + D_REACT_W &&
+        y >= s_deskLikeY && y < s_deskLikeY + D_REACT_H) return 1;
+    if (s_deskDisX && x >= s_deskDisX && x < s_deskDisX + D_REACT_W &&
+        y >= s_deskDisY && y < s_deskDisY + D_REACT_H) return 2;
+#else
+    (void)x; (void)y;
+#endif
+    return 0;
+}
+
+// A tap on a reaction key: the reaction goes out as an ordinary message
+// and the answered letter is dismissed like any other read one. True when
+// the tap landed on a key, whether or not the send went out.
+bool uiDeskReactTap(int x, int y, uint32_t now) {
+#if SQUACH_MESH
+    const int h = uiDeskReactHit(x, y);
+    if (!h) return false;
+    uiMessageSendReaction(h == 1 ? MeshMsg::CANNED_REACT_LIKE : MeshMsg::CANNED_REACT_DISLIKE,
+                          now);
+    s_msgSeenAt = MeshTalk::inbox().at;
+    s_msgSeen   = true;
+    s_msgX1 = s_msgY1 = 0;
+    s_deskLikeX = s_deskLikeY = s_deskDisX = s_deskDisY = 0;
+    return true;
+#else
+    (void)x; (void)y; (void)now;
+    return false;
+#endif
 }
 
 bool uiDeskHitTimer(int x, int y, int screenW, int screenH) {

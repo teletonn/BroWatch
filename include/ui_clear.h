@@ -44,6 +44,13 @@ void uiClearSetGuest(const SquachMesh::Peer* p);
 // The little speech bubble beside a visitor, which opens the message screen.
 // Its rectangle is filled in by the draw; this reads it.
 bool uiClearBubbleHit(int x, int y);
+// The LIKE/DISLIKE keys under an incoming red bubble: 0 for a miss,
+// 1 for LIKE, 2 for DISLIKE. Their rectangles are filled in by the draw,
+// alongside the bubble's own.
+int  uiClearReactHit(int x, int y);
+// A tap on one: sends the reaction as an ordinary message. True when the
+// tap landed on a key, whether or not the send went out.
+bool uiClearReactTap(int x, int y, uint32_t now);
 // The "+N" squad badge beside a visitor, which opens the SQUAD screen.
 bool uiClearSquadHit(int x, int y);
 

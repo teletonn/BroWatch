@@ -40,6 +40,14 @@ extern const uint16_t    WORD_N;
 extern const char* const CANNED[];
 extern const uint8_t     CANNED_N;
 
+// Reactions (BroWatch): the two canned lines that are answers, not openers.
+// Sent from an incoming message's own buttons, never offered in the picker's
+// tabs -- cannedAtTab() knows only 0..47. Appended at the end like every
+// other line; nothing before them moved.
+constexpr uint8_t CANNED_REACT_LIKE    = 48;
+constexpr uint8_t CANNED_REACT_DISLIKE = 49;
+constexpr uint8_t CANNED_REACT_N       = 2;
+
 // How the picker groups them. PRESENTATION ONLY -- none of this travels, so
 // unlike the indices above it may be reordered or renamed freely. Same shape
 // as the emote picker's tabs (EmoteScript::TABS/PER_TAB) on purpose: both

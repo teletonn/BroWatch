@@ -231,6 +231,14 @@ namespace Theme {
     void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
                     const char* label, bool pressed, uint8_t textSize = 1);
 
+    // A reaction key for an incoming message: a light face with a dark
+    // thumb-up or thumb-down, readable at a glance next to the bubble.
+    // Vector-drawn like every other icon here -- the faces carry no emoji,
+    // so there is no emoji to draw with. `fg` is the thumb and the edge,
+    // `bg` the face; the caller picks the pair for its own background.
+    void drawThumbButton(TFT_eSPI& t, int x, int y, int w, int h,
+                         bool thumbsUp, uint16_t fg, uint16_t bg);
+
     // A real Windows 95/98 push button: silver face, two-pixel bevel, black
     // system-font label. `sunken` inverts the bevel and nudges the label a
     // pixel down and right, which is what Win95 itself did and is the whole

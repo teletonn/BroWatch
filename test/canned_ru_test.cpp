@@ -12,8 +12,8 @@
 
 int main() {
     suite("Same indices, same count");
-    ck("48 EN lines", MeshMsg::CANNED_N == 48);
-    ck("48 RU lines", MeshMsg::CANNED_RU_N == 48);
+    ck("50 EN lines", MeshMsg::CANNED_N == 50);
+    ck("50 RU lines", MeshMsg::CANNED_RU_N == 50);
     ck("counts match", MeshMsg::CANNED_RU_N == MeshMsg::CANNED_N);
 
     suite("Display routing");
@@ -45,6 +45,18 @@ int main() {
             if (idx != 0xFF && idx >= MeshMsg::CANNED_N) slots = false;
         }
     ck("every slot is 0xFF or a valid index", slots);
+    // The two reactions are answers, not openers: no tab holds them.
+    bool reacted = true;
+    for (uint8_t tb = 0; tb < MeshMsg::CANNED_TABS; tb++)
+        for (uint8_t s = 0; s < MeshMsg::CANNED_PER_TAB; s++) {
+            const uint8_t idx = MeshMsg::cannedAtTab(tb, s);
+            if (idx == MeshMsg::CANNED_REACT_LIKE || idx == MeshMsg::CANNED_REACT_DISLIKE)
+                reacted = false;
+        }
+    ck("reactions live outside the tabs", reacted);
+    ck("reaction indices are the last two",
+       MeshMsg::CANNED_REACT_LIKE + 1 == MeshMsg::CANNED_REACT_DISLIKE &&
+       MeshMsg::CANNED_REACT_DISLIKE + 1 == MeshMsg::CANNED_N);
 
     suite("RU lines fit the UI");
     bool fit = true, glyphs = true, cyr = true;

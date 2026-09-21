@@ -8,6 +8,7 @@
 #include "emote_script.h"
 #include "state.h"
 #include "test_util.h"
+#include "ru_text.h"
 #include <cstring>
 #include <cstdio>
 
@@ -57,6 +58,35 @@ int main() {
         ck("and none is longer than a small bubble holds", fits);
         ck("pool 0 is silence", line(0, 0) == nullptr);
         ck("a pool past the end is silence too", line(lineCount(), 0) == nullptr);
+
+        // BroWatch RU: every pool has its Russian parallel, none overflows
+        // the 48-byte wrap buffers, and lang routing falls back to EN.
+        bool ruFilled = true, ruFits = true, ruGlyphs = true;
+        for (uint8_t p = 1; p < lineCount(); p++)
+            for (uint8_t v = 0; v < VARIANTS; v++) {
+                const char* l = lineL(p, v, 1);
+                if (!l || !l[0]) ruFilled = false;
+                else if (strlen(l) >= 48) ruFits = false;
+                else if (RuText::count(l) > 24) ruGlyphs = false;
+            }
+        ck("every pool has three Russian lines", ruFilled);
+        ck("and none overflows the wrap buffers", ruFits);
+        ck("and none past two bubble rows", ruGlyphs);
+        ck("lang 0 and lang 9 read English",
+           lineL(1, 0, 0) == line(1, 0) && lineL(1, 0, 9) == line(1, 0));
+        ck("lang 1 reads Russian", strcmp(lineL(1, 0, 1), line(1, 0)) != 0);
+        ck("RU lines are renderable (ASCII/Cyrillic)", [] {
+            for (uint8_t p = 1; p < lineCount(); p++)
+                for (uint8_t v = 0; v < VARIANTS; v++) {
+                    const char* s = lineL(p, v, 1);
+                    const char* q = s;
+                    while (*q) {
+                        const uint16_t cp = RuText::next(&q);
+                        if (!RuText::isAscii(cp) && !RuText::isCyrillic(cp)) return false;
+                    }
+                }
+            return true;
+        }());
 
         char b[32];
         dynLine(DYN_SPOTTED, E::SPOTTED, (uint8_t)DetectionType::FLOCK, b, sizeof b);

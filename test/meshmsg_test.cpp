@@ -579,7 +579,9 @@ int main() {
     {
         // The tab table is presentation only -- it never goes on the air -- but
         // a line that sits on no tab is a line nobody can ever send, and one on
-        // two tabs is a picker that lies about where things are.
+        // two tabs is a picker that lies about where things are. The deliberate
+        // exception is the two reactions (LIKE/DISLIKE): answers sent from a
+        // message's own buttons, checked below to sit on no tab.
         uint8_t seen[256] = {};
         int empty = 0;
         bool fits = true;
@@ -593,8 +595,13 @@ int main() {
                 if (strlen(MeshMsg::CANNED[idx]) > 20) fits = false;
             }
         bool once = true;
-        for (uint8_t i = 0; i < MeshMsg::CANNED_N; i++) if (seen[i] != 1) once = false;
-        ck("six tabs of eight hold every line", MeshMsg::CANNED_TABS * MeshMsg::CANNED_PER_TAB == MeshMsg::CANNED_N);
+        // Every line but the two reactions, which no tab holds on purpose:
+        // they are answers sent from a message's own buttons, not openers.
+        for (uint8_t i = 0; i < MeshMsg::CANNED_N - MeshMsg::CANNED_REACT_N; i++)
+            if (seen[i] != 1) once = false;
+        ck("six tabs of eight hold every line but the reactions",
+           MeshMsg::CANNED_TABS * MeshMsg::CANNED_PER_TAB ==
+           MeshMsg::CANNED_N - MeshMsg::CANNED_REACT_N);
         ck("no empty slots", empty == 0);
         ck("each line on exactly one tab", once);
         ck("every line fits a bubble", fits);

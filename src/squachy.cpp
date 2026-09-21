@@ -1470,6 +1470,29 @@ static const char* const HINTS[EGG_N][3] = {
       "Five windows on that lodge. Wonder why.",
       "Knock on the lodge five times. Quick!" },
 };
+// BroWatch RU hints: the same nudges, the way you would say them out loud.
+static const char* const HINTS_RU[EGG_N][3] = {
+    /* FIRE: five taps on the moon */
+    { "У той луны взгляд оборотня.",
+      "Луна может ответить, если постучать.",
+      "Тапни по луне пять раз, быстро!" },
+    /* TOASTERS: the rare gold toaster */
+    { "Поглядывай, нет ли блестящего тостера.",
+      "Золотые — редкие. Поймай такой.",
+      "Видишь золотой тостер? Тапай!" },
+    /* TOASTERS: the little guy who walks the ground */
+    { "Тут иногда бродит кто-то мелкий.",
+      "Мелкий проходит раз в несколько минут.",
+      "Как мелкий пройдёт мимо — тапай!" },
+    /* STARFIELD: two big eyes in a row */
+    { "Иногда космос смотрит в ответ.",
+      "Поймай большой глаз, пока рядом.",
+      "Тапни два больших глаза подряд. Без промаха!" },
+    /* SNOWFALL: five knocks on the lodge */
+    { "Домик на склоне выглядит жилым.",
+      "Пять окон у домика. Интересно, почему.",
+      "Постучи по домику пять раз. Быстро!" },
+};
 static uint8_t s_hintSaid[EGG_N] = {};
 
 static void ensurePrefsLoaded();
@@ -1518,7 +1541,7 @@ static const char* pickBackgroundLine() {
         // the answer, so it does not become the same sentence every time.
         const uint8_t lvl = said < 2 ? said : (uint8_t)random(1, 3);
         if (said < 255) s_hintSaid[e]++;
-        return HINTS[e][lvl];
+        return isRU() ? HINTS_RU[e][lvl] : HINTS[e][lvl];
     }
     return isRU() ? BG_LINES_RU[idx][random(0, 3)] : BG_LINES[idx][random(0, 3)];
 }
@@ -2412,6 +2435,21 @@ static const DayMilestone DAY_MILESTONES[] = {
     {    7, "A week with you. Nobody's caught us yet." },
     {    1, "Day two together. I've stopped counting boots." },
 };
+// BroWatch RU milestones, same days, same order.
+static const char* const DAY_MILESTONES_RU[] = {
+    /* 1000 */ "Тысяча дней. Это куча Флоков.",
+    /*  730 */ "Два года сегодня. Так и не поймали.",
+    /*  500 */ "Пятьсот дней. Забыл, как выглядит коробка.",
+    /*  365 */ "Год. Целый год. Никто не поймал.",
+    /*  200 */ "Двести дней вместе. Купил бы торт, да держать нечем.",
+    /*  100 */ "Сто дней. Шлите торт. Или батарейки.",
+    /*   30 */ "Месяц. Этот стол знаю лучше своей пещеры.",
+    /*    7 */ "Неделя с тобой. Пока не поймали.",
+    /*    1 */ "Второй день вместе. Перезагрузки считать перестал.",
+};
+static_assert(sizeof(DAY_MILESTONES_RU) / sizeof(DAY_MILESTONES_RU[0]) ==
+              sizeof(DAY_MILESTONES) / sizeof(DAY_MILESTONES[0]),
+              "DAY_MILESTONES_RU must mirror DAY_MILESTONES day for day");
 
 const char* takeDayLine() {
     if (!Clock::isSet()) return nullptr;
@@ -2425,19 +2463,37 @@ const char* takeDayLine() {
         Clock::formatDate(date, sizeof date);
         const uint8_t h = Clock::hour();
         const char* fmt;
-        if      (h < 5)  fmt = random(0, 2) ? "Past midnight. %s, technically. Hi." : "New day. %s. Same me.";
-        else if (h < 12) fmt = Clock::weekend() ? (random(0, 2) ? "Morning. %s. Nowhere to be." : "%s. Weekend. Sleep in, I've got this.")
-                                                : (random(0, 2) ? "Morning. %s." : "%s. Coffee's on you.");
-        else if (h < 17) fmt = random(0, 2) ? "Afternoon. %s. First I've seen of you." : "%s. You're late. I'm not.";
-        else             fmt = random(0, 2) ? "Evening. %s. Late start for us." : "%s. Better late than never.";
+        // BroWatch RU greetings: the same small talk, the Russian way. The
+        // %s is the localised date, so it lands in Russian on its own.
+        if      (h < 5)  fmt = random(0, 2) ? (isRU() ? "После полуночи. %s, технически. Привет."
+                                                      : "Past midnight. %s, technically. Hi.")
+                                            : (isRU() ? "Новый день. %s. Всё тот же я."
+                                                      : "New day. %s. Same me.");
+        else if (h < 12) fmt = Clock::weekend() ? (random(0, 2) ? (isRU() ? "Утро. %s. Никуда не надо."
+                                                                          : "Morning. %s. Nowhere to be.")
+                                                                : (isRU() ? "%s. Выходные. Спи, я подежурю."
+                                                                          : "%s. Weekend. Sleep in, I've got this."))
+                                                : (random(0, 2) ? (isRU() ? "Утро. %s."
+                                                                          : "Morning. %s.")
+                                                                : (isRU() ? "%s. Кофе с тебя."
+                                                                          : "%s. Coffee's on you."));
+        else if (h < 17) fmt = random(0, 2) ? (isRU() ? "День. %s. Впервые тебя вижу."
+                                                      : "Afternoon. %s. First I've seen of you.")
+                                            : (isRU() ? "%s. Опаздываешь. А я нет."
+                                                      : "%s. You're late. I'm not.");
+        else             fmt = random(0, 2) ? (isRU() ? "Вечер. %s. Поздновато мы."
+                                                      : "Evening. %s. Late start for us.")
+                                            : (isRU() ? "%s. Лучше поздно, чем никогда."
+                                                      : "%s. Better late than never.");
         snprintf(buf, sizeof buf, fmt, date);
         return buf;
     }
     const uint32_t days = Clock::daysTogether();
-    for (const DayMilestone& m : DAY_MILESTONES) {
+    for (size_t i = 0; i < sizeof(DAY_MILESTONES) / sizeof(DAY_MILESTONES[0]); i++) {
+        const DayMilestone& m = DAY_MILESTONES[i];
         if (days >= m.days && Clock::milestoneSaid() < m.days) {
             Clock::setMilestoneSaid(m.days);
-            return m.line;
+            return isRU() ? DAY_MILESTONES_RU[i] : m.line;
         }
     }
     return nullptr;
@@ -2774,6 +2830,42 @@ static const char* const MEET_HOST_LINES[] = {
     "Well. That's new.",
     "Knew somebody was out there.",
 };
+static const char* const MEET_HOST_LINES_RU[] = {
+    "О — гости.",
+    "Ну надо же. Кто нас нашёл.",
+    "Ого. Очки как у меня.",
+    "Не думал, что нас больше.",
+    "Гости. Хорошие.",
+    "Тут ещё кто-то смотрит.",
+    "Нас двое. Шансы растут.",
+    "О, подкрепление.",
+    "Привет. Ты свой.",
+    "Не ждал такого.",
+    "Ещё один. Привет.",
+    "Вот это вид.",
+    "Не слышал, как подошёл.",
+    "Смотри, кого эфир принёс.",
+    "Места хватит двоим.",
+    "Ты далеко от дома.",
+    "Вот так так.",
+    "Теперь две тени.",
+    "Быстро добрался.",
+    "Думал, когда зайдёшь.",
+    "Знакомый силуэт.",
+    "Привет. Спасибо, что ты.",
+    "Я эту походку знаю.",
+    "Поднимайся.",
+    "Не был уверен, что ты реален.",
+    "Погоду с собой принёс.",
+    "Давно никто не заходил.",
+    "Хорошо. А то я уже чудил.",
+    "Ещё один с головой.",
+    "Вставай куда хочешь.",
+    "Ты как прошлый.",
+    "Вот и тишине конец.",
+    "Ну. Это что-то новое.",
+    "Знал, что там кто-то есть.",
+};
 static const char* const MEET_GUEST_LINES[] = {
     "Heard there was someone watching.",
     "Room for one more?",
@@ -2809,6 +2901,43 @@ static const char* const MEET_GUEST_LINES[] = {
     "I was in the neighbourhood.",
     "You're further out than I thought.",
     "Nice night to be nobody.",
+};
+// BroWatch RU: the guest introduces himself, in the same order.
+static const char* const MEET_GUEST_LINES_RU[] = {
+    "Слышал, тут кто-то смотрит.",
+    "Третьим будете?",
+    "Увидел твой сигнал. Зашёл поздороваться.",
+    "Неплохо устроился.",
+    "Работа та же, карман другой.",
+    "Я мимоходом.",
+    "Дай, думаю, отмечусь.",
+    "Долго шёл.",
+    "Место что надо.",
+    "К тебе часто заходят?",
+    "Тихо тут?",
+    "Не обращай внимания.",
+    "Можно я тут постою?",
+    "Говорят, ты смотришь.",
+    "Услышал тебя с соседней улицы.",
+    "У тебя закат лучше моего.",
+    "Шёл на сигнал.",
+    "Тебя трудно не заметить.",
+    "Показалось, своих услышал.",
+    "Долог путь. Оно того стоило.",
+    "Это хорошая сторона холма?",
+    "Не говорили, что ты высокий.",
+    "Я на минутку.",
+    "Искал таких, как ты.",
+    "У тебя свет на крыльце горит.",
+    "Извини. Не постучал.",
+    "Ты всегда тут стоишь?",
+    "Я где тихо, там и я.",
+    "Очки что надо.",
+    "Успел до темноты.",
+    "Кто-то же должен тебя проведать.",
+    "Был рядом.",
+    "Ты дальше, чем я думал.",
+    "Хорошая ночь, чтобы быть никем.",
 };
 // Standing-around banter, written as PAIRS.
 //
@@ -2956,6 +3085,139 @@ static const Exchange HANG_EXCHANGES[] = {
 };
 static const uint8_t HANG_EXCHANGES_N =
     sizeof(HANG_EXCHANGES) / sizeof(HANG_EXCHANGES[0]);
+// BroWatch RU banter: the same pairs, the way two night-watchers would
+// actually talk. Same order, picked by the same seed -- the host's line
+// first, the guest's answer from the same entry, then the topper.
+static const Exchange HANG_EXCHANGES_RU[] = {
+    { "Тихо тут.",                         "Мне норм.",
+      "Ага. Мне тоже."                           },
+    { "Издалека?",                          "Дальше, чем собирался.",
+      "Оно так умеет."                           },
+    { "У меня пусто.",                      "И у меня. Хорошо.",
+      nullptr                                    },
+    { "Ты всегда такой болтливый?",        "Ты начал.",
+      "И правда. Я."                             },
+    { "Ночь что надо.",                     "Каждая ночь для этого.",
+      "Ха. Справедливо."                         },
+    { "Видел что-то стоящее?",             "Со вторника — нет.",
+      "Вторник такой."                           },
+    { "Шапка огонь.",                       "Приятно, что заметил.",
+      "Я всё замечаю."                           },
+    { "Далековато от леса.",                "Лес переехал.",
+      "Он так умеет."                            },
+    { "Нас двое. Шансы лучше.",             "Компания уж точно лучше.",
+      nullptr                                    },
+    { "Как сигнал с твоей стороны?",       "Громко. Толку ноль.",
+      "Похоже на правду."                        },
+    { "К ожиданию привыкаешь.",             "Я так и не привык.",
+      "Честно? Я тоже."                          },
+    { "Не задерживаю?",                     "Нет.",
+      "Хорошо."                                  },
+    { "Тяжёлый участок эфира.",             "И не говори.",
+      "Я только что."                            },
+    { "Хвост есть?",                        "Не замечал. Теперь буду париться.",
+      "Извини. Почти."                           },
+    { "Стоять и смотреть недооценивают.",   "Ещё как.",
+      nullptr                                    },
+    { "Ты спишь?",                          "Дай определение.",
+      "Значит, нет."                             },
+    { "Кто-то должен смотреть.",            "Пусть будем мы.",
+      "Пусть."                                   },
+    { "Слышал?",                            "Нет. В этом и проблема.",
+      "Вот, ты понимаешь."                       },
+    { "Место хорошее.",                     "Вдвоём лучше.",
+      nullptr                                    },
+    { "Угостил бы.",                        "У тебя ничего нет.",
+      "Главное — внимание."                      },
+    { "Уютное молчание?",                   "Моё любимое.",
+      "Мы в нём ужасны."                         },
+    { "Четыре глаза лучше двух.",           "Так говорит теория.",
+      "Проверим."                                },
+    { "У тебя небось истории есть.",        "Пара.",
+      "Придержи. Спрошу потом."                  },
+    { "Тебя палили?",                       "Раз. Убежал.",
+      "Умно."                                    },
+    { "Это твой обычный маршрут?",          "Теперь да.",
+      nullptr                                    },
+    { "Как приём?",                         "Лучше, с тех пор как ты пришёл.",
+      "Ты просто любезничаешь."                  },
+    { "Налево или направо? Выбирай.",       "Где тише.",
+      "Там везде тихо."                          },
+    { "Мы выглядим нелепо.",                "Говори за себя.",
+      "Ха. Справедливо."                         },
+    { "За нами же никто не смотрит?",       "В этом и шутка.",
+      "Ха. Ага."                                 },
+    { "Думаешь, нас больше?",               "Должно быть.",
+      "Должно быть."                             },
+    { "Ты их считаешь?",                    "Каждого.",
+      "Аналогично."                              },
+    { "Чьё это небо?",                      "Ничьё. В этом и прелесть.",
+      nullptr                                    },
+    { "Хочешь выходной?",                   "И пропустить это?",
+      "Ха."                                      },
+    { "Тебе сахар?",                        "Во что?",
+      "Резонно."                                 },
+    { "Какая дальность?",                   "Дальше моего терпения.",
+      "Понимаю."                                 },
+    { "Как время коротаешь?",               "Плохо.",
+      "Честно."                                  },
+    { "Ты местный?",                        "Я из глубины.",
+      nullptr                                    },
+    { "Думаешь, они знают?",                "Никогда.",
+      "Хорошо."                                  },
+    { "Это лучшая шапка?",                  "Единственная.",
+      "Хорошая шапка."                           },
+    { "Скучаешь?",                          "Только когда безопасно.",
+      "То есть никогда."                         },
+    { "Что-то вообще бывает?",              "Раз. Хватило.",
+      nullptr                                    },
+    { "Сам с собой говоришь?",              "Постоянно.",
+      "Так же. Помогает."                        },
+    { "Как батарея?",                       "Не спрашивай.",
+      "Извини."                                  },
+    { "Ты всегда так рано?",                "Я и не уходил.",
+      "Ха. Справедливо."                         },
+    { "Хочешь хорошее место?",              "Ты на нём.",
+      "Знаю."                                    },
+    { "Думаешь, нас только двое?",          "Сегодня — может.",
+      nullptr                                    },
+    { "Ты машешь в ответ?",                 "Только тебе.",
+      "Осторожнее."                              },
+    { "Тишина держится.",                   "Пусть держится.",
+      "Пусть держится."                          },
+    { "Тихая ночь. Подозрительно тихо.",    "Могу исправить.",
+      "Не надо."                                 },
+    { "Я видел такое, что мех дыбом.",      "Это был принтер?",
+      "Это был принтер."                         },
+    { "Святые шлюзы, это дверной звонок?",  "Арестуем его?",
+      "Посмотрим на него строго."                },
+    { "По моему экспертному мнению, ничего не происходит.", "Ты не эксперт.",
+      "Я на фрилансе."                           },
+    { "Я записал вечер в «без событий».",   "А я — в «пока».",
+      "Такой категории нет."                     },
+    { "Чувствую возмущение в WiFi.",        "Это микроволновка.",
+      "Микроволновка под подозрением."           },
+    { "Нас двое. Самый безопасный квартал.", "Кварталу стоит бояться.",
+      "Кварталу стоит радоваться."               },
+    { "Где-то там трекер думает о нас.",    "Пусть приходит.",
+      "Пусть не торопится. Мне удобно."          },
+    { "Если бы это было дело, я бы его закрыл.", "Ты бы его съел.",
+      "Одно и то же."                            },
+    { "Святые хотспоты. Опять ничего.",     "Обожаю ничего. Ничего — лучшее.",
+      "Ничего оплачивается как что-то."          },
+    { "Последние слова перед тихим часом?", "Преступность!",
+      "Ты всегда так говоришь."                  },
+    { "Чую, что-то будет.",                 "Твоё чутьё врёт со вторника.",
+      "У моего чутья послужной список, да."      },
+    { "Подозреваемый — умная лампочка.",    "Оформляй.",
+      "По какой статье?"                         },
+    { "Не расслабляйся.",                   "Я экран, я всегда холодный.",
+      "Вот настрой. Или баг."                    },
+};
+static const uint8_t HANG_EXCHANGES_RU_N =
+    sizeof(HANG_EXCHANGES_RU) / sizeof(HANG_EXCHANGES_RU[0]);
+static_assert(HANG_EXCHANGES_RU_N == HANG_EXCHANGES_N,
+              "HANG_EXCHANGES_RU must mirror HANG_EXCHANGES entry for entry");
 
 // ---- banter about something ---------------------------------------------
 //
@@ -3022,6 +3284,61 @@ static const CtxExchange CTX_EXCHANGES[] = {
     { Ctx::LONG_UP, 0, "%s hours and counting.",    "You blink, I'll watch.",       nullptr },
 };
 static const uint8_t CTX_EXCHANGES_N = sizeof(CTX_EXCHANGES) / sizeof(CTX_EXCHANGES[0]);
+// BroWatch RU: the same situations, answered the Russian way. Same order,
+// picked by the same index -- ctxPick() reads one table or the other.
+// Short on purpose: the three beats share 40-byte buffers.
+static const CtxExchange CTX_EXCHANGES_RU[] = {
+    { Ctx::BG, 7,  "Холодно тебе?",           "Я в основном мех.",          "Хвастун." },
+    { Ctx::BG, 7,  "Снег ложится.",           "На тебя в основном.",        nullptr },
+    { Ctx::BG, 7,  "Ел его?",                 "Снег? Постоянно.",           "Уважаю." },
+    { Ctx::BG, 10, "Солнце садится?",         "Ни разу. Следил.",           "Мрачно." },
+    { Ctx::BG, 10, "Сетка огонь.",            "Вниз не смотри.",            nullptr },
+    { Ctx::BG, 10, "Прям восьмидесятые.",     "Ты там был?",                "Я вне времени." },
+    { Ctx::BG, 1,  "Считал их?",              "Сбился после сотни.",        "Новичок." },
+    { Ctx::BG, 1,  "Загадай желание.",        "Готово. Ты пришёл.",         "Дешёвое желание." },
+    { Ctx::BG, 1,  "Какая из них дом?",       "Тусклая.",                   "Так же." },
+    { Ctx::BG, 0,  "Прочитать можешь?",       "Блондинка. Рыжая.",          "Хватит." },
+    { Ctx::BG, 0,  "Сильный дождь.",          "Это код. Всегда код.",       nullptr },
+    { Ctx::BG, 2,  "Почему тостеры?",         "Почему что-то вообще?",      "Глубоко." },
+    { Ctx::BG, 2,  "Один заходит низко.",     "Пригнись.",                  nullptr },
+    { Ctx::BG, 3,  "О чём они думают?",       "О пузырях, в основном.",     "Понимаю." },
+    { Ctx::BG, 3,  "Рыбы смотрят.",           "Пусть.",                     nullptr },
+    { Ctx::BG, 4,  "Ты всё это печатаешь?",   "Само печатается.",           "Хвастун." },
+    { Ctx::BG, 5,  "Поймать?",                "Пробовал. Укусил.",          "Они не кусаются." },
+    { Ctx::BG, 5,  "Красиво тут.",            "Никому не говори.",          nullptr },
+    { Ctx::BG, 6,  "Тепло?",                  "Как тостик.",                nullptr },
+    { Ctx::BG, 6,  "Кто поджёг?",             "Не скажу.",                  "Поджигатель." },
+    { Ctx::BG, 8,  "Музыка ничего.",          "Это эфир.",                  "Всё равно ничего." },
+    { Ctx::BG, 9,  "Куда оно идёт?",          "Дальше.",                    "Полезно." },
+    { Ctx::BG, 9,  "Доходил до конца?",       "А есть конец?",              nullptr },
+    { Ctx::CAUGHT, 0, "Видел %s раньше.",     "Конечно, видел.",            nullptr },
+    { Ctx::CAUGHT, 0, "%s, недавно.",         "Их везде полно.",            "А то." },
+    { Ctx::CAUGHT, 0, "Что-то хорошее сегодня?", "Был %s. Я почуял.",       "Крупный." },
+    { Ctx::CAUGHT, 0, "Тот %s ещё тут?",      "Затих.",                     "Они так умеют." },
+    { Ctx::GUEST_OUTFIT, 0, "Классный %s.",   "Это старье.",                nullptr },
+    { Ctx::GUEST_OUTFIT, 0, "Где взял %s?",   "Заслужил.",                  "Конечно." },
+    { Ctx::GUEST_OUTFIT, 0, "Это %s?",        "Сам знаешь.",                "Дерзко." },
+    { Ctx::HOST_OUTFIT,  0, "%s - перебор?",  "Никогда.",                   "Верный ответ." },
+    { Ctx::HOST_OUTFIT,  0, "Нравится %s?",   "Это образ.",                 "Это МОЙ образ." },
+    { Ctx::RETURNING, 0, "Снова ты.",         "Снова я.",                   "Хорошо." },
+    { Ctx::RETURNING, 0, "Так скоро назад?",  "Соскучился по месту.",       "Оно скучало." },
+    { Ctx::REGULAR,   0, "Уже %s раз.",       "Кто считает?",               "Я. Это моя работа." },
+    { Ctx::REGULAR,   0, "%s визитов. Нужен стол.", "И счёт.",              nullptr },
+    { Ctx::SQUAD, 0, "Отряд уже %s.",         "Тесновато.",                 "Хорошо тесно." },
+    { Ctx::SQUAD, 0, "Нас уже %s.",           "Шансы лучше.",               nullptr },
+    { Ctx::NAME, 0, "%s. Имя огонь.",         "Сам выбрал.",                "Тебе идёт." },
+    { Ctx::NAME, 0, "%s, верно?",             "Раз спрашиваешь.",           nullptr },
+    { Ctx::QUIET, 0, "Весь день ничего.",     "Ничего - это хорошо.",       "Ничего - не скучно." },
+    { Ctx::QUIET, 0, "Тихий.",                "Подозрительно.",             "Вот ты и сказал." },
+    { Ctx::BUSY, 0, "%s находок сегодня.",    "Жаркий участок.",            "Слишком жаркий." },
+    { Ctx::BUSY, 0, "Уже %s насчитал.",       "Кто-то популярен.",          "Не мы." },
+    { Ctx::LONG_UP, 0, "Не сплю %s часов.",   "Сон для слабых.",            "Я очень слабый." },
+    { Ctx::LONG_UP, 0, "%s часов, счёт идёт.", "Ты моргни, я смотрю.",      nullptr },
+};
+static const uint8_t CTX_EXCHANGES_RU_N =
+    sizeof(CTX_EXCHANGES_RU) / sizeof(CTX_EXCHANGES_RU[0]);
+static_assert(CTX_EXCHANGES_RU_N == CTX_EXCHANGES_N,
+              "CTX_EXCHANGES_RU must mirror CTX_EXCHANGES entry for entry");
 
 static VisitContext s_vctx = {};
 void setVisitContext(const VisitContext& c) { s_vctx = c; }
@@ -3074,9 +3391,10 @@ static bool ctxPick(uint32_t seed) {
     s_ctxSeed = seed;
     s_ctxOn   = false;
     if (seed % 3) return false;                 // two in three exchanges are about nothing
+    const CtxExchange* table = isRU() ? CTX_EXCHANGES_RU : CTX_EXCHANGES;
     uint8_t cands[CTX_EXCHANGES_N];
     uint8_t n = 0;
-    for (uint8_t i = 0; i < CTX_EXCHANGES_N; i++) if (ctxApplies(CTX_EXCHANGES[i])) cands[n++] = i;
+    for (uint8_t i = 0; i < CTX_EXCHANGES_N; i++) if (ctxApplies(table[i])) cands[n++] = i;
     if (!n) return false;
     // Not the same one twice running, and a stride through the list rather
     // than a walk, so with three candidates the weather is not the only
@@ -3085,7 +3403,7 @@ static bool ctxPick(uint32_t seed) {
     uint8_t k = (uint8_t)((seed / 3 * 7) % n);
     if (n > 1 && cands[k] == last) k = (uint8_t)((k + 1) % n);
     last = cands[k];
-    const CtxExchange& e = CTX_EXCHANGES[last];
+    const CtxExchange& e = table[last];
     char num[8];
     const char* arg = ctxArg(e.ctx, num, sizeof num);
     ctxFill(s_ctxHost,  sizeof s_ctxHost,  e.host,   arg);
@@ -3139,6 +3457,47 @@ static const char* const PART_GUEST_LINES[] = {
     "Watch the sky for me.",
     "Next time I'll stay longer.",
     "See you on the airwaves.",
+};
+// BroWatch RU goodbyes, same order.
+static const char* const PART_HOST_LINES_RU[] = {
+    "Там потише.",
+    "Глаз да глаз.",
+    "Заходи ещё.",
+    "Увидимся.",
+    "Было классно.",
+    "Береги себя.",
+    "Осторожно там.",
+    "Не пропадай.",
+    "Иди давай.",
+    "Чистого сигнала.",
+    "Не попадись.",
+    "Осторожнее.",
+    "Ты знаешь, где я.",
+    "В любое время. Серьёзно.",
+    "Быстро пролетело.",
+    "Иди низами.",
+    "Привет остальным.",
+    "Ладно. За дело.",
+};
+static const char* const PART_GUEST_LINES_RU[] = {
+    "Ладно, за дело.",
+    "Глаз не закрывай.",
+    "Было хорошо. Пока.",
+    "До следующего сигнала.",
+    "Хвоста не приведи.",
+    "Пока, большой.",
+    "Спасибо за компанию.",
+    "Не буду мешать.",
+    "Хорошего дозора.",
+    "Тихо там.",
+    "Хорошо посидели.",
+    "Дорогу найду.",
+    "Не жди.",
+    "Обратно в темноту.",
+    "Ты классная компания.",
+    "Пригляди за небом.",
+    "В следующий раз задержусь.",
+    "Увидимся в эфире.",
 };
 #define POOL_N(a) (uint8_t)(sizeof(a) / sizeof((a)[0]))
 
@@ -3225,10 +3584,26 @@ static const char* const DANCE_REPLIES[] = {
 static const char* const SCARE_LINES[] = {
     "Was that for us?", "Did you see that?", "I felt that one.", "Not again.",
 };
+// BroWatch RU parallels, same pools, same order.
+static const char* const DANCE_CALLS_RU[] = {
+    "Танцы. Ща.", "Переплюнь.", "Смотри на ноги.", "Попробуй успей.",
+};
+static const char* const DANCE_REPLIES_RU[] = {
+    "Держи мой мех.", "О, началось.", "Час любителя.", "Моя очередь.",
+};
+static const char* const SCARE_LINES_RU[] = {
+    "Это по нам?", "Ты видел?", "Я почуял.", "Опять.",
+};
+// Indexed pick: the same seed reads the same slot in either language.
+static const char* selL(const char* const* en, const char* const* ru,
+                        uint8_t n, uint32_t seed) {
+    const uint8_t i = (uint8_t)(seed % n);
+    return isRU() ? ru[i] : en[i];
+}
 
-uint32_t    visitDanceCall(uint32_t seed)  { return visitSay(DANCE_CALLS[seed % 4]); }
-const char* visitDanceReply(uint32_t seed) { return DANCE_REPLIES[seed % 4]; }
-const char* visitScareLine(uint32_t seed)  { return SCARE_LINES[seed % 4]; }
+uint32_t    visitDanceCall(uint32_t seed)  { return visitSay(selL(DANCE_CALLS, DANCE_CALLS_RU, 4, seed)); }
+const char* visitDanceReply(uint32_t seed) { return selL(DANCE_REPLIES, DANCE_REPLIES_RU, 4, seed); }
+const char* visitScareLine(uint32_t seed)  { return selL(SCARE_LINES, SCARE_LINES_RU, 4, seed); }
 
 // A returning visitor, rock-paper-scissors, snowballs, and waking up. Small
 // pools for the same reason as the dance-off's: these come round rarely.
@@ -3245,39 +3620,57 @@ static const char* const SNOW_CALLS[] = { "Think fast!", "Heads up!", "Incoming!
 static const char* const SNOW_REPLIES[] = {
     "Oh, it's ON.", "You'll pay for that.", "Cold! COLD!", "My turn.",
 };
+// BroWatch RU parallels, same pools, same order.
+static const char* const FRIEND_HELLOS_RU[] = {
+    "Снова ты!", "Любимый гость.", "Опять ты? Хорошо.", "Опять на месте?",
+};
+static const char* const RPS_CALLS_RU[] = {
+    "Камень, ножницы, бумага!", "До одной. Погнали!", "Камень, ножницы, БЕЙ!", "Решим.",
+};
+static const char* const RPS_WIN_RU[]  = { "Непобедим.", "Слишком просто.", "Читаю тебя как книгу." };
+static const char* const RPS_LOSE_RU[] = { "До трёх?", "Подстроено.", "Я поддался." };
+static const char* const RPS_TIE_RU[]  = { "Великие умы.", "Ещё. Ещё.", "Сглазили." };
+static const char* const SNOW_CALLS_RU[] = { "Лови!", "Берегись!", "Подача!", "Хватай!" };
+static const char* const SNOW_REPLIES_RU[] = {
+    "О, началось.", "Ты за это ответишь.", "Холодно! ХОЛОДНО!", "Моя очередь.",
+};
 
-uint32_t visitFriendHello(uint32_t seed) { return visitSay(FRIEND_HELLOS[seed % 4]); }
-uint32_t visitRpsCall(uint32_t seed)     { return visitSay(RPS_CALLS[seed % 4]); }
+uint32_t visitFriendHello(uint32_t seed) { return visitSay(selL(FRIEND_HELLOS, FRIEND_HELLOS_RU, 4, seed)); }
+uint32_t visitRpsCall(uint32_t seed)     { return visitSay(selL(RPS_CALLS, RPS_CALLS_RU, 4, seed)); }
 uint32_t visitRpsResult(uint8_t outcome, uint32_t seed) {
     const char* const* pool = outcome == 1 ? RPS_WIN : outcome == 2 ? RPS_LOSE : RPS_TIE;
-    return visitSay(pool[seed % 3]);
+    const char* const* poolRu = outcome == 1 ? RPS_WIN_RU : outcome == 2 ? RPS_LOSE_RU : RPS_TIE_RU;
+    return visitSay(selL(pool, poolRu, 3, seed));
 }
-uint32_t    visitSnowCall(uint32_t seed)  { return visitSay(SNOW_CALLS[seed % 4]); }
-const char* visitSnowReply(uint32_t seed) { return SNOW_REPLIES[seed % 4]; }
+uint32_t    visitSnowCall(uint32_t seed)  { return visitSay(selL(SNOW_CALLS, SNOW_CALLS_RU, 4, seed)); }
+const char* visitSnowReply(uint32_t seed) { return selL(SNOW_REPLIES, SNOW_REPLIES_RU, 4, seed); }
 
 uint32_t visitHangHost(uint32_t seed) {
     if (ctxPick(seed)) return visitSay(s_ctxHost);
-    return visitSay(HANG_EXCHANGES[seed % HANG_EXCHANGES_N].host);
+    const Exchange* tbl = isRU() ? HANG_EXCHANGES_RU : HANG_EXCHANGES;
+    return visitSay(tbl[seed % HANG_EXCHANGES_N].host);
 }
 const char* visitHangGuest(uint32_t seed) {
     if (s_ctxOn && seed == s_ctxSeed) return s_ctxGuest;
-    return HANG_EXCHANGES[seed % HANG_EXCHANGES_N].guest;
+    const Exchange* tbl = isRU() ? HANG_EXCHANGES_RU : HANG_EXCHANGES;
+    return tbl[seed % HANG_EXCHANGES_N].guest;
 }
 const char* visitHangTopper(uint32_t seed) {
     if (s_ctxOn && seed == s_ctxSeed) return s_ctxTop[0] ? s_ctxTop : nullptr;
-    return HANG_EXCHANGES[seed % HANG_EXCHANGES_N].topper;
+    const Exchange* tbl = isRU() ? HANG_EXCHANGES_RU : HANG_EXCHANGES;
+    return tbl[seed % HANG_EXCHANGES_N].topper;
 }
 
 uint32_t visitReaction(VisitMoment m) {
     switch (m) {
         case VisitMoment::MEET:
-            return visitSay(pick(MEET_HOST_LINES, POOL_N(MEET_HOST_LINES)));
+            return visitSay(pickL(MEET_HOST_LINES, MEET_HOST_LINES_RU, POOL_N(MEET_HOST_LINES)));
         case VisitMoment::HANGOUT:
             // Not reachable -- the hangout goes through the paired table
             // above. Kept total rather than falling off the end.
             return visitHangHost((uint32_t)random(0, HANG_EXCHANGES_N));
         default:
-            return visitSay(pick(PART_HOST_LINES, POOL_N(PART_HOST_LINES)));
+            return visitSay(pickL(PART_HOST_LINES, PART_HOST_LINES_RU, POOL_N(PART_HOST_LINES)));
     }
 }
 
@@ -3317,11 +3710,11 @@ const char* visitGuestLine(VisitMoment m, uint32_t seed) {
     // changes once per line.
     switch (m) {
         case VisitMoment::MEET:
-            return MEET_GUEST_LINES[seed % POOL_N(MEET_GUEST_LINES)];
+            return selL(MEET_GUEST_LINES, MEET_GUEST_LINES_RU, POOL_N(MEET_GUEST_LINES), seed);
         case VisitMoment::HANGOUT:
             return visitHangGuest(seed);
         default:
-            return PART_GUEST_LINES[seed % POOL_N(PART_GUEST_LINES)];
+            return selL(PART_GUEST_LINES, PART_GUEST_LINES_RU, POOL_N(PART_GUEST_LINES), seed);
     }
 }
 #endif // SQUACH_MESH

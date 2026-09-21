@@ -90,11 +90,85 @@ static const char* const LINES[L_COUNT][VARIANTS] = {
     { "Post it!",        "I blinked!",        "Frame-worthy." },
 };
 
+// BroWatch RU display lines: the same stunts, the way they sound in a
+// Russian chat. Same pools, same order, same count -- the air never
+// carries these, only the screen shows them. Short like the EN ones:
+// a guest's bubble holds about twenty glyphs before it covers his face.
+static const char* const LINES_RU[L_COUNT][VARIANTS] = {
+    { "", "", "" },
+    { "Дай кулака!",    "Здорово!",          "Приветствую!" },
+    { "...Бабах.",      "Тссс!",             "Взрыв!" },
+    { "Наш знак?",      "Секретный!",        "Ты в теме." },
+    { "Чётко.",         "Как всегда.",       "Безупречно." },
+    { "Докладываю!",    "Товарищ сква!",     "Отряд!" },
+    { "Вольно.",        "Продолжай.",        "Ура!" },
+    { "После вас.",     "Ваш сквашность.",   "Милорд." },
+    { "Нет, после ВАС.", "Благодарю.",       "Польщён." },
+    { "Обнимашки!",     "Иди сюда!",         "Давай, ты!" },
+    { "Охх.",           "Так надо было.",    "Лучшие други." },
+    { "Орёл-решка!",    "Кинь монетку!",     "На удачу!" },
+    { "Кидай!",         "Давай шесть!",      "По-крупному!" },
+    { "Армрестлинг. Ща.", "Силён, думаешь?", "Разберёмся." },
+    { "Непобедим!",     "Чувствуй мощь!",    "Чистая сила." },
+    { "Канат!",         "Тяни!",             "Дружно!" },
+    { "Победа!",        "Моё!",              "Слишком силён!" },
+    { "Чехарда!",       "Замри!",            "Лечу!" },
+    { "Ква.",           "Приземлился!",      "Режим лягушки!" },
+    { "Время торта!",   "Доставка!",         "Лови!" },
+    { "...Банановый крем.", "СЕРЬЁЗНО?!",    "Ммм. Кокос." },
+    { "Шарик с водой!", "Берегись!",         "Зона брызг!" },
+    { "Я МОКРЫЙ!",      "Холодно! Холодно!", "О, началось." },
+    { "Авиапочта!",     "Входящее!",         "Рейс 404!" },
+    { "Ай! Порез бумагой!", "Вернуть отправителю.", "Что там?" },
+    { "Бой подушками!", "Ан гард!",          "Перья наружу!" },
+    { "Получи!",        "Месть!",            "О, ты ТРУП." },
+    { "Мир?",           "Перья везде!",      "Лучший бой." },
+    { "Это тебе!",      "Тебе!",             "Открывай!" },
+    { "Мне?!",          "Не стоило!",        "О, блестяшка!" },
+    { "Хочешь кусок?",  "Перерыв на пиццу!", "Делимся?" },
+    { "Ном-ном-ном.",   "Ананас? Дерзко.",   "Лучший. Друг." },
+    { "Ура!",           "За нас!",           "До дна!" },
+    { "Слышу, слышу!",  "За дозор!",         "Будем!" },
+    { "Веселье!",       "Сюрприз!",          "Празднуем!" },
+    { "Смотри вверх!",  "Оооо!",             "Салют!" },
+    { "Ааах.",          "Красиво.",          "Ещё! Ещё!" },
+    { "Люблю тебя, брат.", "Ты лучший.",     "Други навек." },
+    { "Ох, смущаешь.",  "Взаимно.",          "Хватит уже." },
+    { "ХАХАХА!",        "Хехехе!",           "БУГАГА!" },
+    { "Чего смешного?!", "ХАХАХА!",          "Не могу дышать!" },
+    { "Тяжёлый день...", "*шмыг*",           "Носок потерял." },
+    { "Ну-ну.",         "Я с тобой.",        "Выше нос, брат." },
+    { "ГРРРР!",         "Хрмф!",             "Грр. Аргх." },
+    { "Тихо, тихо!",    "Кто обидел?",       "Дыши глубже!" },
+    { "*зевок*",        "Так спать...",      "Пора на бок?" },
+    { "Ещё пять минут.", "Я храпел?",        "А? Что?" },
+    { "Шапочки надеть!", "Они слушают.",     "Фольгу выше." },
+    { "Не отследят.",   "Защита от лучей.",  "Сигнал закрыт." },
+    { "КАМЕРА!",        "Флок, на двенадцать!", "Улыбнись, снимают." },
+    { "Заметила?",      "Веди себя естественно.", "...Пронесло." },
+    { "Где?!",          "Да ладно!",         "Ничего не видел." },
+    { "АУУУУ!",         "Зов сквача!",       "УУУУП!" },
+    { "АУУУУУУ!",       "УП-УП!",            "...уп?" },
+    { "Селфи!",         "Влезь в кадр!",     "Скажи сыр!" },
+    { "Выложи!",        "Я моргнул!",        "В рамку такое." },
+};
+static_assert(sizeof(LINES_RU) / sizeof(LINES_RU[0]) == L_COUNT,
+              "LINES_RU must mirror LINES pool for pool");
+static_assert(sizeof(LINES_RU[0]) / sizeof(LINES_RU[0][0]) == VARIANTS,
+              "LINES_RU must hold VARIANTS lines per pool");
+
 uint8_t lineCount() { return L_COUNT; }
 
 const char* line(uint8_t pool, uint8_t variant) {
     if (pool == L_NONE || pool >= L_COUNT) return nullptr;
     return LINES[pool][variant % VARIANTS];
+}
+
+// lang: 0 EN, 1 RU (Settings::lang); anything else reads as EN.
+const char* lineL(uint8_t pool, uint8_t variant, uint8_t lang) {
+    if (pool == L_NONE || pool >= L_COUNT) return nullptr;
+    return (lang == 1) ? LINES_RU[pool][variant % VARIANTS]
+                       : LINES[pool][variant % VARIANTS];
 }
 
 bool isDyn(uint8_t code) { return code >= DYN_COIN_CALL && code <= DYN_SPOTTED; }
@@ -382,32 +456,44 @@ const char* spokenName(uint8_t t) {
     }
 }
 
-void dynLine(uint8_t code, E e, uint8_t setup, char* out, size_t cap) {
+void dynLine(uint8_t code, E e, uint8_t setup, char* out, size_t cap, uint8_t lang) {
     if (!out || !cap) return;
     out[0] = '\0';
+    // RU outputs stay under the 24-byte dyn buffers in ui_clear.cpp.
+    const bool ru = (lang == 1);
     switch (code) {
         case DYN_COIN_CALL: {
             // The receiver's call: right means it matches how it lands.
             const bool side = setup & 1, right = setup & 2;
-            snprintf(out, cap, "%s!", (right ? side : !side) ? "TAILS" : "HEADS");
+            if (ru) snprintf(out, cap, "%s!", (right ? side : !side) ? "РЕШКА" : "ОРЁЛ");
+            else    snprintf(out, cap, "%s!", (right ? side : !side) ? "TAILS" : "HEADS");
             break;
         }
         case DYN_COIN_SIDE:
             // Said by whoever won: the caller if they called it, else the flipper.
-            snprintf(out, cap, "%s! %s", (setup & 1) ? "TAILS" : "HEADS",
-                     (setup & 2) ? "Called it!" : "Ha!");
+            if (ru) snprintf(out, cap, "%s! %s", (setup & 1) ? "РЕШКА" : "ОРЁЛ",
+                             (setup & 2) ? "Моё!" : "Ха!");
+            else    snprintf(out, cap, "%s! %s", (setup & 1) ? "TAILS" : "HEADS",
+                             (setup & 2) ? "Called it!" : "Ha!");
             break;
         case DYN_DICE: {
             const uint8_t a = die(setup, 0), b = die(setup, 1);
-            if (a == b) snprintf(out, cap, "Tie! %u and %u.", (unsigned)a, (unsigned)b);
+            if (a == b) {
+                if (ru) snprintf(out, cap, "Ничья! %u и %u.", (unsigned)a, (unsigned)b);
+                else    snprintf(out, cap, "Tie! %u and %u.", (unsigned)a, (unsigned)b);
+            } else if (ru) snprintf(out, cap, "%u бьёт %u!", (unsigned)(a > b ? a : b),
+                                    (unsigned)(a > b ? b : a));
             else        snprintf(out, cap, "%u beats %u!", (unsigned)(a > b ? a : b),
                                  (unsigned)(a > b ? b : a));
             break;
         }
         case DYN_SPOTTED: {
             const char* n = spokenName(setup);
-            if (n) snprintf(out, cap, "See that %s?!", n);
-            else   snprintf(out, cap, "Did you see that?!");
+            if (n) {
+                if (ru) snprintf(out, cap, "Это %s?!", n);
+                else    snprintf(out, cap, "See that %s?!", n);
+            } else if (ru) snprintf(out, cap, "Ты видел?!");
+            else           snprintf(out, cap, "Did you see that?!");
             break;
         }
         default: break;

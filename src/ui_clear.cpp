@@ -13,6 +13,7 @@
 #include "squachy.h"
 #include "detection.h"
 #include "emote_script.h"
+#include "ui_meshcompose.h"   // reactions send from the bubble's own buttons
 #include <esp_system.h>
 #include "crowd_bench.h"
 
@@ -396,7 +397,20 @@ static const char* const EMOTE_SNOW_CALL[]  = { "Think fast!", "Heads up!", "Inc
 static const char* const EMOTE_SNOW_BACK[]  = { "Oh, you're DONE.", "Payback!", "Take THAT!" };
 static const char* const EMOTE_BOO[]        = { "BOO!", "BOO!!", "RAAWR!" };
 static const char* const EMOTE_SCARED[]     = { "AAAH!", "Not funny!", "My FUR!" };
-#define EMOTE_PICK(a) (a[s_exchange % (sizeof(a) / sizeof(a[0]))])
+// BroWatch RU parallels to the set-piece calls above: same pools, same
+// order, display only. EMOTE_PICK_L picks the same roll in Russian.
+static const char* const EMOTE_WAVE_CALL_RU[]  = { "Привееет!", "Йо!", "Привет-привет!" };
+static const char* const EMOTE_WAVE_BACK_RU[]  = { "Привет привет!", "Йо-йо!", "При-ве-ет!" };
+static const char* const EMOTE_FIVE_CALL_RU[]  = { "Дай пять!", "Лапу!", "Хлоп!" };
+static const char* const EMOTE_DANCE_CALL_RU[] = { "Танцы. Ща.", "Смотри СЮДА.", "Переплюнь!" };
+static const char* const EMOTE_DANCE_BACK_RU[] = { "О, началось.", "Моя очередь!", "Любитель." };
+static const char* const EMOTE_RPS_CALL_RU[]   = { "Камень, ножницы...", "До одной! Погнали!", "Готов? Давай!" };
+static const char* const EMOTE_SNOW_CALL_RU[]  = { "Лови!", "Берегись!", "Подача!" };
+static const char* const EMOTE_SNOW_BACK_RU[]  = { "О, ты ТРУП.", "Месть!", "Получи!" };
+static const char* const EMOTE_BOO_RU[]        = { "БУ!", "БУУ!!", "РРРА!" };
+static const char* const EMOTE_SCARED_RU[]     = { "ААА!", "Не смешно!", "Мой МЕХ!" };
+static inline bool isRU() { return Settings::lang() == 1; }
+#define EMOTE_PICK_L(en, ru) (isRU() ? (ru)[s_exchange % 3] : (en)[s_exchange % 3])
 
 // ---- the shared scare -----------------------------------------------------
 // The host reacts to a detection through his mood machine; the guest gets
@@ -500,7 +514,7 @@ static void pieceBegin(uint32_t now, Piece p, bool guestFirst) {
     switch (s_piece) {
         case Piece::DANCE:
             if (guestFirst) {
-                s_visitGuestLine = EMOTE_PICK(EMOTE_DANCE_CALL);
+                s_visitGuestLine = EMOTE_PICK_L(EMOTE_DANCE_CALL, EMOTE_DANCE_CALL_RU);
             } else {
                 Squachy::visitDanceCall(s_exchange);          // throws down...
                 Squachy::visitDance(now, DANCE_SEG_MS);       // ...and goes first
@@ -512,7 +526,7 @@ static void pieceBegin(uint32_t now, Piece p, bool guestFirst) {
             // are set by emoteStart() straight after.
             s_rpsHost  = (uint8_t)random(0, 3);
             s_rpsGuest = (uint8_t)random(0, 3);
-            if (guestFirst) s_visitGuestLine = EMOTE_PICK(EMOTE_RPS_CALL);
+            if (guestFirst) s_visitGuestLine = EMOTE_PICK_L(EMOTE_RPS_CALL, EMOTE_RPS_CALL_RU);
             else            Squachy::visitRpsCall(s_exchange);
             Squachy::visitPump(now, RPS_PUMP_MS);
             Serial.println("[visit] rock paper scissors");
@@ -521,7 +535,7 @@ static void pieceBegin(uint32_t now, Piece p, bool guestFirst) {
             s_snowDone = 0;
             s_puffAt   = 0;
             if (guestFirst) {
-                s_visitGuestLine = EMOTE_PICK(EMOTE_SNOW_CALL);
+                s_visitGuestLine = EMOTE_PICK_L(EMOTE_SNOW_CALL, EMOTE_SNOW_CALL_RU);
             } else {
                 Squachy::visitSnowCall(s_exchange);
                 Squachy::visitReach(now, SNOW_WIND_MS, Squachy::Reach::UP);   // winding up
@@ -529,20 +543,20 @@ static void pieceBegin(uint32_t now, Piece p, bool guestFirst) {
             Serial.println("[visit] snowball fight");
             break;
         case Piece::WAVE:
-            if (guestFirst) s_visitGuestLine = EMOTE_PICK(EMOTE_WAVE_CALL);
-            else            Squachy::visitSay(EMOTE_PICK(EMOTE_WAVE_CALL));
+            if (guestFirst) s_visitGuestLine = EMOTE_PICK_L(EMOTE_WAVE_CALL, EMOTE_WAVE_CALL_RU);
+            else            Squachy::visitSay(EMOTE_PICK_L(EMOTE_WAVE_CALL, EMOTE_WAVE_CALL_RU));
             Serial.println("[visit] wave");
             break;
         case Piece::FIVE:
-            if (guestFirst) s_visitGuestLine = EMOTE_PICK(EMOTE_FIVE_CALL);
-            else            Squachy::visitSay(EMOTE_PICK(EMOTE_FIVE_CALL));
+            if (guestFirst) s_visitGuestLine = EMOTE_PICK_L(EMOTE_FIVE_CALL, EMOTE_FIVE_CALL_RU);
+            else            Squachy::visitSay(EMOTE_PICK_L(EMOTE_FIVE_CALL, EMOTE_FIVE_CALL_RU));
             Serial.println("[visit] high five (emote)");
             break;
         case Piece::BOO:
             if (guestFirst) {
-                s_visitGuestLine = EMOTE_PICK(EMOTE_BOO);
+                s_visitGuestLine = EMOTE_PICK_L(EMOTE_BOO, EMOTE_BOO_RU);
             } else {
-                Squachy::visitSay(EMOTE_PICK(EMOTE_BOO));
+                Squachy::visitSay(EMOTE_PICK_L(EMOTE_BOO, EMOTE_BOO_RU));
                 Squachy::visitReach(now, BOO_JUMP_MS + 300, Squachy::Reach::UP);   // arms up
             }
             Serial.println("[visit] boo");
@@ -650,10 +664,11 @@ static void scriptBeat(uint8_t i, uint32_t now) {
         const char* text;
         if (isDyn(b.line)) {
             char* buf = hostSays ? s_dynHost : s_dynGuest;
-            dynLine(b.line, s_scriptEmote, s_scriptSetup, buf, sizeof s_dynHost);
+            dynLine(b.line, s_scriptEmote, s_scriptSetup, buf, sizeof s_dynHost,
+                    Settings::lang());
             text = buf;
         } else {
-            text = line(b.line, (uint8_t)(s_exchange % VARIANTS));
+            text = lineL(b.line, (uint8_t)(s_exchange % VARIANTS), Settings::lang());
         }
         if (text && hostSays) Squachy::visitSay(text);
         else if (text)      { s_visitGuestLine = text; s_guestTurn = true; }
@@ -772,7 +787,7 @@ static void pieceTick(uint32_t now) {
             if (s_pieceGuestFirst) {
                 s_guestTurn      = false;
                 s_visitGuestLine = nullptr;
-                Squachy::visitSay(EMOTE_PICK(EMOTE_DANCE_BACK));
+                Squachy::visitSay(EMOTE_PICK_L(EMOTE_DANCE_BACK, EMOTE_DANCE_BACK_RU));
                 Squachy::visitDance(now, DANCE_SEG_MS);
             } else {
                 s_guestTurn      = true;
@@ -818,7 +833,7 @@ static void pieceTick(uint32_t now) {
                 if (s_pieceGuestFirst) {
                     s_guestTurn      = false;
                     s_visitGuestLine = nullptr;
-                    Squachy::visitSay(EMOTE_PICK(EMOTE_SNOW_BACK));
+                    Squachy::visitSay(EMOTE_PICK_L(EMOTE_SNOW_BACK, EMOTE_SNOW_BACK_RU));
                     Squachy::visitReach(now, SNOW_WIND_MS, Squachy::Reach::UP);
                 } else {
                     s_guestTurn      = true;
@@ -870,10 +885,10 @@ static void pieceTick(uint32_t now) {
             if (s_pieceGuestFirst) {
                 s_guestTurn      = false;
                 s_visitGuestLine = nullptr;
-                Squachy::visitSay(EMOTE_PICK(EMOTE_WAVE_BACK));
+                Squachy::visitSay(EMOTE_PICK_L(EMOTE_WAVE_BACK, EMOTE_WAVE_BACK_RU));
             } else {
                 s_guestTurn      = true;
-                s_visitGuestLine = EMOTE_PICK(EMOTE_WAVE_BACK);
+                s_visitGuestLine = EMOTE_PICK_L(EMOTE_WAVE_BACK, EMOTE_WAVE_BACK_RU);
             }
         } else if (step >= 2) {
             Squachy::visitLaugh(now);
@@ -906,12 +921,12 @@ static void pieceTick(uint32_t now) {
         s_pieceStep = step;
         if (step == 1) {                              // and the other one jumps out of his fur
             if (s_pieceGuestFirst) {
-                Squachy::visitSay(EMOTE_PICK(EMOTE_SCARED));
+                Squachy::visitSay(EMOTE_PICK_L(EMOTE_SCARED, EMOTE_SCARED_RU));
                 Squachy::visitReach(now, BOO_MS - BOO_JUMP_MS, Squachy::Reach::UP);   // hands up
             } else {
                 s_guestStartleUntil = now + 1100;
                 s_guestTurn         = true;
-                s_visitGuestLine    = EMOTE_PICK(EMOTE_SCARED);
+                s_visitGuestLine    = EMOTE_PICK_L(EMOTE_SCARED, EMOTE_SCARED_RU);
             }
         } else {
             Squachy::visitLaugh(now);
@@ -1536,6 +1551,11 @@ static bool    s_msgGuestOn = false;      // a visitor is on screen this frame
 static int     s_msgGx = 0, s_msgHeadTop = 0;
 static bool    s_bubbleOn = false;        // the tap target, filled by the draw
 static int16_t s_bubX = 0, s_bubY = 0, s_bubW = 0, s_bubH = 0;
+// The reaction keys under a real incoming bubble, LIKE on the left. Same
+// shape: filled by drawRedBubble, read by uiClearReactHit.
+static bool    s_reactOn = false;
+static int16_t s_reactLikeX = 0, s_reactLikeY = 0, s_reactDisX = 0, s_reactDisY = 0;
+static const int REACT_W = 26, REACT_H = 17, REACT_GAP = 4, REACT_ROW = 21;
 
 static bool messageShowing(uint32_t now) {
     const MeshTalk::Message& m = MeshTalk::inbox();
@@ -1549,8 +1569,11 @@ static bool tutorReply() {
 
 // Who, then what, over the speaker's head, with a tail aimed at him. The name
 // is always in it, so even when the sender is not the one standing there the
-// bubble cannot misattribute.
-static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, const char* line) {
+// bubble cannot misattribute. With showReact the bubble grows one row at the
+// bottom holding the LIKE/DISLIKE keys -- answering without leaving the
+// screen for the message screen.
+static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, const char* line,
+                          bool showReact = false) {
     t.setTextSize(1);
     t.setTextWrap(false);
     const int w = t.width();
@@ -1576,8 +1599,12 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
     if (!ru) Theme::bubbleFontOff(t);
     if (t.textWidth(from) > bw) bw = t.textWidth(from);
     bw += 12;
+    // Room for the two reaction keys when they are up: short lines would
+    // otherwise leave them hanging off the bubble's sides.
+    if (showReact && bw < 6 + REACT_W + REACT_GAP + REACT_W + 6)
+        bw = 6 + REACT_W + REACT_GAP + REACT_W + 6;
     if (bw > w - 8) bw = w - 8;
-    const int bh = 14 + n * lineH + 3;
+    const int bh = 14 + n * lineH + 3 + (showReact ? REACT_ROW : 0);
     int bx = cx - bw / 2;
     if (bx < 4) bx = 4;
     if (bx + bw > w - 4) bx = w - 4 - bw;
@@ -1596,6 +1623,21 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
     for (uint8_t i = 0; i < n; i++) {
         t.setCursor(bx + 6, by + 13 + i * lineH + (ru ? 0 : Theme::bubbleAscent()));
         if (ru) Theme::printRU(t, rows[i]); else t.print(rows[i]);
+    }
+    if (showReact) {
+        // White faces, red thumbs: the one colour pair that reads on RED in
+        // every theme, GH0ST's near-white RED included (the thumbs are marks
+        // on a light face, the case drawMessageIcon already handles).
+        const int ry = by + bh - REACT_ROW + 2;
+        Theme::drawThumbButton(t, bx + 6, ry, REACT_W, REACT_H, true,
+                               Theme::RED, Theme::WHITE);
+        Theme::drawThumbButton(t, bx + 6 + REACT_W + REACT_GAP, ry, REACT_W, REACT_H, false,
+                               Theme::RED, Theme::WHITE);
+        s_reactLikeX = (int16_t)(bx + 6);
+        s_reactLikeY = (int16_t)ry;
+        s_reactDisX  = (int16_t)(bx + 6 + REACT_W + REACT_GAP);
+        s_reactDisY  = (int16_t)ry;
+        s_reactOn    = true;
     }
     Theme::bubbleFontOff(t);
 }
@@ -2103,6 +2145,7 @@ bool uiClearCrowdTap(int x, int y, uint32_t now) {
 
 static void drawMessageUi(TFT_eSPI& t, uint32_t now, int titleBottom, int squachyBottom) {
     s_bubbleOn = false;
+    s_reactOn  = false;
     // The tutorial runs before anybody has a phrase, so it shows the bubble
     // regardless -- finding it is the thing it teaches.
     const bool tut = MeshTutor::active();
@@ -2115,8 +2158,10 @@ static void drawMessageUi(TFT_eSPI& t, uint32_t now, int titleBottom, int squach
                                   : titleBottom + (squachyBottom - titleBottom) / 3;
     const bool showing = tut ? tutorReply() : messageShowing(now);
     if (showing) {
+        // No keys on the tutorial's pretend bubble (nothing to answer to)
+        // and none in boring mode (the bubble itself does nothing there).
         if (tut) drawRedBubble(t, gx, head, MeshTutor::DEMO_NAME, Theme::tr(MeshTutor::DEMO_REPLY, "Спасибо."));
-        else     drawRedBubble(t, gx, head, m.from, MeshTalk::lineText(m));
+        else     drawRedBubble(t, gx, head, m.from, MeshTalk::lineText(m), !Settings::boringMode());
     }
     // Only with somebody around -- or something unread from somebody who was.
     if (s_msgGuestOn || (m.unread && !tut)) {
@@ -2132,6 +2177,27 @@ static void drawMessageUi(TFT_eSPI& t, uint32_t now, int titleBottom, int squach
 bool uiClearBubbleHit(int x, int y) {
     return s_bubbleOn && !Settings::boringMode() &&
            x >= s_bubX && x < s_bubX + s_bubW && y >= s_bubY && y < s_bubY + s_bubH;
+}
+
+// 0 for a miss, 1 for LIKE, 2 for DISLIKE.
+int uiClearReactHit(int x, int y) {
+    if (!s_reactOn || Settings::boringMode()) return 0;
+    if (x >= s_reactLikeX && x < s_reactLikeX + REACT_W &&
+        y >= s_reactLikeY && y < s_reactLikeY + REACT_H) return 1;
+    if (x >= s_reactDisX && x < s_reactDisX + REACT_W &&
+        y >= s_reactDisY && y < s_reactDisY + REACT_H) return 2;
+    return 0;
+}
+
+bool uiClearReactTap(int x, int y, uint32_t now) {
+    const int h = uiClearReactHit(x, y);
+    if (!h) return false;
+    // True whether or not the send went out: the tap was ours, and a miss
+    // explains itself in a toast rather than by falling through to the
+    // compose screen behind the keys.
+    uiMessageSendReaction(h == 1 ? MeshMsg::CANNED_REACT_LIKE : MeshMsg::CANNED_REACT_DISLIKE,
+                          now);
+    return true;
 }
 
 // Received emotes. See ui_clear.h: called from main.cpp's loop rather than
