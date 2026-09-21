@@ -10,6 +10,9 @@ through Pillow and thresholded.
 --codes A,B-C,... restricts/extends the codepoint set, e.g.
     python tools/ttf2gfx.py font.ttf 8 RuCyr out.h --codes 1025,1040-1103,1105
 The header then covers first..last contiguously (gaps become empty glyphs).
+
+--supersample N renders at size*N and downscales: denser small glyphs.
+--thresh N keeps pixels >= N (default 110); higher = thinner.
 """
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -39,6 +42,11 @@ if axes:
 X0, Y0 = 32, 64
 bitmaps = bytearray()
 glyphs = []
+# --supersample N renders at size*N then downscales: stems survive to 8px
+# instead of thresholding away. Offsets/advances below are divided back.
+ss = int(args[args.index('--supersample') + 1]) if '--supersample' in args else 1
+if ss > 1:
+    font = ImageFont.truetype(path, size * ss)
 codes = None
 if '--codes' in args:
     spec = args[args.index('--codes') + 1]
@@ -62,10 +70,14 @@ for code in range(first, last + 1):
         glyphs.append((0, 0, 0, 0, 0, 0))  # gap: empty glyph, keeps glyph[c-first] dense
         continue
     ch = chr(code)
-    ch = chr(code)
     img = Image.new('L', (size * 4 + 64, size * 4 + 96), 0)
-    ImageDraw.Draw(img).text((X0, Y0), ch, font=font, fill=255, anchor='ls')
-    adv = int(round(font.getlength(ch)))
+    if ss > 1:
+        bigimg = Image.new('L', ((size * 4 + 64) * ss, (size * 4 + 96) * ss), 0)
+        ImageDraw.Draw(bigimg).text((X0 * ss, Y0 * ss), ch, font=font, fill=255, anchor='ls')
+        img = bigimg.resize((img.width, img.height), Image.BILINEAR)
+    else:
+        ImageDraw.Draw(img).text((X0, Y0), ch, font=font, fill=255, anchor='ls')
+    adv = int(round(font.getlength(ch) / ss))
     bw = img.point(lambda p: 255 if p >= thresh else 0)
     box = bw.getbbox()
     off = len(bitmaps)

@@ -9347,6 +9347,31 @@ const char* tr(const char* en, const char* ru) {
     return (Settings::lang() == 1) ? ru : en;
 }
 
+// One Cyrillic glyph, drawn with plain fillRects Bangers-style: pixel-
+// identical on hardware and in the emulator, with no FreeFont machinery
+// (setFreeFont/drawChar) in between. x,y is the pen: same convention as
+// the GFX renderer (ink at x+xOffset, y+yOffset), so textWidthRU() below,
+// which measures the same tables, always agrees with what lands.
+static void drawRuGlyph(TFT_eSPI& t, int x, int y, uint16_t cp) {
+    const uint16_t i = cp - RuCyr8.first;
+    const uint8_t sz = t.textsize ? t.textsize : 1;
+    const uint8_t gw = pgm_read_byte(&RuCyr8.glyph[i].width);
+    const uint8_t gh = pgm_read_byte(&RuCyr8.glyph[i].height);
+    const int8_t xo = (int8_t)pgm_read_byte(&RuCyr8.glyph[i].xOffset);
+    const int8_t yo = (int8_t)pgm_read_byte(&RuCyr8.glyph[i].yOffset);
+    const uint8_t* bm = RuCyr8Bitmaps + RuCyr8.glyph[i].bitmapOffset;
+    const uint16_t fg = t.textcolor;
+    uint32_t bit = 0;
+    for (uint8_t yy = 0; yy < gh; yy++) {
+        for (uint8_t xx = 0; xx < gw; xx++, bit++) {
+            if (!((pgm_read_byte(&bm[bit >> 3]) >> (7 - (bit & 7))) & 1)) continue;
+            const int px = x + (xo + xx) * sz, py = y + (yo + yy) * sz;
+            if (sz == 1) t.drawPixel(px, py, fg);
+            else         t.fillRect(px, py, sz, sz, fg);
+        }
+    }
+}
+
 void printRU(TFT_eSPI& t, const char* s) {
     const char* p = s;
     while (p && *p) {
@@ -9358,10 +9383,10 @@ void printRU(TFT_eSPI& t, const char* s) {
         } else if (RuText::isCyrillic(cp)) {
             const uint16_t i = cp - RuCyr8.first;
             if (pgm_read_byte(&RuCyr8.glyph[i].xAdvance)) {
-                t.setFreeFont(&RuCyr8);
-                const int16_t w = t.drawChar(cp, t.getCursorX(), t.getCursorY());
-                t.setCursor(t.getCursorX() + w, t.getCursorY());
-                t.setTextFont(1);
+                drawRuGlyph(t, t.getCursorX(), t.getCursorY(), cp);
+                const uint8_t sz = t.textsize ? t.textsize : 1;
+                t.setCursor(t.getCursorX() + (int16_t)pgm_read_byte(&RuCyr8.glyph[i].xAdvance) * sz,
+                            t.getCursorY());
             } else {
                 t.write('?');
             }
