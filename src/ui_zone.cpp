@@ -36,10 +36,10 @@ void uiZoneCardDraw(TFT_eSPI& t, uint32_t now) {
     t.drawRoundRect(x + 1, y + 1, CARD_W - 2, CARD_H - 2, 5, Theme::VAPOR_PURPLE);
     t.setTextSize(1);
     t.setTextWrap(false);
-    const char* head = "WHICH TIME ZONE?";
+    const char* head = Theme::tr("WHICH TIME ZONE?", "КАКОЙ ЧАСОВОЙ ПОЯС?");
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(x + (CARD_W - t.textWidth(head)) / 2, y + 7);
-    t.print(head);
+    t.setCursor(x + (CARD_W - Theme::textWidthRU(t, head)) / 2, y + 7);
+    Theme::printRU(t, head);
     // The zone, large, and the time it makes of right now: the second line
     // is how you know the first is right without knowing the names.
     t.setTextSize(2);
@@ -59,7 +59,7 @@ void uiZoneCardDraw(TFT_eSPI& t, uint32_t now) {
     int px, okx, okw, nx, by;
     buttonRects(x, y, px, okx, okw, nx, by);
     Theme::drawButton(t, px,  by, 34,  BTN_H, "<", false);
-    Theme::drawButton(t, okx, by, okw, BTN_H, "THIS IS RIGHT", false);
+    Theme::drawButton(t, okx, by, okw, BTN_H, Theme::tr("THIS IS RIGHT", "ВЕРНО"), false);
     Theme::drawButton(t, nx,  by, 34,  BTN_H, ">", false);
 }
 

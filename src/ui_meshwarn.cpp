@@ -32,7 +32,16 @@ const char* const PARAS[] = {
     "Messages are encrypted. That you sent one is not.",
     "DETECT only listens. It broadcasts nothing.",
 };
+const char* const PARAS_RU[] = {
+    "TRANSMIT шлёт Bluetooth каждые 1.5 секунды: неменяющийся адрес, имя и костюм твоего Сквачи.",
+    "Любой со сканером рядом запишет адрес со временем и местом. Адрес постоянен — точки сложатся в маршрут, где ты был.",
+    "Тот самый приём, от которого плата предупреждает.",
+    "Письма шифрованы. Сам факт отправки — нет.",
+    "СЛУШАТЬ только слушает. В эфир ничего.",
+};
 const uint8_t PARA_N = sizeof(PARAS) / sizeof(PARAS[0]);
+static_assert(sizeof(PARAS_RU) / sizeof(PARAS_RU[0]) == sizeof(PARAS) / sizeof(PARAS[0]),
+              "PARAS_RU mirrors PARAS");
 
 const int BTN_W = 92, BTN_H = 28, BTN_GAP = 18;
 
@@ -67,12 +76,12 @@ void uiMeshWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     t.setTextSize(2);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(8, 6);
-    t.print("SQUACHMESH");
+    Theme::printRU(t, Theme::tr("BROMESH", "БРОМЕШ"));
 
     t.setTextSize(1);
     t.setTextColor(Theme::AMBER, Theme::BG);
     t.setCursor(8, 26);
-    t.print("THIS MAKES YOU TRACKABLE");
+    Theme::printRU(t, Theme::tr("THIS MAKES YOU TRACKABLE", "ТЕБЯ БУДЕТ ВИДНО"));
 
     // Theme::wrapText fills fixed 48-char rows, so the wrap width is capped
     // at what 47 characters occupy regardless of how wide the panel is. At
@@ -87,10 +96,11 @@ void uiMeshWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     t.setTextColor(Theme::WHITE, Theme::BG);
     for (uint8_t p = 0; p < PARA_N; p++) {
         char lines[8][48];
-        const uint8_t n = Theme::wrapText(t, PARAS[p], maxW, lines, 8);
+        const char* para = Settings::lang() == 1 ? PARAS_RU[p] : PARAS[p];
+        const uint8_t n = Theme::wrapTextRU(t, para, maxW, lines, 8);
         for (uint8_t i = 0; i < n; i++) {
             t.setCursor(8, y);
-            t.print(lines[i]);
+            Theme::printRU(t, lines[i]);
             y += lineH;
         }
         y += 4;                      // a gap between paragraphs, not a line
@@ -102,15 +112,15 @@ void uiMeshWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     // The question sits with the buttons rather than at the top, so whatever
     // is being answered is the last thing read before answering it.
     t.setTextColor(Theme::CYAN, Theme::BG);
-    const char* q = "Turn on SquachMesh?";
-    t.setCursor((w - t.textWidth(q)) / 2, by - 14);
-    t.print(q);
+    const char* q = Theme::tr("Turn on BroMesh?", "Включить БроМеш?");
+    t.setCursor((w - Theme::textWidthRU(t, q)) / 2, by - 14);
+    Theme::printRU(t, q);
 
     // NO is not the quiet one. A consent dialog whose decline is styled as
     // the lesser option is doing the opposite of what it is for, so both are
     // ordinary system buttons and neither is preselected.
-    Theme::drawWin95Button(t, yesX, by, BTN_W, BTN_H, "YES", false);
-    Theme::drawWin95Button(t, noX,  by, BTN_W, BTN_H, "NO",  false);
+    Theme::drawWin95Button(t, yesX, by, BTN_W, BTN_H, Theme::tr("YES", "ДА"), false);
+    Theme::drawWin95Button(t, noX,  by, BTN_W, BTN_H, Theme::tr("NO", "НЕТ"),  false);
 }
 
 MeshWarnHit uiMeshWarnHitTest(TFT_eSPI& t, int x, int y) {

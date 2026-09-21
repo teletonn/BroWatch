@@ -1,6 +1,7 @@
 // SquachWatch-CYD — the iBeacon warning. See include/ui_beaconwarn.h.
 #include "ui_beaconwarn.h"
 #include "theme.h"
+#include "settings.h"
 #include "detection.h"
 #include <Arduino.h>
 
@@ -21,7 +22,15 @@ const char* const PARAS[] = {
     "One shop can have dozens. Walking in can mean dozens of alerts in a row.",
     "Nothing else changes, and you can switch it off again here at any time.",
 };
+const char* const PARAS_RU[] = {
+    "Маяк — радио на стенах магазинов и стадионов. Сам не следит: повторяет ID, а приложение в телефоне сдаёт, где ты.",
+    "Каждый маяк захватывает экран в первый раз и снова, если вернулся через минуту.",
+    "В одном магазине десятки. Зашёл — десятки тревог подряд.",
+    "Остальное без изменений, выключить можно тут же.",
+};
 const uint8_t PARA_N = sizeof(PARAS) / sizeof(PARAS[0]);
+static_assert(sizeof(PARAS_RU) / sizeof(PARAS_RU[0]) == sizeof(PARAS) / sizeof(PARAS[0]),
+              "PARAS_RU mirrors PARAS");
 
 const int BTN_W = 104, BTN_H = 28, BTN_GAP = 16;
 
@@ -53,12 +62,12 @@ void uiBeaconWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     t.setTextSize(2);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(8, 6);
-    t.print("IBEACONS");
+    Theme::printRU(t, Theme::tr("IBEACONS", "МАЯКИ"));
 
     t.setTextSize(1);
     t.setTextColor(Theme::AMBER, Theme::BG);
     t.setCursor(8, 26);
-    t.print("THIS CAN BE A LOT OF ALERTS");
+    Theme::printRU(t, Theme::tr("THIS CAN BE A LOT OF ALERTS", "ИХ МОЖЕТ БЫТЬ ОЧЕНЬ МНОГО"));
 
     // wrapText fills fixed 48-character rows, so the width is capped at what
     // 47 characters take whatever the panel's width -- see ui_meshwarn.cpp.
@@ -71,10 +80,11 @@ void uiBeaconWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     t.setTextColor(Theme::WHITE, Theme::BG);
     for (uint8_t p = 0; p < PARA_N; p++) {
         char lines[8][48];
-        const uint8_t n = Theme::wrapText(t, PARAS[p], maxW, lines, 8);
+        const char* para = Settings::lang() == 1 ? PARAS_RU[p] : PARAS[p];
+        const uint8_t n = Theme::wrapTextRU(t, para, maxW, lines, 8);
         for (uint8_t i = 0; i < n; i++) {
             t.setCursor(8, y);
-            t.print(lines[i]);
+            Theme::printRU(t, lines[i]);
             y += lineH;
         }
         y += 4;
@@ -85,12 +95,12 @@ void uiBeaconWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
 
     // The question sits with the buttons, so it is the last thing read.
     t.setTextColor(Theme::CYAN, Theme::BG);
-    const char* q = "Alert on iBeacons?";
-    t.setCursor((w - t.textWidth(q)) / 2, by - 14);
-    t.print(q);
+    const char* q = Theme::tr("Alert on iBeacons?", "Следить за маяками?");
+    t.setCursor((w - Theme::textWidthRU(t, q)) / 2, by - 14);
+    Theme::printRU(t, q);
 
-    Theme::drawWin95Button(t, enX,  by, BTN_W, BTN_H, "ENABLE",        false);
-    Theme::drawWin95Button(t, offX, by, BTN_W, BTN_H, "KEEP DISABLED", false);
+    Theme::drawWin95Button(t, enX,  by, BTN_W, BTN_H, Theme::tr("ENABLE", "ВКЛЮЧИТЬ"),        false);
+    Theme::drawWin95Button(t, offX, by, BTN_W, BTN_H, Theme::tr("KEEP DISABLED", "НЕ НАДО"), false);
 }
 
 BeaconWarnHit uiBeaconWarnHitTest(TFT_eSPI& t, int x, int y) {

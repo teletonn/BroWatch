@@ -14,6 +14,7 @@ static const uint16_t PURE_GREEN = 0x07E0;
 static const uint16_t PURE_BLUE  = 0x001F;
 
 static const char* const CAPTION = "Wrong colors? Tap below till RED/GREEN/BLUE match.";
+static const char* const CAPTION_RU = "Цвета врут? Жми ниже, пока ЦВЕТА не сойдутся.";
 static const uint8_t CAPTION_MAX_LINES = 3;
 
 // Shared by drawing and hit-testing so they can't drift apart -- no
@@ -75,34 +76,38 @@ void uiColorCheckTick(TFT_eSPI& t, uint32_t now) {
     t.setTextWrap(false);
     t.setTextColor(Theme::WHITE, Theme::BG);
     char capLines[CAPTION_MAX_LINES][48];
-    uint8_t capN = Theme::wrapText(t, CAPTION, captionMaxW, capLines, CAPTION_MAX_LINES);
+    const char* cap = Settings::lang() == 1 ? CAPTION_RU : CAPTION;
+    uint8_t capN = Theme::wrapTextRU(t, cap, captionMaxW, capLines, CAPTION_MAX_LINES);
     int cy = captionTop;
     for (uint8_t i = 0; i < capN; i++) {
-        int lw = t.textWidth(capLines[i]);
+        int lw = Theme::textWidthRU(t, capLines[i]);
         t.setCursor((w - lw) / 2, cy);
-        t.print(capLines[i]);
+        Theme::printRU(t, capLines[i]);
         cy += 10;
     }
 
     t.setTextSize(3);
-    const char* words[3] = { "RED", "GREEN", "BLUE" };
+    const bool ruW = Settings::lang() == 1;
+    const char* words[3] = { ruW ? "КРАСН" : "RED", ruW ? "ЗЕЛЁН" : "GREEN", ruW ? "СИНИЙ" : "BLUE" };
     uint16_t cols[3] = { PURE_RED, PURE_GREEN, PURE_BLUE };
     int y = wordsTop;
     for (int i = 0; i < 3; i++) {
         t.setTextColor(cols[i], Theme::BG);
-        int tw = t.textWidth(words[i]);
+        int tw = Theme::textWidthRU(t, words[i]);
         t.setCursor((w - tw) / 2, y);
-        t.print(words[i]);
+        Theme::printRU(t, words[i]);
         y += wordRowH;
     }
 
-    char invLabel[16];
-    snprintf(invLabel, sizeof(invLabel), "INVERT: %s", Settings::inverted() ? "ON" : "OFF");
-    char ordLabel[20];
-    snprintf(ordLabel, sizeof(ordLabel), "ORDER: %s", Settings::rgbSwapped() ? "SWAP" : "NORM");
+    char invLabel[24];
+    if (Settings::lang() == 1) snprintf(invLabel, sizeof(invLabel), "ИНВЕРСИЯ: %s", Settings::inverted() ? "ВКЛ" : "ВЫКЛ");
+    else                       snprintf(invLabel, sizeof(invLabel), "INVERT: %s", Settings::inverted() ? "ON" : "OFF");
+    char ordLabel[24];
+    if (Settings::lang() == 1) snprintf(ordLabel, sizeof(ordLabel), "ПОРЯДОК: %s", Settings::rgbSwapped() ? "BGR" : "RGB");
+    else                       snprintf(ordLabel, sizeof(ordLabel), "ORDER: %s", Settings::rgbSwapped() ? "SWAP" : "NORM");
     Theme::drawButton(t, invX, invY, invW, invH, invLabel, false);
     Theme::drawButton(t, ordX, ordY, ordW, ordH, ordLabel, false);
-    Theme::drawButton(t, doneX, doneY, doneW, doneH, "[ LOOKS GOOD ]", false);
+    Theme::drawButton(t, doneX, doneY, doneW, doneH, Theme::tr("[ LOOKS GOOD ]", "[ ХОРОШО ]"), false);
 }
 
 ColorCheckTap uiColorCheckHitTest(int x, int y, int screenW, int screenH) {

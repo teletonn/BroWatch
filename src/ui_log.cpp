@@ -152,10 +152,10 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     t.setTextWrap(false);
     t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    const char* q = "TRACK THIS TARGET?";
-    int qw = t.textWidth(q);
+    const char* q = Theme::tr("TRACK THIS TARGET?", "СЛЕДИТЬ ЗА ЦЕЛЬЮ?");
+    int qw = Theme::textWidthRU(t, q);
     t.setCursor(px + (pw - qw) / 2, py + 8);
-    t.print(q);
+    Theme::printRU(t, q);
 
     // The Bangers glyph table is uppercase-only (it was built for
     // hardcoded shout-caps strings like "RING"/"FLOCK") -- lowercase
@@ -175,12 +175,12 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
 
     // See ui_rawscan.cpp's copy of this panel: toggling, so the label names
     // the next tap rather than the thing already done.
-    Theme::drawButton(t, wX, wY, wW, wH, watched ? "UNWATCH" : "WATCH", watched);
+    Theme::drawButton(t, wX, wY, wW, wH, watched ? Theme::tr("UNWATCH", "НЕ СЛЕДИТЬ") : Theme::tr("WATCH", "СЛЕДИТЬ"), watched);
     // Toggles like WATCH beside it -- see that button's comment.
-    Theme::drawButton(t, huX, huY, huW, huH, hunted ? "STOP HUNT" : "HUNT", hunted);
-    Theme::drawButton(t, igX, igY, igW, igH, "IGNORE", false);
-    Theme::drawButton(t, infX, infY, infW, infH, "MORE INFO", false);
-    Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false);
+    Theme::drawButton(t, huX, huY, huW, huH, hunted ? Theme::tr("STOP HUNT", "ХВАТИТ") : Theme::tr("HUNT", "ОХОТА"), hunted);
+    Theme::drawButton(t, igX, igY, igW, igH, Theme::tr("IGNORE", "ИГНОР"), false);
+    Theme::drawButton(t, infX, infY, infW, infH, Theme::tr("MORE INFO", "ПОДРОБНЕЕ"), false);
+    Theme::drawButton(t, cnX, cnY, cnW, cnH, Theme::tr("CANCEL", "ОТМЕНА"), false);
 }
 
 // Row geometry, shared by uiLogTick() (drawing) and uiLogRowAt() (hit
@@ -269,17 +269,17 @@ switch (Settings::background()) {
         uint16_t col = Theme::blend(Theme::GREEN, Theme::CYAN, (uint16_t)(pulse * 200.0f));
         t.setTextSize(3);
         t.setTextColor(col, Theme::BG);
-        const char* msg = "LOG EMPTY";
-        int mw = t.textWidth(msg);
+        const char* msg = Theme::tr("LOG EMPTY", "ЖУРНАЛ ПУСТ");
+        int mw = Theme::textWidthRU(t, msg);
         t.setCursor((w - mw) / 2, bodyTop + bodyH / 3);
-        t.print(msg);
+        Theme::printRU(t, msg);
 
         t.setTextSize(1);
         t.setTextColor(Theme::CYAN, Theme::BG);
-        const char* sub = "no detections yet";
-        int sw = t.textWidth(sub);
+        const char* sub = Theme::tr("no detections yet", "пока ничего не поймали");
+        int sw = Theme::textWidthRU(t, sub);
         t.setCursor((w - sw) / 2, bodyTop + bodyH / 3 + 35);
-        t.print(sub);
+        Theme::printRU(t, sub);
 
         Theme::drawButtonBar(t, ButtonId::LOG, Theme::ButtonBarMode::LOG);
         if (infoPending)        Theme::drawInfoPanel(t, w, h, now, infoTypeName, infoText);

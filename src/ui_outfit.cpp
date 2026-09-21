@@ -1,6 +1,7 @@
 // SquachWatch-CYD — outfit picker screen implementation
 #include "ui_outfit.h"
 #include "theme.h"
+#include "settings.h"
 #include "squachy.h"
 #include "detection.h"
 #include <Arduino.h>
@@ -60,14 +61,16 @@ void uiOutfitTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool ad
     t.setCursor((w - nw) / 2, footerTop + 2);
     t.print(name);
 
-    char buf[24];
-    snprintf(buf, sizeof(buf), "%u / %u unlocked",
+    char buf[32];
+    if (Settings::lang() == 1) snprintf(buf, sizeof(buf), "%u / %u открыто",
+             (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
+    else                       snprintf(buf, sizeof(buf), "%u / %u unlocked",
              (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
     t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    int bw = t.textWidth(buf);
+    int bw = Theme::textWidthRU(t, buf);
     t.setCursor((w - bw) / 2, footerTop + 22);
-    t.print(buf);
+    Theme::printRU(t, buf);
 
     int ay = footerTop + 12;
     t.fillTriangle(24, ay, 10, ay + 10, 24, ay + 20, Theme::VAPOR_PINK);

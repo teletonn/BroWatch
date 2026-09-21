@@ -42,35 +42,35 @@ static void rowContent(SecurityRow r, char* buf, size_t bufN,
     value = nullptr;
     switch (r) {
         case SecurityRow::PIN_LOCK:
-            label = "PIN LOCK"; value = on ? "ON" : "OFF"; dimmed = false;
+            label = Theme::tr("PIN LOCK", "ПИН-ЗАМОК"); value = on ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ"); dimmed = false;
             break;
         case SecurityRow::PIN_LENGTH:
-            label = "PIN LENGTH";
+            label = Theme::tr("PIN LENGTH", "ДЛИНА ПИНА");
             snprintf(buf, bufN, "%u", (unsigned)Security::pinLength());
             value = buf;
             dimmed = on;    // fixed once a PIN is set
             break;
         case SecurityRow::CHANGE_PIN:
-            label = "CHANGE PIN"; value = on ? ">" : "--";
+            label = Theme::tr("CHANGE PIN", "СМЕНИТЬ ПИН"); value = on ? ">" : "--";
             break;
         case SecurityRow::DURESS_PIN:
-            label = "DURESS PIN"; value = Security::hasDuress() ? "ON" : "OFF";
+            label = Theme::tr("DURESS PIN", "ПИН-ОБМАНКА"); value = Security::hasDuress() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             break;
         case SecurityRow::AUTO_LOCK:
-            label = "AUTO-LOCK"; value = Security::autoLockLabel();
+            label = Theme::tr("AUTO-LOCK", "АВТОБЛОК"); value = Security::autoLockLabel();
             break;
         case SecurityRow::LOCK_AT_BOOT:
-            label = "LOCK AT BOOT"; value = Security::lockAtBoot() ? "ON" : "OFF";
+            label = Theme::tr("LOCK AT BOOT", "БЛОК ПРИ СТАРТЕ"); value = Security::lockAtBoot() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             break;
         case SecurityRow::WIPE_ON_FAIL:
-            label = "WIPE AFTER 10"; value = Security::wipeOnFail() ? "ON" : "OFF";
+            label = Theme::tr("WIPE AFTER 10", "СБРОС ЗА 10"); value = Security::wipeOnFail() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             break;
         case SecurityRow::LOCK_ALERTS:
-            label = "ALERTS LOCKED"; value = Security::lockAlertsLabel();
+            label = Theme::tr("ALERTS LOCKED", "ТРЕВОГИ ЗАКРЫТЫ"); value = Security::lockAlertsLabel();
             break;
         case SecurityRow::REMOTE_UPDATE:
             // Not gated on the PIN: it is a permission, not a lock feature.
-            label = "REMOTE UPDATE"; value = Settings::remoteUpdate() ? "ON" : "OFF";
+            label = Theme::tr("REMOTE UPDATE", "УДАЛЁН. ОБНОВА"); value = Settings::remoteUpdate() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             dimmed = false;
             break;
         default: label = "?"; break;
@@ -90,7 +90,7 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, SecurityRow r, bool comp
     const uint16_t lab = dimmed ? Theme::blend(Theme::BG, Theme::VAPOR_PURPLE, 110) : Theme::VAPOR_PURPLE;
     t.setTextColor(lab, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(label);
+    Theme::printRU(t, label);
 
     if (value) {
         uint16_t vc = dimmed ? Theme::blend(Theme::BG, Theme::WHITE, 110) : Theme::WHITE;
@@ -101,9 +101,9 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, SecurityRow r, bool comp
              (r == SecurityRow::WIPE_ON_FAIL && Security::wipeOnFail())))
             vc = Theme::RED;
         t.setTextColor(vc, Theme::BG);
-        int vw = t.textWidth(value);
+        int vw = Theme::textWidthRU(t, value);
         t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
-        t.print(value);
+        Theme::printRU(t, value);
     }
     t.drawFastHLine(4, y + hgt - 1, w - 8, Theme::PURPLE);
 }
@@ -131,7 +131,7 @@ void uiSecurityTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     Theme::restorePalette(saved);
 
     Theme::drawTitleBar(t, ">> SECURITY <<");
-    Theme::drawListHeading(t, "SECURITY", Theme::VAPOR_PURPLE);
+    Theme::drawListHeading(t, Theme::tr("SECURITY", "ЗАЩИТА"), Theme::VAPOR_PURPLE);
 
     const bool compact = (w < 300);
     uint8_t n = rowCount();
@@ -143,7 +143,7 @@ void uiSecurityTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         y += rowH; idx++; visibleCount++;
     }
     Theme::drawScrollbar(t, w - 4, top, bodyBottom - top, n, visibleCount, g_scroll);
-    Theme::drawPinnedBack(t, "[ BACK ]");
+    Theme::drawPinnedBack(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"));
 }
 
 SecurityRow uiSecurityHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {

@@ -46,49 +46,50 @@ static void rowContent(PowerRow r, char* valBuf, size_t valBufN,
     value = nullptr;
     switch (r) {
         case PowerRow::ENABLED:
-            label = "LOW POWER"; value = Settings::powerSaver() ? "ON" : "OFF";
+            label = Theme::tr("LOW POWER", "ЭКОРЕЖИМ"); value = Settings::powerSaver() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             dimmed = false;
             break;
         case PowerRow::SCREEN_TIMEOUT: {
-            label = "SCREEN TIMEOUT";
+            label = Theme::tr("SCREEN TIMEOUT", "ГАСНУТЬ ЧЕРЕЗ");
             // Read the raw table, not the gated getter: this row has to show
             // what is configured even while the master switch is off.
             uint16_t sec = Settings::powerSaver() ? Settings::screenTimeoutSec()
                                                   : Settings::screenTimeoutSecRaw();
-            if (!sec)            snprintf(valBuf, valBufN, "NEVER");
-            else if (sec < 60)   snprintf(valBuf, valBufN, "%us", (unsigned)sec);
-            else                 snprintf(valBuf, valBufN, "%umin", (unsigned)(sec / 60));
+            const bool ru = Settings::lang() == 1;
+            if (!sec)            snprintf(valBuf, valBufN, "%s", ru ? "НИКОГДА" : "NEVER");
+            else if (sec < 60)   snprintf(valBuf, valBufN, ru ? "%u с" : "%us", (unsigned)sec);
+            else                 snprintf(valBuf, valBufN, ru ? "%u мин" : "%umin", (unsigned)(sec / 60));
             value = valBuf;
             break;
         }
         case PowerRow::DIM_LEVEL:
-            label = "DIM TO -  +";
-            if (!Settings::dimLevel()) snprintf(valBuf, valBufN, "OFF");
+            label = Theme::tr("DIM TO -  +", "ТЕМНЕТЬ -  +");
+            if (!Settings::dimLevel()) snprintf(valBuf, valBufN, "%s", Settings::lang() == 1 ? "ВЫКЛ" : "OFF");
             else snprintf(valBuf, valBufN, "%u%%", (unsigned)(Settings::dimLevel() * 100 / 255));
             value = valBuf;
             break;
         case PowerRow::IDLE_FPS: {
-            label = "IDLE FRAMES";
+            label = Theme::tr("IDLE FRAMES", "КАДРЫ В ПОКОЕ");
             uint8_t f = Settings::powerSaver() ? Settings::idleFps() : Settings::idleFpsRaw();
-            if (!f) snprintf(valBuf, valBufN, "FULL");
+            if (!f) snprintf(valBuf, valBufN, "%s", Settings::lang() == 1 ? "МАКС" : "FULL");
             else    snprintf(valBuf, valBufN, "%u fps", (unsigned)f);
             value = valBuf;
             break;
         }
         case PowerRow::IDLE_AFTER:
-            label = "IDLE AFTER";
-            snprintf(valBuf, valBufN, "%us", (unsigned)Settings::idleAfterSec());
+            label = Theme::tr("IDLE AFTER", "ПОКОЙ ЧЕРЕЗ");
+            snprintf(valBuf, valBufN, Settings::lang() == 1 ? "%u с" : "%us", (unsigned)Settings::idleAfterSec());
             value = valBuf;
             break;
         case PowerRow::CPU_CLOCK: {
-            label = "CPU CLOCK";
+            label = Theme::tr("CPU CLOCK", "ПРОЦЕССОР");
             uint16_t m = Settings::powerSaver() ? Settings::cpuMhz() : Settings::cpuMhzRaw();
             snprintf(valBuf, valBufN, "%u MHz", (unsigned)m);
             value = valBuf;
             break;
         }
         case PowerRow::WAKE_ON_ALERT:
-            label = "WAKE ON ALERT"; value = Settings::wakeOnAlert() ? "ON" : "OFF";
+            label = Theme::tr("WAKE ON ALERT", "БУДИТЬ ТРЕВОГОЙ"); value = Settings::wakeOnAlert() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             break;
         default:
             label = "?";
@@ -115,16 +116,16 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, PowerRow r, bool compact
     const uint16_t lab = dimmed ? Theme::blend(Theme::BG, Theme::VAPOR_PURPLE, 110) : Theme::VAPOR_PURPLE;
     t.setTextColor(lab, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(label);
+    Theme::printRU(t, label);
 
     if (value) {
         t.setTextColor(dimmed ? Theme::blend(Theme::BG, Theme::WHITE, 110) : Theme::WHITE,
                        Theme::BG);
-        int vw = t.textWidth(value);
+        int vw = Theme::textWidthRU(t, value);
         // 18px reserved on the right, same as Settings: leaves room for the
         // scrollbar without the value running under it.
         t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
-        t.print(value);
+        Theme::printRU(t, value);
     }
 }
 
@@ -165,7 +166,7 @@ switch (Settings::background()) {
     Theme::restorePalette(saved);
 
     Theme::drawTitleBar(t, ">> POWER SAVER <<");
-    Theme::drawListHeading(t, "POWER SAVER", Theme::VAPOR_PURPLE);
+    Theme::drawListHeading(t, Theme::tr("POWER SAVER", "ЭКОРЕЖИМ"), Theme::VAPOR_PURPLE);
 
     // Portrait is 240px wide, which is not enough for "SCREEN TIMEOUT" and
     // its value side by side at size 2's 12px per glyph -- the same collision
@@ -186,7 +187,7 @@ switch (Settings::background()) {
     }
 
     Theme::drawScrollbar(t, w - 4, top, bodyBottom - top, n, visibleCount, g_scroll);
-    Theme::drawPinnedBack(t, "[ BACK ]");
+    Theme::drawPinnedBack(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"));
 }
 
 PowerRow uiPowerHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {

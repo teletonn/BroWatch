@@ -44,11 +44,11 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, DetectionType type) {
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
     t.print(detectionTypeName(type));
 
-    const char* value = on ? "ON" : "OFF";
+    const char* value = on ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
     t.setTextColor(on ? Theme::WHITE : Theme::RED, Theme::BG);
-    int vw = t.textWidth(value);
+    int vw = Theme::textWidthRU(t, value);
     t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
-    t.print(value);
+    Theme::printRU(t, value);
 }
 
 void uiDetFilterTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
@@ -91,7 +91,7 @@ switch (Settings::background()) {
     Theme::restorePalette(saved);
 
     Theme::drawTitleBar(t, ">> DETECTION FILTER <<");
-    Theme::drawListHeading(t, "TYPE FILTER", Theme::AMBER);
+    Theme::drawListHeading(t, Theme::tr("TYPE FILTER", "ФИЛЬТР ТИПОВ"), Theme::AMBER);
 
     uint8_t n = rowCount();
     uiClampScroll(g_scroll, n, bodyBottom - top, rowH);
@@ -107,7 +107,7 @@ switch (Settings::background()) {
     }
 
     Theme::drawScrollbar(t, w - 4, top, bodyBottom - top, n, visibleCount, g_scroll);
-    Theme::drawPinnedBack(t, "[ BACK ]");
+    Theme::drawPinnedBack(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"));
 }
 
 DetectionType uiDetFilterHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {

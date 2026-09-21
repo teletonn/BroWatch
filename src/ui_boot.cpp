@@ -30,6 +30,22 @@ static const char* BOOT_LINES[] = {
     "Detecting nonsense since day one.",
 };
 static const uint8_t BOOT_LINE_COUNT = sizeof(BOOT_LINES) / sizeof(BOOT_LINES[0]);
+
+// BroWatch RU parallels (same count; picked by the same roll in uiBootInit).
+static const char* BOOT_LINES_RU[] = {
+    "Слежка? Не на моей смене.",
+    "Улыбнись! Я слежу за смотрящими.",
+    "Ни одна камера не пострадала. Пока.",
+    "Приватность мертва. Я — некролог.",
+    "Вообще-то я страшный кузен Большого Брата.",
+    "Коллекционирую MAC-адреса, не друзей.",
+    "Они видят всё. Я их — тоже.",
+    "Криптид по профессии, стукач по хобби.",
+    "Где-то камера только что занервничала.",
+    "Не паранойя. Просто в курсе.",
+    "Не доверяй объективам.",
+    "Чушь детекчу с первого дня.",
+};
 static uint8_t s_bootLineIdx = 0;
 
 // When this splash started, and how far through its scripted glitch
@@ -82,7 +98,7 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
 
     // Big title, Bangers comic-impact font — landscape-only screen
     // (boot always starts at rotation 1) so the width is never tight.
-    const char* title = "SQUACHWATCH";
+    const char* title = "BROWATCH";
     int tw = Theme::bangersTextWidth(title, Theme::BangersSize::LG);
     int tx = (w - tw) / 2;
     // 3px black outline. The title sits over a bright sunset now, and
@@ -127,8 +143,8 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
     // rectangle. Anything built on it would look correct in one and
     // wrong on the other, and the emulator is where this gets checked.
     t.setTextSize(2);
-    const char* sub = "TALKING SASQUACH";
-    const int sw = t.textWidth(sub);
+    const char* sub = Theme::tr("TALKING SASQUACH", "ГОВОРЯЩИЙ СКВАЧ");
+    const int sw = Theme::textWidthRU(t, sub);
     const int sx = (w - sw) / 2;
     const int sy = 54;
 
@@ -141,16 +157,16 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
     // the gap reading as a second, blurrier copy of the text.
     t.setTextColor(Theme::BLACK);
     t.setCursor(sx + 2, sy + 2);
-    t.print(sub);
+    Theme::printRU(t, sub);
 
     // Magenta trails right, cyan leads left -- the direction a
     // mistracked CRT actually smears.
     t.setTextColor(Theme::PINK);
     t.setCursor(sx + split + jitter, sy);
-    t.print(sub);
+    Theme::printRU(t, sub);
     t.setTextColor(Theme::CYAN);
     t.setCursor(sx - split + jitter, sy);
-    t.print(sub);
+    Theme::printRU(t, sub);
 
     // Burst only: one more cyan copy dropped a row or two, like a scan
     // that failed to land. Kept to a couple of rows so it reads as a
@@ -158,14 +174,14 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
     if (glitch) {
         t.setTextColor(Theme::CYAN);
         t.setCursor(sx + jitter * 2, sy + 1 + (int)random(0, 2));
-        t.print(sub);
+        Theme::printRU(t, sub);
     }
 
     // White core last, so the word stays legible whatever the copies
     // are doing around it.
     t.setTextColor(Theme::WHITE);
     t.setCursor(sx + jitter, sy);
-    t.print(sub);
+    Theme::printRU(t, sub);
 
     // Snow over the subtitle's own box. A no-op while glitchActive() is
     // false, so this is safe to call every frame.
@@ -217,7 +233,7 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
             if (bootScale < 1.95f) bootScale = 1.95f;
             if (bootScale > 3.2f)  bootScale = 3.2f;
         }
-        Squachy::drawWaving(t, w / 2, h - 21, now, bootScale, BOOT_LINES[s_bootLineIdx]);
+        Squachy::drawWaving(t, w / 2, h - 21, now, bootScale, Settings::lang() == 1 ? BOOT_LINES_RU[s_bootLineIdx] : BOOT_LINES[s_bootLineIdx]);
     }
 
     // INITIALIZING...  vX.Y.Z -- version tacked onto this line rather
@@ -237,16 +253,17 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
     // bands, and it is the one most likely to still surprise somebody -- so
     // the word goes where nobody can miss it rather than in a release note
     // they may never have read.
-    snprintf(init, sizeof(init), "3.5in BETA   %s", FIRMWARE_VERSION);
+    const bool ruInit = Settings::lang() == 1;
+    snprintf(init, sizeof(init), ruInit ? "3.5 БЕТА   %s" : "3.5in BETA   %s", FIRMWARE_VERSION);
 #else
-    snprintf(init, sizeof(init), "INITIALIZING...  %s", FIRMWARE_VERSION);
+    snprintf(init, sizeof(init), Settings::lang() == 1 ? "ЗАГРУЗКА...  %s" : "INITIALIZING...  %s", FIRMWARE_VERSION);
 #endif
-    int iw = t.textWidth(init);
+    int iw = Theme::textWidthRU(t, init);
     t.setCursor((w - iw) / 2, h - 16);
 #if defined(CYD35)
     t.setTextColor(Theme::AMBER);   // not the cyan the rest of the line uses
 #endif
-    t.print(init);
+    Theme::printRU(t, init);
 
     // animated scanline sweeping top to bottom every 600 ms
     int phase = (int)((now / 600) % (uint32_t)h);

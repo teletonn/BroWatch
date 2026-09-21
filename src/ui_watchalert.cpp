@@ -1,6 +1,7 @@
 // SquachWatch-CYD — watched-target alert screen implementation
 #include "ui_watchalert.h"
 #include "theme.h"
+#include "settings.h"
 #include "squachy.h"
 #include <Arduino.h>
 
@@ -21,15 +22,16 @@ static void removeRect(TFT_eSPI& t, int& x, int& y, int& w, int& h) {
 // cannot hold it. Shortened rather than shrunk: size-1 is already the
 // smallest the built-in font offers.
 static const char* removeLabel(TFT_eSPI& t, int w) {
-    const char* full = "REMOVE FROM WATCH LIST";
+    const bool ru = Settings::lang() == 1;
+    const char* full = ru ? "УБРАТЬ ИЗ СЛЕЖКИ" : "REMOVE FROM WATCH LIST";
     // At the size this button will actually be drawn. On a wide panel that is
     // size 2, where the full label wants 270 px in a 240 px box -- so it takes
     // the short word and keeps the bigger letters, rather than keeping all
     // twenty-two characters and being the one small button on the screen.
     t.setTextSize(Theme::uiTextSize(t, 1));
-    const bool fits = t.textWidth(full) <= w - 8;
+    const bool fits = Theme::textWidthRU(t, full) <= w - 8;
     t.setTextSize(1);
-    return fits ? full : "UNWATCH";
+    return fits ? full : (ru ? "НЕ СЛЕДИТЬ" : "UNWATCH");
 }
 
 void uiWatchAlertInit(TFT_eSPI& t) {
@@ -76,11 +78,13 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
         {-2, 1},{-1, 1},{0, 1},{1, 1},{2, 1},
         {-2, 2},{-1, 2},{0, 2},{1, 2},{2, 2},
     };
-    const char* msg = "TARGET IN RANGE";
+    const bool ruMsg = Settings::lang() == 1;
+    const char* msg = Theme::tr("TARGET IN RANGE", "ЦЕЛЬ РЯДОМ");
     uint16_t col = Theme::blend(Theme::RED, Theme::WHITE, (uint16_t)(pulse * 120.0f));
     int ty = h / 2 - 20;
-    int tw = Theme::bangersTextWidth(msg, Theme::BangersSize::MD);
-    if (tw <= w - 8) {
+    // Bangers has no Cyrillic: RU takes the size-2 fallback path.
+    int tw = ruMsg ? 0 : Theme::bangersTextWidth(msg, Theme::BangersSize::MD);
+    if (!ruMsg && tw <= w - 8) {
         int tx = (w - tw) / 2;
         // One pass, not twenty-four -- see drawBangersOutline() in theme.cpp.
         Theme::drawBangersOutline(t, tx, ty, msg, Theme::BLACK, Theme::BangersSize::MD, 2);
@@ -89,16 +93,16 @@ void uiWatchAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
         // Narrowest portrait rotations: same fallback CLEAR's status
         // text uses when the Bangers glyph set won't fit.
         t.setTextSize(2);
-        int sw = t.textWidth(msg);
+        int sw = Theme::textWidthRU(t, msg);
         int sx = (w - sw) / 2, sy = ty;
         t.setTextColor(Theme::BLACK, bg);
         for (uint8_t i = 0; i < 24; i++) {
             t.setCursor(sx + OUTLINE_OFS[i][0], sy + OUTLINE_OFS[i][1]);
-            t.print(msg);
+            Theme::printRU(t, msg);
         }
         t.setTextColor(col, bg);
         t.setCursor(sx, sy);
-        t.print(msg);
+        Theme::printRU(t, msg);
     }
 
     // Sub-line: what's actually being watched, and the dismiss hint --

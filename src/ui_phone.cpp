@@ -244,7 +244,7 @@ static const char* keyLabel(char c) {
         case Qwerty::BKSP: return "DEL";
         case Qwerty::CLR:  return "CLR";
         case Qwerty::SHUF: return "SHUFFLE";
-        case Qwerty::OK:   return "OK";
+        case Qwerty::OK:   return Theme::tr("OK", "ОК");
         case ' ':          return "SPACE";
         default: one[0] = c; one[1] = '\0'; return one;
     }
@@ -400,11 +400,11 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
 
     // Prompt -- or, with FORGOT armed, what a second tap will do.
     const bool armed = forgotArmed(now);
-    const char* pr = armed ? "TAP AGAIN: WIPE + UNLOCK" : s_pinPrompt;
+    const char* pr = armed ? Theme::tr("TAP AGAIN: WIPE + UNLOCK", "ЖМИ ЕЩЁ: СТЕРЕТЬ ВСЁ") : s_pinPrompt;
     t.setTextSize(1);
     t.setTextColor(armed ? Theme::RED : STEEL_LT);
-    t.setCursor(ux + (UW - t.textWidth(pr)) / 2, uy + 8);
-    t.print(pr);
+    t.setCursor(ux + (UW - Theme::textWidthRU(t, pr)) / 2, uy + 8);
+    Theme::printRU(t, pr);
 
     // The dots, or the wait banner in their place. A shake nudges them for a
     // moment after a wrong PIN.
@@ -414,8 +414,8 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
     if (s_pinWaitMsg) {
         t.setTextColor(Theme::RED);
         t.setTextSize(1);
-        t.setCursor(ux + (UW - t.textWidth(s_pinWaitMsg)) / 2, dY + (dH - 8) / 2);
-        t.print(s_pinWaitMsg);
+        t.setCursor(ux + (UW - Theme::textWidthRU(t, s_pinWaitMsg)) / 2, dY + (dH - 8) / 2);
+        Theme::printRU(t, s_pinWaitMsg);
     } else {
         int shake = 0;
         if (s_pinShakeAt && now - s_pinShakeAt < 300) shake = ((now / 40) % 2) ? 3 : -3;
@@ -438,14 +438,14 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         t.setTextSize(2);
         if (t.textWidth(lab) > KW - 6) t.setTextSize(1);
         t.setTextColor(Theme::WHITE);
-        t.setCursor(kx + (KW - t.textWidth(lab)) / 2, ky + (KH - t.fontHeight()) / 2);
-        t.print(lab);
+        t.setCursor(kx + (KW - Theme::textWidthRU(t, lab)) / 2, ky + (KH - t.fontHeight()) / 2);
+        Theme::printRU(t, lab);
     }
 
     if (s_pinBack)
-        Theme::drawButton(t, BX, s_backY, BW_(), BH, "[ BACK ]", false);
+        Theme::drawButton(t, BX, s_backY, BW_(), BH, Theme::tr("[ BACK ]", "[ НАЗАД ]"), false);
     else if (s_pinForgot)
-        Theme::drawButton(t, BX, s_backY, BW_(), BH, armed ? "[ WIPE? ]" : "[ FORGOT ]", armed);
+        Theme::drawButton(t, BX, s_backY, BW_(), BH, armed ? Theme::tr("[ WIPE? ]", "[ СТЕРЕТЬ? ]") : Theme::tr("[ FORGOT ]", "[ ЗАБЫЛ ]"), armed);
 }
 
 void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {
@@ -596,8 +596,9 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     }
     // A message has a limit worth seeing coming; a name's twelve is its own
     // readout.
-    char rem[8];
-    snprintf(rem, sizeof rem, "%u LEFT", (unsigned)(s_max - s_len));
+    char rem[12];
+    if (Settings::lang() == 1) snprintf(rem, sizeof rem, "%u ОСТ.", (unsigned)(s_max - s_len));
+    else                       snprintf(rem, sizeof rem, "%u LEFT", (unsigned)(s_max - s_len));
 
     s_backY = backY(h);
 
@@ -615,10 +616,10 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         if (s_armed >= 0) {
             const char* lab = keyLabel(s_keys[s_armed].ch);
             t.setTextSize(2);
-            if (t.textWidth(lab) > pw - 4) t.setTextSize(1);
+            if (Theme::textWidthRU(t, lab) > pw - 4) t.setTextSize(1);
             t.setTextColor(Theme::VAPOR_YELLOW);
-            t.setCursor(px + (pw - t.textWidth(lab)) / 2, dY + (dH - t.fontHeight()) / 2);
-            t.print(lab);
+            t.setCursor(px + (pw - Theme::textWidthRU(t, lab)) / 2, dY + (dH - t.fontHeight()) / 2);
+            Theme::printRU(t, lab);
         } else if (msg()) {
             char n[4];
             snprintf(n, sizeof n, "%u", (unsigned)(s_max - s_len));
@@ -637,17 +638,17 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
             Theme::drawSteelKey(t, k.x, k.y, k.w, k.h, lit);
             const char* lab = keyLabel(k.ch);
             t.setTextSize(2);
-            if (t.textWidth(lab) > k.w - 6) t.setTextSize(1);
+            if (Theme::textWidthRU(t, lab) > k.w - 6) t.setTextSize(1);
             t.setTextColor(lit ? Theme::VAPOR_YELLOW : Theme::WHITE);
-            t.setCursor(k.x + (k.w - t.textWidth(lab)) / 2, k.y + (k.h - t.fontHeight()) / 2);
-            t.print(lab);
+            t.setCursor(k.x + (k.w - Theme::textWidthRU(t, lab)) / 2, k.y + (k.h - t.fontHeight()) / 2);
+            Theme::printRU(t, lab);
         }
     } else {
         if (msg()) {
             t.setTextSize(1);
             t.setTextColor(STEEL_DK);
-            t.setCursor(caseX() + UW - 12 - t.textWidth(rem), dY + dH + 6);
-            t.print(rem);
+            t.setCursor(caseX() + UW - 12 - Theme::textWidthRU(t, rem), dY + dH + 6);
+            Theme::printRU(t, rem);
         }
         // ---- keypad -------------------------------------------------------
         for (int i = 0; i < 12; i++) {

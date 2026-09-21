@@ -1,20 +1,22 @@
-# SquachWatch-CYD
+# BroWatch
+
+> Русскоязычный форк [SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD): интерфейс на русском (переключатель `LANGUAGE`), шаблоны сообщений и болтовня Сквачи адаптированы, сеть в интерфейсе зовётся BroMesh. Wire-протокол и фразы совместимы с оригиналом.
 
 > Surveillance-device detector for the ESP32-2432S028R ("Cheap Yellow Display").
 
-SquachWatch-CYD sniffs the 2.4 GHz airwaves for known wireless signatures
+BroWatch sniffs the 2.4 GHz airwaves for known wireless signatures
 of Flock Safety cameras, Axon body cameras, recording glasses, card
 skimmers, AirTags, drones, proximity beacons and pentest hardware. It runs
 standalone on a bare CYD board — no PC, no extras, just plug it into USB.
 
 The UI is a vaporwave-themed take on the **SquachWare** aesthetic: matrix
 digital rain, Squachy the mascot, full-screen dramatic ALERT overlays, and
-the glitchy SquachWatch wordmark.
+the glitchy BroWatch wordmark.
 
 <p align="center">
   <a href="https://squachwatch.com/emulator/" title="Drive it in your browser">
     <img src="docs/demo.gif" width="640"
-         alt="SquachWatch booting, Squachy in the VOID EYE costume on the synthwave sunset, a Flock camera detection card, his reaction to it, and a visiting SquachWatch walking on to say hello">
+         alt="BroWatch booting, Squachy in the VOID EYE costume on the synthwave sunset, a Flock camera detection card, his reaction to it, and a visiting BroWatch walking on to say hello">
   </a>
 </p>
 
@@ -93,8 +95,8 @@ Three steps:
 1. Install [PlatformIO](https://platformio.org/) (CLI or VS Code extension).
 2. Clone the repo:
    ```sh
-   git clone https://github.com/skizzophrenic/SquachWatch-CYD
-   cd SquachWatch-CYD
+   git clone https://github.com/teletonn/BroWatch
+   cd BroWatch
    ```
 3. Build and flash:
    ```sh
@@ -203,7 +205,7 @@ steps, and a TEST row that plays the lot in six seconds. Boards whose LED pins
 have not been checked (the AWOK and the 3.5") compile it out and say so on
 that screen.
 
-## SquachMesh
+## BroMesh
 
 > **Work in progress.** It is in this release because it works — two boards
 > find each other and each draws the other's Squachy — but it has had days of
@@ -213,16 +215,16 @@ that screen.
 
 <p align="center">
   <img src="docs/squachmesh.gif" width="640"
-       alt="Two SquachWatches in range of each other. One Squachy walks in, they greet each other, and the pair stand around talking.">
+       alt="Two BroWatches in range of each other. One Squachy walks in, they greet each other, and the pair stand around talking.">
 </p>
 
-Two SquachWatches in range of each other notice, and each one draws the
+Two BroWatches in range of each other notice, and each one draws the
 other's Squachy as a visitor. He walks in, they high five, they stand around
 talking — now and then breaking into one of the thirty-odd emotes on their
 own, a pie fight, a coin toss, a selfie, a dance-off, the same one on both
 screens with the same result — and he goes home when the other board does.
 His outfit, his shades and his name all travelled over the air in a
-twenty-byte BLE advert. The name is one row, **NAME** under SQUACHMESH: a
+twenty-byte BLE advert. The name is one row, **NAME** under BROMESH: a
 curated one until somebody types one on the payphone, where **SHUFFLE**
 steps through the curated list for anyone who would rather not type.
 Whichever it is, the visitor wears it on a sticker on his chest.
@@ -233,7 +235,7 @@ earshot may or may not catch it. A peer is recognised inside the scan callback
 and returns before the signature tables ever see it, so two of these can never
 set each other off.
 
-**Settings → SQUACHMESH**, and it asks first. `DETECT` is receive-only: you
+**Settings → BROMESH**, and it asks first. `DETECT` is receive-only: you
 see other people's Squachys and broadcast nothing at all. `TRANSMIT` is the
 half that makes you visible, and a full-screen warning stands in front of that
 menu spelling out what goes out, how often, and what somebody with a scanner
@@ -252,13 +254,13 @@ doing. Offering it is defensible; switching it on quietly would not be.
        alt="A visiting Squachy sends a typed message that lands in a red speech bubble; a ready-made reply is chosen, confirmed and sent, the visitor answers, and the phrase picker shows its big alphabet and word list.">
 </p>
 
-Two SquachWatches that share a five-word phrase can message each other: one
+Two BroWatches that share a five-word phrase can message each other: one
 of 24 ready-made lines, or up to 48 characters typed on the payphone or the
 QWERTY board. A message arrives as a **red** bubble with the sender's name in
 it, so it is never mistaken for the Squachys' own chatter, and nothing is sent
 until you have confirmed it.
 
-**Settings → SQUACHMESH → MESSAGES**, then **PHRASE**: one of you ROLLs five
+**Settings → BROMESH → MESSAGES**, then **PHRASE**: one of you ROLLs five
 words and reads them out, the other ENTERs the same five. Setting a phrase
 freezes the screen for about three seconds on purpose — it is 20,000 rounds of
 PBKDF2, which every guess at your phrase has to pay too. A seven-card tutorial
@@ -298,7 +300,7 @@ phrase on every board.
 
 ### Your squad
 
-**Settings → SQUACHMESH → SQUAD** is the roster: everybody who has ever been
+**Settings → BROMESH → SQUAD** is the roster: everybody who has ever been
 heard holding your phrase, here or not, up to sixteen, kept across restarts.
 Each member shows in the outfit from their latest advert, with how many
 separate times you have met, those in range first. INVITE works when they
@@ -395,7 +397,7 @@ wrongly. Regenerate with `python3 make_gallery.py` in `sim/`.
 ## Project layout
 
 ```
-SquachWatch-CYD/
+BroWatch/
 ├── platformio.ini
 ├── README.md
 ├── LICENSE

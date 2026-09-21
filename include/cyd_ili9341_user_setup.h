@@ -9,7 +9,7 @@
 // Identical to that file except the two lines called out below.
 #pragma once
 
-#define USER_SETUP_INFO    "SquachWatch-CYD / 2.8 inch / ILI9341"
+#define USER_SETUP_INFO    "BroWatch / 2.8 inch / ILI9341"
 #define ILI9341_DRIVER
 // Portrait native. We rotate to landscape at runtime via setRotation(1).
 #define TFT_WIDTH   240

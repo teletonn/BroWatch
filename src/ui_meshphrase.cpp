@@ -70,7 +70,7 @@ void title(TFT_eSPI& t, const char* s) {
     t.setTextSize(2);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(8, 6);
-    t.print(s);
+    Theme::printRU(t, s);
 }
 
 int para(TFT_eSPI& t, int y, const char* text, uint16_t col) {
@@ -81,10 +81,10 @@ int para(TFT_eSPI& t, int y, const char* text, uint16_t col) {
     int maxW = t.width() - 16;
     if (maxW > 47 * charW) maxW = 47 * charW;
     char lines[6][48];
-    const uint8_t n = Theme::wrapText(t, text, maxW, lines, 6);
+    const uint8_t n = Theme::wrapTextRU(t, text, maxW, lines, 6);
     for (uint8_t i = 0; i < n; i++) {
         t.setCursor(8, y);
-        t.print(lines[i]);
+        Theme::printRU(t, lines[i]);
         y += t.fontHeight() + 1;
     }
     return y;
@@ -117,7 +117,7 @@ void status(TFT_eSPI& t) {
 }
 
 void drawShow(TFT_eSPI& t) {
-    title(t, "PHRASE");
+    title(t, Theme::tr("PHRASE", "ФРАЗА"));
     int y = 30;
     if (MeshTalk::havePhrase()) {
         char buf[MeshMsg::PHRASE_TEXT_MAX];
@@ -134,10 +134,14 @@ void drawShow(TFT_eSPI& t) {
         const bool shown = Settings::phraseShown();
         static const char* const DASHES[MeshMsg::PHRASE_WORDS] = { "-----", "-----", "-----", "-----", "-----" };
         y = bigWords(t, y, shown ? words : DASHES, shown ? Theme::VAPOR_YELLOW : Theme::W95_SHADOW);
-        y = para(t, y + 4, shown ? "Anyone who has these five words can read your messages. "
-                                   "Say them aloud only to people you trust."
-                                 : "Hidden. This board never says its phrase; members join "
-                                   "by ADD TO SQUAD, in person.", Theme::W95_LIGHT);
+        y = para(t, y + 4, shown ? Theme::tr("Anyone who has these five words can read your messages. "
+                                   "Say them aloud only to people you trust.",
+                                   "Кто знает эти 5 слов, читает твои письма. "
+                                   "Диктуй вслух только своим.")
+                                 : Theme::tr("Hidden. This board never says its phrase; members join "
+                                   "by ADD TO SQUAD, in person.",
+                                   "Скрыто. Плата фразу не скажет; берут "
+                                   "только лично, через В ОТРЯД."), Theme::W95_LIGHT);
         // The switch, drawn as a settings row.
         {
             const int rh = 22;
@@ -146,38 +150,44 @@ void drawShow(TFT_eSPI& t) {
             t.setTextSize(1);
             t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
             t.setCursor(10, s_showRow.y + (rh - t.fontHeight()) / 2);
-            t.print("SHOW PHRASE");
-            const char* v = shown ? "ON" : "OFF";
+            Theme::printRU(t, Theme::tr("SHOW PHRASE", "ПОКАЗАТЬ ФРАЗУ"));
+            const char* v = shown ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             t.setTextColor(Theme::WHITE, Theme::BG);
-            t.setCursor(t.width() - 16 - t.textWidth(v), s_showRow.y + (rh - t.fontHeight()) / 2);
-            t.print(v);
+            t.setCursor(t.width() - 16 - Theme::textWidthRU(t, v), s_showRow.y + (rh - t.fontHeight()) / 2);
+            Theme::printRU(t, v);
         }
     } else {
         s_showRow = { 0, 0, 0, 0 };
         t.setTextSize(2);
         t.setTextColor(Theme::WHITE, Theme::BG);
         t.setCursor(8, y);
-        t.print("No phrase yet.");
-        y = para(t, y + 24, "A phrase is five words you share with a friend. ROLL makes "
-                            "a new one to read out; ENTER takes theirs.", Theme::W95_LIGHT);
+        Theme::printRU(t, Theme::tr("No phrase yet.", "Фразы пока нет."));
+        y = para(t, y + 24, Theme::tr("A phrase is five words you share with a friend. ROLL makes "
+                            "a new one to read out; ENTER takes theirs.",
+                            "Фраза — 5 слов для друга. КРУТИ даёт "
+                            "новую вслух; ВВОД берёт его."), Theme::W95_LIGHT);
         if (!MeshTalk::selfTestOk())
-            para(t, y + 4, "Messages are off: this build's crypto failed its self-test "
-                           "at boot.", Theme::RED);
+            para(t, y + 4, Theme::tr("Messages are off: this build's crypto failed its self-test "
+                           "at boot.",
+                           "Письма выкл: криптотест провален "
+                           "при старте."), Theme::RED);
     }
     status(t);
     // No way to make a key on a build whose crypto failed the self-test.
     const bool ok = MeshTalk::selfTestOk();
-    chrome(t, "[ BACK ]", ok ? "[ ROLL ]" : nullptr, ok ? "[ ENTER ]" : nullptr);
+    chrome(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"), ok ? Theme::tr("[ ROLL ]", "[ КРУТИ ]") : nullptr, ok ? Theme::tr("[ ENTER ]", "[ ВВОД ]") : nullptr);
 }
 
 void drawRolled(TFT_eSPI& t) {
-    title(t, "NEW PHRASE");
+    title(t, Theme::tr("NEW PHRASE", "НОВАЯ ФРАЗА"));
     const char* words[MeshMsg::PHRASE_WORDS];
     for (int i = 0; i < MeshMsg::PHRASE_WORDS; i++) words[i] = MeshMsg::WORDS[s_rolled[i]];
     const int y = bigWords(t, 30, words, Theme::VAPOR_YELLOW);
-    para(t, y + 4, "Read these to your friend. On theirs: PHRASE, ENTER, and the "
-                   "same five in the same order.", Theme::W95_LIGHT);
-    chrome(t, "[ CANCEL ]", "[ AGAIN ]", "[ USE ]");
+    para(t, y + 4, Theme::tr("Read these to your friend. On theirs: PHRASE, ENTER, and the "
+                   "same five in the same order.",
+                   "Прочти другу. У него: ФРАЗА, ВВОД "
+                   "и те же 5 слов по порядку."), Theme::W95_LIGHT);
+    chrome(t, Theme::tr("[ CANCEL ]", "[ ОТМЕНА ]"), Theme::tr("[ AGAIN ]", "[ ЕЩЁ ]"), Theme::tr("[ USE ]", "[ ВЗЯТЬ ]"));
 }
 
 void countLetters() {
@@ -220,8 +230,9 @@ void drawPick(TFT_eSPI& t) {
     const int w = t.width(), h = t.height();
     const bool port = h > w;
     const int M = 4, G = 4, avail = w - 2 * M;
-    char tb[20];
-    snprintf(tb, sizeof tb, "WORD %u OF 5", (unsigned)(s_pickN + 1));
+    char tb[24];
+    if (Settings::lang() == 1) snprintf(tb, sizeof tb, "СЛОВО %u ИЗ 5", (unsigned)(s_pickN + 1));
+    else                       snprintf(tb, sizeof tb, "WORD %u OF 5", (unsigned)(s_pickN + 1));
     title(t, tb);
     progress(t, 28);
 
@@ -297,14 +308,19 @@ void pickBack() {
 }
 
 void drawStretch(TFT_eSPI& t) {
-    title(t, "STRETCHING");
+    title(t, Theme::tr("STRETCHING", "ВАРИМ КЛЮЧ"));
     // Measured: 2.75 s at MeshMsg::ITERS on an ESP32. Said plainly, because
     // the screen does not move while it runs and a frozen screen with no
     // warning looks like a crash.
-    const int y = para(t, 34, "Turning five words into a key. This takes about three seconds, "
-                              "and the screen will freeze until it is done.", Theme::W95_LIGHT);
-    para(t, y + 6, "That is on purpose: every guess an attacker makes has to take "
-                "that long too. It only happens when you set a phrase.", Theme::W95_LIGHT);
+    const int y = para(t, 34, Theme::tr("Turning five words into a key. This takes about three seconds, "
+                              "and the screen will freeze until it is done.",
+                              "Варим ключ из 5 слов. Секунды три, "
+                              "экран замрёт — так надо."), Theme::W95_LIGHT);
+    para(t, y + 6, Theme::tr("That is on purpose: every guess an attacker makes has to take "
+                "that long too. It only happens when you set a phrase.",
+                "Так задумано: взломщику каждая попытка "
+                "тоже встанет в 3 секунды. Только при "
+                "смене фразы."), Theme::W95_LIGHT);
 }
 
 void startStretch() {
@@ -354,7 +370,7 @@ void uiMeshPhraseTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     switch (s_mode) {
         case Mode::SHOW:    drawShow(t); break;
         case Mode::ROLLED:  drawRolled(t); break;
-        case Mode::PICK:    drawPick(t); chrome(t, "[ BACK ]", nullptr, "[ CANCEL ]"); break;
+        case Mode::PICK:    drawPick(t); chrome(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"), nullptr, Theme::tr("[ CANCEL ]", "[ ОТМЕНА ]")); break;
         case Mode::STRETCH: drawStretch(t); s_stretchShown = true; break;
     }
 }

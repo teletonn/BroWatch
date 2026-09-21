@@ -50,7 +50,7 @@ bool in(int x, int y, int bx, int by, int bw, int bh) {
 void line(TFT_eSPI& t, int y, uint16_t c, const char* s) {
     t.setTextColor(c, Theme::BG);
     t.setCursor(8, y);
-    t.print(s);
+    Theme::printRU(t, s);
 }
 } // namespace
 
@@ -116,19 +116,20 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     else if (!s_shareSet)      s_share = true;    // the scan found one: on, until said otherwise
     const int w = t.width(), h = t.height();
     t.fillRect(0, 0, w, h, Theme::BG);
-    Theme::drawListHeading(t, "UPDATE SQUAD", Theme::VAPOR_PINK);
+    Theme::drawListHeading(t, Theme::tr("UPDATE SQUAD", "ОБНОВИТЬ ОТРЯД"), Theme::VAPOR_PINK);
     const Geom g = geom(t);
     t.setTextSize(1);
     int y = Theme::LIST_TOP + Theme::LIST_HEADING_H + 4;
     char buf[48];
 
     if (!s_sent) {
-        line(t, y, Theme::WHITE, "Tells every SquachWatch in range with");
+        line(t, y, Theme::WHITE, Theme::tr("Tells every BroWatch in range with", "Скажет всем BroWatch рядом:"));
         y += 12;
-        snprintf(buf, sizeof buf, "your phrase to update to %s,", OtaCore::runningVersion());
+        if (Settings::lang() == 1) snprintf(buf, sizeof buf, "твоя фраза — обновиться до %s,", OtaCore::runningVersion());
+        else                       snprintf(buf, sizeof buf, "your phrase to update to %s,", OtaCore::runningVersion());
         line(t, y, Theme::WHITE, buf);
         y += 12;
-        line(t, y, Theme::WHITE, "the version this one runs.");
+        line(t, y, Theme::WHITE, Theme::tr("the version this one runs.", "версии этой платы."));
 
         // The SHARE WIFI row, a settings row in shape.
         Theme::drawListRowPanel(t, w, g.shareY, g.shareH);
@@ -136,42 +137,44 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         const bool can = s_shareIdx >= 0;
         t.setTextColor(can ? Theme::VAPOR_PINK : Theme::blend(Theme::BG, Theme::VAPOR_PINK, 110), Theme::BG);
         t.setCursor(8, g.shareY + (g.shareH - t.fontHeight()) / 2);
-        t.print("SHARE WIFI");
-        const char* v = can ? (s_share ? "ON" : "OFF") : "--";
+        Theme::printRU(t, Theme::tr("SHARE WIFI", "РАЗДАТЬ WIFI"));
+        const char* v = can ? (s_share ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ")) : "--";
         t.setTextColor(can ? Theme::WHITE : Theme::blend(Theme::BG, Theme::WHITE, 110), Theme::BG);
-        t.setCursor(w - 18 - t.textWidth(v), g.shareY + (g.shareH - t.fontHeight()) / 2);
-        t.print(v);
+        t.setCursor(w - 18 - Theme::textWidthRU(t, v), g.shareY + (g.shareH - t.fontHeight()) / 2);
+        Theme::printRU(t, v);
         t.setTextSize(1);
         y = g.shareY + g.shareH + 4;
+        const bool ru = Settings::lang() == 1;
         if (can)
-            snprintf(buf, sizeof buf, "%s, used once and forgotten.",
+            snprintf(buf, sizeof buf, ru ? "%s — разово." : "%s, used once and forgotten.",
                      OtaWifi::savedSsidAt((uint8_t)s_shareIdx));
         else if (!s_scanDone)
-            snprintf(buf, sizeof buf, "Looking for a network to share...");
+            snprintf(buf, sizeof buf, "%s", ru ? "Ищу сеть для раздачи..." : "Looking for a network to share...");
         else if (!OtaWifi::hasSaved())
-            snprintf(buf, sizeof buf, "No network saved here to share.");
+            snprintf(buf, sizeof buf, "%s", ru ? "Тут сетей не сохранено." : "No network saved here to share.");
         else
             // The whole point of the scan: a board away from home would
             // otherwise hand out the password to a network nobody here can
             // see, and the boards it told could never act on it.
-            snprintf(buf, sizeof buf, "None of your networks are in range.");
+            snprintf(buf, sizeof buf, "%s", ru ? "Твоих сетей рядом нет." : "None of your networks are in range.");
         line(t, y, Theme::W95_LIGHT, buf);
         y += 12;
-        line(t, y, Theme::W95_LIGHT, "Boards with their own WiFi use that.");
+        line(t, y, Theme::W95_LIGHT, Theme::tr("Boards with their own WiFi use that.", "Кто со своим WiFi — сам."));
 
-        Theme::drawWin95Button(t, g.sendX, g.sendY, g.sendW, BTN_H, "SEND", false);
+        Theme::drawWin95Button(t, g.sendX, g.sendY, g.sendW, BTN_H, Theme::tr("SEND", "СЛАТЬ"), false);
     } else {
         const uint32_t left = (now - s_sentAt < 60000u) ? (60000u - (now - s_sentAt)) / 1000u : 0;
-        if (left) snprintf(buf, sizeof buf, "Sent. On the air for %lu s more.", (unsigned long)left);
-        else      snprintf(buf, sizeof buf, "Sent. Boards report back here.");
+        const bool ru2 = Settings::lang() == 1;
+        if (left) snprintf(buf, sizeof buf, ru2 ? "Ушло. В эфире ещё %lu с." : "Sent. On the air for %lu s more.", (unsigned long)left);
+        else      snprintf(buf, sizeof buf, "%s", ru2 ? "Ушло. Платы отчитаются тут." : "Sent. Boards report back here.");
         line(t, y, Theme::WHITE, buf);
         y += 12;
-        line(t, y, Theme::W95_LIGHT, "Each one joins WiFi, installs, restarts,");
+        line(t, y, Theme::W95_LIGHT, Theme::tr("Each one joins WiFi, installs, restarts,", "Каждая в WiFi, ставит, ребут,"));
         y += 12;
-        line(t, y, Theme::W95_LIGHT, "and says so. A minute or two each.");
+        line(t, y, Theme::W95_LIGHT, Theme::tr("and says so. A minute or two each.", "и докладывает. Минута-две."));
         y += 18;
         if (s_tallyN == 0) {
-            line(t, y, Theme::CYAN, "Nobody yet.");
+            line(t, y, Theme::CYAN, Theme::tr("Nobody yet.", "Пока никого."));
         } else {
             t.setTextSize(2);
             const int colW = w / 2;
@@ -185,7 +188,7 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             t.setTextSize(1);
         }
     }
-    Theme::drawPinnedBack(t, "[ BACK ]");
+    Theme::drawPinnedBack(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"));
 }
 
 SquadUpdateHit uiSquadUpdateHit(TFT_eSPI& t, int x, int y) {

@@ -12,7 +12,7 @@
 // NOT the 27/26 that Marauder MINI uses.
 #pragma once
 
-#define USER_SETUP_INFO    "SquachWatch-CYD / AWOK 2.4 inch / ILI9341"
+#define USER_SETUP_INFO    "BroWatch / AWOK 2.4 inch / ILI9341"
 #define ILI9341_DRIVER
 // Portrait native (240 wide x 320 tall). We rotate to landscape at
 // runtime via setRotation(1), same as the sister boards.

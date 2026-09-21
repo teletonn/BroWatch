@@ -138,7 +138,7 @@ const char* label(char ch, char* one) {
         case K_SHIFT: return "SHIFT";
         case K_SYM:   return s_sym ? "abc" : "#+=";
         case K_DEL:   return "DEL";
-        case K_OK:    return "OK";
+        case K_OK:    return Theme::tr("OK", "ОК");
         case ' ':     return "SPACE";
         default:      one[0] = ch; one[1] = '\0'; return one;
     }
@@ -199,10 +199,10 @@ void drawKey(TFT_eSPI& t, uint8_t i) {
     char one[2];
     const char* lab = label(k.ch, one);
     t.setTextSize(2);
-    if (t.textWidth(lab) > k.w - 6) t.setTextSize(1);
+    if (Theme::textWidthRU(t, lab) > k.w - 6) t.setTextSize(1);
     t.setTextColor(lit ? Theme::VAPOR_YELLOW : Theme::WHITE);
-    t.setCursor(k.x + (k.w - t.textWidth(lab)) / 2, k.y + (k.h - t.fontHeight()) / 2);
-    t.print(lab);
+    t.setCursor(k.x + (k.w - Theme::textWidthRU(t, lab)) / 2, k.y + (k.h - t.fontHeight()) / 2);
+    Theme::printRU(t, lab);
     t.setTextSize(1);
 }
 
@@ -236,7 +236,7 @@ void drawField(TFT_eSPI& t, int w, uint32_t now) {
 
 void drawShow(TFT_eSPI& t, int w) {
     t.setTextSize(1);
-    Theme::drawWin95Button(t, showX(w), FIELD_Y, SHOW_W, FIELD_H, s_show ? "HIDE" : "SHOW", false);
+    Theme::drawWin95Button(t, showX(w), FIELD_Y, SHOW_W, FIELD_H, s_show ? Theme::tr("HIDE", "СКРЫТЬ") : Theme::tr("SHOW", "ВИДНО"), false);
     s_drawnShow = s_show;
 }
 
@@ -256,11 +256,11 @@ void drawAll(TFT_eSPI& t, uint32_t now) {
     Theme::drawSteelPanel(t, 0, panelTop, w, h - panelTop, false);
     t.setTextWrap(false);
     // Header: BACK, then which network this is for.
-    Theme::drawWin95Button(t, BACK_X, BACK_Y, BACK_W, BACK_H, "BACK", false);
+    Theme::drawWin95Button(t, BACK_X, BACK_Y, BACK_W, BACK_H, Theme::tr("BACK", "НАЗАД"), false);
     t.setTextSize(1);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 1);
-    t.print("PASSWORD FOR");
+    Theme::printRU(t, Theme::tr("PASSWORD FOR", "ПАРОЛЬ ДЛЯ"));
     t.setTextColor(Theme::CYAN, Theme::BG);
     t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 11);
     char ssid[40];

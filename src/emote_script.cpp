@@ -448,5 +448,33 @@ static const char* const NAME[(size_t)E::COUNT][2] = {
 const char* name(E e) { return (uint8_t)e < (uint8_t)E::COUNT ? NAME[(uint8_t)e][0] : ""; }
 const char* sub(E e)  { return (uint8_t)e < (uint8_t)E::COUNT ? NAME[(uint8_t)e][1] : ""; }
 
+// BroWatch RU display names: the same stunt, the way it is called in Russian.
+static const char* const NAME_RU[(size_t)E::COUNT][2] = {
+    { "МАШИ", "" }, { "ДАЙ ПЯТЬ", "" }, { "ТАНЦЫ", "" }, { "ЦУ-Е-ФА", "" },
+    { "СНЕЖОК", "" }, { "БУ!", "" },
+    { "КУЛАК", "" }, { "СЕКРЕТ", "ЗНАК" }, { "САЛЮТ", "" }, { "ПОКЛОН", "" }, { "ОБНИМАШКИ", "" },
+    { "МОНЕТКА", "" }, { "КОСТИ", "" }, { "АРМ-", "РЕСТЛИНГ" }, { "КАНАТ", "ТЯНИ" },
+    { "ЧЕХАРДА", "" },
+    { "ТОРТ", "В ЛИЦО" }, { "ШАРИК", "С ВОДОЙ" }, { "САМОЛЁТИК", "" }, { "ПОДУШКИ", "БОЙ" },
+    { "ПОДАРОК", "" }, { "ВКУСНЯШКА", "" }, { "УРА", "" }, { "КОНФЕТТИ", "" }, { "ФЕЙЕРВЕРК", "" },
+    { "СЕРДЦЕ", "" }, { "ХОХОТ", "" }, { "ГРУСТЬ", "" }, { "РЫК", "" }, { "СПАТЬ", "" },
+    { "ШАПОЧКА", "ИЗ ФОЛЬГИ" }, { "ФОТО!", "" }, { "ВИДИШЬ?", "" }, { "ВОЙ", "" },
+    { "СЕЛФИ", "" },
+};
+static const char* const TAB_NAME_RU[TABS] = { "ПРИВЕТ", "ИГРА", "ПРИКОЛ", "ТУСА", "НАСТРОЙ", "ГЛЯДИ" };
+
+const char* tabNameL(uint8_t i, uint8_t lang) {
+    if (i >= TABS) return "?";
+    return (lang == 1) ? TAB_NAME_RU[i] : TAB_NAME[i];
+}
+const char* nameL(E e, uint8_t lang) {
+    if ((uint8_t)e >= (uint8_t)E::COUNT) return "";
+    return (lang == 1) ? NAME_RU[(uint8_t)e][0] : NAME[(uint8_t)e][0];
+}
+const char* subL(E e, uint8_t lang) {
+    if ((uint8_t)e >= (uint8_t)E::COUNT) return "";
+    return (lang == 1) ? NAME_RU[(uint8_t)e][1] : NAME[(uint8_t)e][1];
+}
+
 } // namespace EmoteScript
 #endif // SQUACH_MESH

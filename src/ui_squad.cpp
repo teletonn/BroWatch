@@ -132,19 +132,22 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     t.setTextSize(2);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(8, 6);
-    t.print("SQUAD");
-    char cnt[24];
+    Theme::printRU(t, Theme::tr("SQUAD", "ОТРЯД"));
+    char cnt[32];
+    const bool ru = Settings::lang() == 1;
     if (s_roster) {
         uint8_t here = 0;
         for (uint8_t i = 0; i < s_n; i++) if (s_here[i]) here++;
-        snprintf(cnt, sizeof cnt, "%u MEMBER%s, %u HERE", (unsigned)s_n, s_n == 1 ? "" : "S", (unsigned)here);
+        if (ru) snprintf(cnt, sizeof cnt, "%u ВСЕГО, %u ТУТ", (unsigned)s_n, (unsigned)here);
+        else    snprintf(cnt, sizeof cnt, "%u MEMBER%s, %u HERE", (unsigned)s_n, s_n == 1 ? "" : "S", (unsigned)here);
     } else {
-        snprintf(cnt, sizeof cnt, "%u IN RANGE", (unsigned)s_n);
+        if (ru) snprintf(cnt, sizeof cnt, "%u РЯДОМ", (unsigned)s_n);
+        else    snprintf(cnt, sizeof cnt, "%u IN RANGE", (unsigned)s_n);
     }
     t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
     t.setCursor(80, 12);
-    t.print(cnt);
+    Theme::printRU(t, cnt);
 
     // ---- the carousel ---------------------------------------------------
     const int colW  = port ? w : 176;
@@ -196,9 +199,9 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         s_hunt   = { (int16_t)(cx - 28), (int16_t)by, 56, 22 };
         s_add    = { (int16_t)(cx + 32), (int16_t)by, 56, 22 };
         Theme::drawButton(t, s_invite.x, s_invite.y, s_invite.w, s_invite.h,
-                          !here ? "AWAY" : vis ? "VISITING" : "INVITE", vis || !here);
+                          !here ? Theme::tr("AWAY", "ДАЛЕКО") : vis ? Theme::tr("VISITING", "ТУТ") : Theme::tr("INVITE", "ЗОВИ"), vis || !here);
         if (!here) s_invite = { 0, 0, 0, 0 };
-        Theme::drawButton(t, s_hunt.x, s_hunt.y, s_hunt.w, s_hunt.h, hunt ? "HUNTING" : "HUNT", hunt);
+        Theme::drawButton(t, s_hunt.x, s_hunt.y, s_hunt.w, s_hunt.h, hunt ? Theme::tr("HUNTING", "ИЩУ") : Theme::tr("HUNT", "ОХОТА"), hunt);
         if (s_roster) {
             // FORGET drops them from the roster, after asking once; they come
             // back the next time they are heard with the phrase.
@@ -206,13 +209,13 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
             s_add    = { 0, 0, 0, 0 };
             const bool sure = (int32_t)(s_sureUntil - now) > 0;
             Theme::drawButton(t, s_forget.x, s_forget.y, s_forget.w, s_forget.h,
-                              sure ? "SURE?" : "FORGET", sure);
+                              sure ? Theme::tr("SURE?", "ТОЧНО?") : Theme::tr("FORGET", "ЗАБЫТЬ"), sure);
         } else if (MeshTalk::inSquad(m.mac, now)) {
             // Heard holding our phrase: a member, so nothing to add.
-            Theme::drawButton(t, s_add.x, s_add.y, s_add.w, s_add.h, "MEMBER", true);
+            Theme::drawButton(t, s_add.x, s_add.y, s_add.w, s_add.h, Theme::tr("MEMBER", "СВОЙ"), true);
             s_add = { 0, 0, 0, 0 };
         } else {
-            Theme::drawButton(t, s_add.x, s_add.y, s_add.w, s_add.h, "ADD", false);
+            Theme::drawButton(t, s_add.x, s_add.y, s_add.w, s_add.h, Theme::tr("ADD", "В ОТРЯД"), false);
         }
     }
 
@@ -225,7 +228,7 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     t.drawRect(ix, iy, iw, ih, Theme::PURPLE);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(ix + 4, iy + 3);
-    t.print("INBOX");
+    Theme::printRU(t, Theme::tr("INBOX", "ВХОДЯЩИЕ"));
 
     const uint8_t have = MeshTalk::inboxCount();
     const int rowH = 32;
@@ -235,7 +238,7 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     if (!have) {
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
         t.setCursor(ix + 4, iy + 18);
-        t.print("No messages yet.");
+        Theme::printRU(t, Theme::tr("No messages yet.", "Пока тихо."));
     }
     for (uint8_t i = 0; i < have && i < rows; i++) {
         const MeshTalk::Message& msg = MeshTalk::inboxAt(i);
@@ -267,7 +270,7 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     }
 
     s_back = { 4, (int16_t)(h - BH - 6), BW, BH };
-    Theme::drawButton(t, s_back.x, s_back.y, s_back.w, s_back.h, "[ BACK ]", false);
+    Theme::drawButton(t, s_back.x, s_back.y, s_back.w, s_back.h, Theme::tr("[ BACK ]", "[ НАЗАД ]"), false);
 }
 
 SquadHit uiSquadTouch(int x, int y, uint32_t now) {

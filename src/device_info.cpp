@@ -38,7 +38,7 @@ const Device kDevices[] = {
     { DetectionType::FLOCK, "FLOCK BLE", "Flock-BLE", nullptr,
       "A Bluetooth radio from XUNTONG, the supplier behind Flock's Bluetooth parts. Flock reportedly turns Bluetooth off on newer units, and XUNTONG sells to others -- a lead." },
     { DetectionType::FLOCK, "ESP32 MODULE", "Flock-ESP32|Flok-ESP-S3|Flok-ESP-S2|Flok-ESP-C6", nullptr,
-      "An Espressif ESP32-family chip. Flock cameras use them -- and so do smart plugs, dev boards and this SquachWatch. Filed under Flock because it could be one. Treat it as a maybe." },
+      "An Espressif ESP32-family chip. Flock cameras use them -- and so do smart plugs, dev boards and this BroWatch. Filed under Flock because it could be one. Treat it as a maybe." },
     { DetectionType::FLOCK, "LITEON CHIP", "Flock-Liteo", nullptr,
       "A Liteon wireless module. Flock hardware has used them, and so have millions of laptops. A maybe, not a match." },
     { DetectionType::FLOCK, "FLOCK MAYBE", "Flock|Flock-OEM|Flock-DeFlk", nullptr,

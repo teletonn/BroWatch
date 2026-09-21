@@ -30,7 +30,7 @@
 // any new code.
 #pragma once
 
-#define USER_SETUP_INFO    "SquachWatch-CYD / RL Phantom 2.4 inch / ILI9341"
+#define USER_SETUP_INFO    "BroWatch / RL Phantom 2.4 inch / ILI9341"
 #define ILI9341_DRIVER
 
 #define TFT_WIDTH   240

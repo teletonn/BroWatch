@@ -1563,7 +1563,7 @@ static void drawRedBubble(TFT_eSPI& t, int cx, int headTop, const char* from, co
     // A typed message runs to 48 characters, wider than a portrait screen:
     // it wraps to two lines, or three, rather than running off the edge.
     if (!ru) Theme::bubbleFontOn(t);
-    const int lineH = ru ? 10 : Theme::bubbleTextH() + 1;
+    const int lineH = ru ? 11 : Theme::bubbleTextH() + 1;
     int maxW = w - 20;
     char rows[3][48];
     const uint8_t n = ru ? Theme::wrapTextRU(t, line, maxW, rows, 3)
@@ -1712,12 +1712,12 @@ static int16_t s_wpX = 0, s_wpY = 0, s_wpW = 0, s_wpH = 0;
 static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting) {
     // HUNT wins the label when both are set: it is the active, look-at-me mode.
     // The two are independent slots (see DetectionEngine), so both can be on.
-    const char* txt = hunting ? "HUNT" : "WATCH";
+    const char* txt = hunting ? Theme::tr("HUNT", "ОХОТА") : Theme::tr("WATCH", "СЛЕЖУ");
     const uint16_t accent = hunting ? Theme::AMBER : Theme::CYAN;
     t.setTextSize(1);
     // 16 in a 20px bar: two rows of clearance top and bottom.
     const int bh = 16;
-    const int bw = 16 + t.textWidth(txt) + 7;
+    const int bw = 16 + Theme::textWidthRU(t, txt) + 7;
     // Left edge of the free span, past the gear. The right limit is the rotate
     // icon (28) plus the lock (26) -- reserve both whether or not either is
     // showing, so the pill cannot move when a PIN is set or rotation locked.
@@ -1733,7 +1733,7 @@ static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting)
     if (hunting) t.drawFastHLine(x + 3, y + bh / 2, 12, accent);
     t.setTextColor(accent, Theme::BG);
     t.setCursor(x + 16, y + (bh - 8) / 2);
-    t.print(txt);
+    Theme::printRU(t, txt);
     // A finger-sized target: the bar is only 20px tall, so grow downward.
     s_wpX = (int16_t)(x - 4); s_wpY = (int16_t)0;
     s_wpW = (int16_t)(bw + 8); s_wpH = (int16_t)(bh + 14);
@@ -2115,7 +2115,7 @@ static void drawMessageUi(TFT_eSPI& t, uint32_t now, int titleBottom, int squach
                                   : titleBottom + (squachyBottom - titleBottom) / 3;
     const bool showing = tut ? tutorReply() : messageShowing(now);
     if (showing) {
-        if (tut) drawRedBubble(t, gx, head, MeshTutor::DEMO_NAME, MeshTutor::DEMO_REPLY);
+        if (tut) drawRedBubble(t, gx, head, MeshTutor::DEMO_NAME, Theme::tr(MeshTutor::DEMO_REPLY, "Спасибо."));
         else     drawRedBubble(t, gx, head, m.from, MeshTalk::lineText(m));
     }
     // Only with somebody around -- or something unread from somebody who was.
@@ -2944,7 +2944,7 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     Theme::drawBackgroundOverlay(t, now);
 
     // Title bar at the top
-    if (DrawBand::has(0, titleBottom)) Theme::drawTitleBar(t, ">> SQUACHWATCH <<  SCANNING");
+    if (DrawBand::has(0, titleBottom)) Theme::drawTitleBar(t, ">> BROWATCH <<  SCANNING");
 
     // The watch/hunt indicator, in the title bar's empty middle. AFTER the bar
     // itself, which repaints that whole band -- see drawWatchPill()'s comment
@@ -3030,7 +3030,7 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         // NEARBY said nothing the counters do not say better; NEARBY is the
         // half that carries the meaning, and dropping the other one is what
         // buys the bigger face above.
-        const char* msg = "NEARBY";
+        const char* msg = Settings::lang() == 1 ? "РЯДОМ" : "NEARBY";
         // 2px black outline: draw the same text at every offset in a
         // 5x5 grid around the real position (minus the center) in
         // black first, then the real color on top. A full grid, not
@@ -3045,9 +3045,9 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
             {-2, 1},{-1, 1},{0, 1},{1, 1},{2, 1},
             {-2, 2},{-1, 2},{0, 2},{1, 2},{2, 2},
         };
-        int tw = Theme::bangersTextWidth(msg, HEADLINE_SIZE);
+        int tw = Settings::lang() == 1 ? 0 : Theme::bangersTextWidth(msg, HEADLINE_SIZE);
         int ty = headlineTop;
-        if (tw <= w - 8) {
+        if (tw <= w - 8 && Settings::lang() != 1) {
             int tx = (w - tw) / 2;
             // One pass, not twenty-four: this was 14.8 ms of every frame.
             if (DrawBand::has(ty, ty + HEADLINE_H)) {
@@ -3067,16 +3067,16 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
             // built-in font does, so any future headline that outgrows the
             // narrow rotation drops to the built-in face rather than clip.
             t.setTextSize(2);
-            int sw = t.textWidth(msg);
+            int sw = Theme::textWidthRU(t, msg);
             int sx = (w - sw) / 2, sy = counterTextTop - HEADLINE_PAD - t.fontHeight(2);
             t.setTextColor(Theme::BLACK, Theme::BG);
             for (uint8_t i = 0; i < 24; i++) {
                 t.setCursor(sx + OUTLINE_OFS[i][0], sy + OUTLINE_OFS[i][1]);
-                t.print(msg);
+                Theme::printRU(t, msg);
             }
             t.setTextColor(col, Theme::BG);
             t.setCursor(sx, sy);
-            t.print(msg);
+            Theme::printRU(t, msg);
             s_nbX = (int16_t)(sx - 16); s_nbY = (int16_t)(sy - 10);
             s_nbW = (int16_t)(sw + 32); s_nbH = (int16_t)(t.fontHeight() + 20);
             s_nearbyOn = true;

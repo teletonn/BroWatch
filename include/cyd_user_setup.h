@@ -8,7 +8,7 @@
 // ILI9341_DRIVER and TFT_RGB_ORDER back to TFT_RGB.
 #pragma once
 
-#define USER_SETUP_INFO    "SquachWatch-CYD / 2.8 inch / ST7789"
+#define USER_SETUP_INFO    "BroWatch / 2.8 inch / ST7789"
 #define ST7789_DRIVER
 // Portrait native. We rotate to landscape at runtime via setRotation(1).
 #define TFT_WIDTH   240

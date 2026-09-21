@@ -43,28 +43,28 @@ static void rowContent(LightRow r, char* valBuf, size_t valBufN,
     value = nullptr;
     switch (r) {
         case LightRow::ENABLED:
-            label = "LIGHT"; value = Settings::lightOn() ? "ON" : "OFF";
+            label = Theme::tr("LIGHT", "СВЕТ"); value = Settings::lightOn() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             dimmed = false;
             break;
         case LightRow::ALERTS:
-            label = "ALERTS"; value = Settings::lightAlerts() ? "ON" : "OFF";
+            label = Theme::tr("ALERTS", "ТРЕВОГИ"); value = Settings::lightAlerts() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             break;
         case LightRow::MESSAGES:
-            label = "MESSAGES"; value = Settings::lightMessages() ? "ON" : "OFF";
+            label = Theme::tr("MESSAGES", "ПИСЬМА"); value = Settings::lightMessages() ? Theme::tr("ON", "ВКЛ") : Theme::tr("OFF", "ВЫКЛ");
             break;
         case LightRow::IDLE:
-            label = "IDLE"; value = Settings::lightIdleName();
+            label = Theme::tr("IDLE", "ПОКОЙ"); value = Settings::lightIdleName();
             break;
         case LightRow::IDLE_COLOR:
-            label = "IDLE COLOR"; value = Settings::lightColorName();
+            label = Theme::tr("IDLE COLOR", "ЦВЕТ ПОКОЯ"); value = Settings::lightColorName();
             break;
         case LightRow::BRIGHTNESS:
-            label = "BRIGHTNESS";
+            label = Theme::tr("BRIGHTNESS", "ЯРКОСТЬ");
             snprintf(valBuf, valBufN, "%u/5", (unsigned)Settings::lightBrightness());
             value = valBuf;
             break;
         case LightRow::TEST:
-            label = "TEST"; value = "PLAY";
+            label = Theme::tr("TEST", "ТЕСТ"); value = Theme::tr("PLAY", "ПУСК");
             break;
         default:
             label = "?";
@@ -85,14 +85,14 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, LightRow r, bool compact
     const uint16_t lab = dimmed ? Theme::blend(Theme::BG, Theme::CYAN, 110) : Theme::CYAN;
     t.setTextColor(lab, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(label);
+    Theme::printRU(t, label);
 
     if (value) {
         t.setTextColor(dimmed ? Theme::blend(Theme::BG, Theme::WHITE, 110) : Theme::WHITE,
                        Theme::BG);
-        int vw = t.textWidth(value);
+        int vw = Theme::textWidthRU(t, value);
         t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
-        t.print(value);
+        Theme::printRU(t, value);
     }
 }
 
@@ -119,7 +119,7 @@ void uiLightTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     Theme::restorePalette(saved);
 
     Theme::drawTitleBar(t, ">> STATUS LIGHT <<");
-    Theme::drawListHeading(t, "STATUS LIGHT", Theme::CYAN);
+    Theme::drawListHeading(t, Theme::tr("STATUS LIGHT", "СВЕТОДИОД"), Theme::CYAN);
 
     const bool compact = (w < 300);
 
@@ -144,11 +144,11 @@ void uiLightTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         t.setTextSize(1);
         t.setTextColor(Theme::blend(Theme::BG, Theme::WHITE, 150), Theme::BG);
         t.setCursor(8, y + 4);
-        t.print("No LED known on this board yet.");
+        Theme::printRU(t, Theme::tr("No LED known on this board yet.", "Светодиод тут неизвестен."));
     }
 
     Theme::drawScrollbar(t, w - 4, top, bodyBottom - top, n, visibleCount, g_scroll);
-    Theme::drawPinnedBack(t, "[ BACK ]");
+    Theme::drawPinnedBack(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"));
 }
 
 LightRow uiLightHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {

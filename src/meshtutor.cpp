@@ -3,6 +3,7 @@
 
 #if SQUACH_MESH
 #include "theme.h"
+#include "settings.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -22,10 +23,43 @@ SquachMesh::Peer s_demo = { 0, 12, 1, true, "DEMO" };
 // Every card is written to be read in one go, and the three on the message
 // screen are held to about 80 characters: they share the top of that screen
 // with nothing, but only 52 pixels of it.
+static inline bool isRU() { return Settings::lang() == 1; }
 const char* body(Step s) {
+    if (isRU()) switch (s) {
+        case Step::VISIT:
+            return "Рядом чужой СквачВотч — его Сквачи "
+                   "приходит в гости. Это демо: в эфир "
+                   "ничего не уйдёт.";
+        case Step::TAP_ICON:
+            return "Чтобы написать, жми облачко "
+                   "рядом с гостем.";
+        case Step::PICK_LINE:
+            return "Жми готовую строку или НАБЕРИ "
+                   "свою, до 48 знаков.";
+        case Step::PRESS_SEND:
+            return "Сначала спросит, так что случайный "
+                   "тап ничего не стоит. Проверь строку "
+                   "и жми СЛАТЬ.";
+        case Step::REPLY:
+            return "Он ответил. Письмо от человека "
+                   "красное, с именем. Остальное — "
+                   "болтовня двух Сквачей.";
+        case Step::PHRASE:
+            return "Читать друг друга могут только "
+                   "платы с общей фразой из 5 слов. "
+                   "Один КРУТИТ и диктует, второй "
+                   "ВВОДИТ те же слова. "
+                   "BROMESH > PHRASE.";
+        case Step::PRIVACY:
+            return "Письма шифрованы, но сам факт "
+                   "отправки виден сканеру. Чтение — "
+                   "это DETECT, отправка — TRANSMIT.";
+        default:
+            return "";
+    }
     switch (s) {
         case Step::VISIT:
-            return "When another SquachWatch is near, its Squachy comes to visit. "
+            return "When another BroWatch is near, its Squachy comes to visit. "
                    "This one is a demo: nothing you do here goes on the air.";
         case Step::TAP_ICON:
             return "To send a message, tap the speech bubble beside your visitor.";
@@ -39,7 +73,7 @@ const char* body(Step s) {
         case Step::PHRASE:
             return "Only boards that share a five-word phrase can read each other. One of you "
                    "ROLLs a phrase and reads it out; the other ENTERs the same words. "
-                   "SQUACHMESH > PHRASE.";
+                   "BROMESH > PHRASE.";
         case Step::PRIVACY:
             return "Messages are encrypted, but anyone scanning can see that you sent one. "
                    "Reading needs DETECT; sending needs TRANSMIT.";
@@ -49,6 +83,13 @@ const char* body(Step s) {
 }
 
 const char* hint(Step s) {
+    if (isRU()) switch (s) {
+        case Step::VISIT:
+        case Step::REPLY:
+        case Step::PHRASE:  return "ЖМИ, ЧТОБЫ ДАЛЬШЕ";
+        case Step::PRIVACY: return "ЖМИ — И ВСЁ";
+        default:            return nullptr;
+    }
     switch (s) {
         case Step::VISIT:
         case Step::REPLY:
@@ -97,7 +138,8 @@ void drawCard(TFT_eSPI& t, bool atTop) {
     int maxW = cw - 16;
     if (maxW > 47 * charW) maxW = 47 * charW;
     char lines[6][48];
-    const uint8_t n = Theme::wrapText(t, body(s_step), maxW, lines, 6);
+    const uint8_t n = isRU() ? Theme::wrapTextRU(t, body(s_step), maxW, lines, 6)
+                             : Theme::wrapText(t, body(s_step), maxW, lines, 6);
     const char* hn = hint(s_step);
     const int lh = t.fontHeight() + 1;
     const int ch = 16 + n * lh + (hn ? lh + 2 : 0) + 4;
@@ -107,15 +149,17 @@ void drawCard(TFT_eSPI& t, bool atTop) {
     t.drawRect(cx, cy, cw, ch, Theme::VAPOR_PINK);
     t.drawRect(cx + 1, cy + 1, cw - 2, ch - 2, Theme::PURPLE);
 
-    char hd[20];
-    snprintf(hd, sizeof hd, "MESSAGES %u/%u", (unsigned)s_step, (unsigned)STEPS);
+    char hd[24];
+    if (isRU()) snprintf(hd, sizeof hd, "ПИСЬМА %u/%u", (unsigned)s_step, (unsigned)STEPS);
+    else        snprintf(hd, sizeof hd, "MESSAGES %u/%u", (unsigned)s_step, (unsigned)STEPS);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(cx + 6, cy + 5);
-    t.print(hd);
-    const int kw = t.textWidth("SKIP");
+    Theme::printRU(t, hd);
+    const char* skip = isRU() ? "ДАЛЕЕ" : "SKIP";
+    const int kw = Theme::textWidthRU(t, skip);
     t.setTextColor(Theme::W95_LIGHT, Theme::BG);
     t.setCursor(cx + cw - 6 - kw, cy + 5);
-    t.print("SKIP");
+    Theme::printRU(t, skip);
     // A finger-sized corner rather than the four letters.
     s_kx = (int16_t)(cx + cw - kw - 22);
     s_ky = (int16_t)cy;
@@ -126,13 +170,13 @@ void drawCard(TFT_eSPI& t, bool atTop) {
     t.setTextColor(Theme::WHITE, Theme::BG);
     for (uint8_t i = 0; i < n; i++) {
         t.setCursor(cx + 6, y);
-        t.print(lines[i]);
+        Theme::printRU(t, lines[i]);
         y += lh;
     }
     if (hn) {
         t.setTextColor(Theme::CYAN, Theme::BG);
-        t.setCursor(cx + cw - 6 - t.textWidth(hn), y + 2);
-        t.print(hn);
+        t.setCursor(cx + cw - 6 - Theme::textWidthRU(t, hn), y + 2);
+        Theme::printRU(t, hn);
     }
     s_cx = (int16_t)cx; s_cy = (int16_t)cy; s_cw = (int16_t)cw; s_ch = (int16_t)ch;
     s_cardOn = true;

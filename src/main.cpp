@@ -278,7 +278,7 @@ static void drawCrashCard(TFT_eSPI& t) {
     if (power) {
         // IGNORE: off the splash for ten minutes, and on with the boot now.
         s_ignY = y0 + bh - IGN_H - 3;
-        Theme::drawWin95Button(t, w - 8 - IGN_W, s_ignY, IGN_W, IGN_H, "IGNORE", false);
+        Theme::drawWin95Button(t, w - 8 - IGN_W, s_ignY, IGN_W, IGN_H, Theme::tr("IGNORE", "ИГНОР"), false);
     }
 }
 #include "state.h"
@@ -1601,7 +1601,7 @@ static void startNudgedUpdate() {
     if (!OtaWifi::hasSaved())
         s_auto.haveCreds = MeshTalk::takeNudgeWifi(s_nudge, s_auto.ssid, s_auto.pass);
     if (!OtaWifi::hasSaved() && !s_auto.haveCreds) {
-        Theme::showToast("NO WIFI TO USE", "Do one WiFi update by hand first", Theme::AMBER);
+        Theme::showToast(Theme::tr("NO WIFI TO USE", "НЕТ СЕТЕЙ"), Theme::tr("Do one WiFi update by hand first", "Обновись по WiFi вручную"), Theme::AMBER);
         enterClear();
         return;
     }
@@ -1610,7 +1610,7 @@ static void startNudgedUpdate() {
     if (!OtaWifi::begin()) {
         engine.stopUpdateRadio();
         memset(s_auto.pass, 0, sizeof s_auto.pass);
-        Theme::showToast("CAN'T START UPDATE", nullptr, Theme::AMBER);
+        Theme::showToast(Theme::tr("CAN'T START UPDATE", "НЕ МОГУ ОБНОВИТЬ"), nullptr, Theme::AMBER);
         enterClear();
         return;
     }
@@ -1824,16 +1824,18 @@ static void enterSecurity() {
 }
 
 static const char* pinFlowPrompt(PinFlow f) {
+    const bool ru = Settings::lang() == 1;
     switch (f) {
         case PinFlow::SET_NEW:
-            snprintf(s_pinPromptBuf, sizeof s_pinPromptBuf, "NEW %u-DIGIT PIN", (unsigned)Security::pinLength());
+            if (ru) snprintf(s_pinPromptBuf, sizeof s_pinPromptBuf, "НОВЫЙ ПИН ИЗ %u", (unsigned)Security::pinLength());
+            else    snprintf(s_pinPromptBuf, sizeof s_pinPromptBuf, "NEW %u-DIGIT PIN", (unsigned)Security::pinLength());
             return s_pinPromptBuf;
         case PinFlow::SET_AGAIN:
         case PinFlow::CHANGE_AGAIN:
-        case PinFlow::DURESS_AGAIN: return "AGAIN TO CONFIRM";
-        case PinFlow::CHANGE_NEW:   return "NEW PIN";
-        case PinFlow::DURESS_NEW:   return "DURESS PIN";
-        default:                    return "CURRENT PIN";
+        case PinFlow::DURESS_AGAIN: return Theme::tr("AGAIN TO CONFIRM", "ЕЩЁ РАЗ ДЛЯ ПРОВЕРКИ");
+        case PinFlow::CHANGE_NEW:   return Theme::tr("NEW PIN", "НОВЫЙ ПИН");
+        case PinFlow::DURESS_NEW:   return Theme::tr("DURESS PIN", "ПИН-ОБМАНКА");
+        default:                    return Theme::tr("CURRENT PIN", "ТЕКУЩИЙ ПИН");
     }
 }
 
@@ -1849,7 +1851,7 @@ static void enterLocked() {
     state = AppState::LOCKED;
     transitionStart = millis();
     s_scanPickerOpen = false;
-    uiPhoneInitPin(*canvas, Security::pinLength(), "LOCKED", false);
+    uiPhoneInitPin(*canvas, Security::pinLength(), Theme::tr("LOCKED", "ЗАКРЫТО"), false);
     uiPhonePinAllowForgot(true);
 }
 
@@ -2680,18 +2682,18 @@ void loop() {
             case Bingo::Event::MARKED:
                 snprintf(sub, sizeof sub, "%s  (%u of 16)", detectionTypeName(bt),
                          (unsigned)Bingo::markedCount());
-                Theme::showToast("SQUARE MARKED", sub, Theme::GREEN, 2200);
+                Theme::showToast(Theme::tr("SQUARE MARKED", "ОТМЕЧЕНО"), sub, Theme::GREEN, 2200);
                 break;
             case Bingo::Event::LINE:
                 snprintf(sub, sizeof sub, "%u line%s called", (unsigned)Bingo::linesCalled(),
                          Bingo::linesCalled() == 1 ? "" : "s");
-                Theme::showToast("BINGO!", sub, Theme::AMBER, 3000);
+                Theme::showToast(Theme::tr("BINGO!", "БИНГО!"), sub, Theme::AMBER, 3000);
                 break;
             case Bingo::Event::FULL:
-                Theme::showToast("FULL CARD", "Sixteen for sixteen", Theme::AMBER, 4000);
+                Theme::showToast(Theme::tr("FULL CARD", "ВСЯ КАРТА"), Theme::tr("Sixteen for sixteen", "16 из 16"), Theme::AMBER, 4000);
                 break;
             case Bingo::Event::NEW_CARD:
-                Theme::showToast("NEW BINGO CARD", "A fresh sixteen", Theme::CYAN, 2500);
+                Theme::showToast(Theme::tr("NEW BINGO CARD", "НОВАЯ КАРТА"), Theme::tr("A fresh sixteen", "Свежие 16"), Theme::CYAN, 2500);
                 break;
             default: break;
         }
@@ -2756,7 +2758,7 @@ void loop() {
         if (MeshTalk::takeRead(who, sizeof who)) {
             static char sub[40];
             snprintf(sub, sizeof sub, "%s opened your message", who);
-            Theme::showToast("READ", sub, Theme::GREEN, 3000);   // a solid three seconds: it is the whole reply
+            Theme::showToast(Theme::tr("READ", "ПРОЧИТАНО"), sub, Theme::GREEN, 3000);   // a solid three seconds: it is the whole reply
             // And from the messenger himself, when he is on screen to say it.
             static char line[32];
             snprintf(line, sizeof line, "%s read it.", who);
@@ -3069,7 +3071,7 @@ void loop() {
                         engine.startUpdateRadio();
                         if (!OtaWifi::begin()) {
                             engine.stopUpdateRadio();
-                            Theme::showToast("CAN'T START UPDATE", updateRefusedWhy(), Theme::AMBER);
+                            Theme::showToast(Theme::tr("CAN'T START UPDATE", "НЕ МОГУ ОБНОВИТЬ"), updateRefusedWhy(), Theme::AMBER);
                         }
                         break;
                     case SysPropsHit::CLOSE: goHome(); break;
@@ -3439,7 +3441,7 @@ void loop() {
                         uiAlertSetRedacted(false);
                         enterAlert(*best);
                     } else {
-                        Theme::showToast("NOTHING NEARBY", "It just left", Theme::CYAN);
+                        Theme::showToast(Theme::tr("NOTHING NEARBY", "РЯДОМ ПУСТО"), Theme::tr("It just left", "Только что ушёл"), Theme::CYAN);
                     }
                 }
             } else if (!boring && tp.valid && sqActive) {
@@ -3621,7 +3623,7 @@ void loop() {
                     // is no longer the whole type for an hour.
                     lastTouch = now;
                     IgnoreList::snooze(s_alertMac);
-                    Theme::showToast("SNOOZED", "This one, until restart", Theme::AMBER);
+                    Theme::showToast(Theme::tr("SNOOZED", "ТИХО"), Theme::tr("This one, until restart", "До перезагрузки"), Theme::AMBER);
                     Squachy::trigger(Squachy::Event::DETECTION, lastAlertType,
                                      engine.lifetimeTotal(), lastAlertHits, lastAlertRssi, lastAlertConf);
                     enterClear();
@@ -3708,7 +3710,7 @@ void loop() {
                 // alert and leaves it running. Both land back on CLEAR.
                 if (uiWatchAlertHitRemove(*canvas, tp.x, tp.y)) {
                     engine.clearWatch();
-                    Theme::showToast("UNWATCHED", nullptr, Theme::CYAN);
+                    Theme::showToast(Theme::tr("UNWATCHED", "НЕ СЛЕЖУ"), nullptr, Theme::CYAN);
                 }
                 enterClear();
             } else if ((now - watchAlertStart) > ALERT_AUTO_DISMISS_MS) {
@@ -3781,7 +3783,7 @@ void loop() {
                         // end a watch that isn't a reboot or the wipe.
                         if (engine.isWatched(s_confirmMac, s_confirmIsBle)) {
                             engine.clearWatch();
-                            Theme::showToast("UNWATCHED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("UNWATCHED", "НЕ СЛЕЖУ"), nullptr, Theme::CYAN);
                         } else if (s_confirmIsBle) {
                             engine.watchBle(s_confirmMac, s_confirmLabel);
                         } else {
@@ -3796,7 +3798,7 @@ void loop() {
                         const bool wasOn = IgnoreList::contains(s_confirmMac);
                         if (wasOn) IgnoreList::remove(s_confirmMac);
                         else       IgnoreList::add(s_confirmMac, s_confirmType);
-                        Theme::showToast(wasOn ? "UN-IGNORED" : "IGNORED",
+                        Theme::showToast(wasOn ? Theme::tr("UN-IGNORED", "НЕ ИГНОР") : Theme::tr("IGNORED", "ИГНОР"),
                                          detectionTypeName(s_confirmType),
                                          Theme::colorFor(s_confirmType));
                     } else if (ctap == LogConfirmTap::HUNT) {
@@ -3807,7 +3809,7 @@ void loop() {
                         // is nowhere to go once the target is gone.
                         if (engine.isHunted(s_confirmMac, s_confirmIsBle)) {
                             engine.clearHunt();
-                            Theme::showToast("HUNT STOPPED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("HUNT STOPPED", "ХВАТИТ ИСКАТЬ"), nullptr, Theme::CYAN);
                         } else {
                             if (s_confirmIsBle) engine.huntBle(s_confirmMac, s_confirmLabel);
                             else                engine.huntWifi(s_confirmMac, s_confirmLabel);
@@ -3943,7 +3945,7 @@ void loop() {
                         // go watch the thing, and there is nothing to go to.
                         if (engine.isWatched(s_confirmMac, s_rawScanIsBle)) {
                             engine.clearWatch();
-                            Theme::showToast("UNWATCHED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("UNWATCHED", "НЕ СЛЕЖУ"), nullptr, Theme::CYAN);
                         } else {
                             if (s_rawScanIsBle) engine.watchBle(s_confirmMac, s_confirmLabel);
                             else                engine.watchWifi(s_confirmMac, s_confirmLabel);
@@ -3958,7 +3960,7 @@ void loop() {
                         const bool wasOn = IgnoreList::contains(s_confirmMac);
                         if (wasOn) IgnoreList::remove(s_confirmMac);
                         else       IgnoreList::add(s_confirmMac, DetectionType::UNKNOWN);
-                        Theme::showToast(wasOn ? "UN-IGNORED" : "IGNORED",
+                        Theme::showToast(wasOn ? Theme::tr("UN-IGNORED", "НЕ ИГНОР") : Theme::tr("IGNORED", "ИГНОР"),
                                          nullptr, Theme::CYAN);
                     } else if (ctap == RawScanConfirmTap::HUNT) {
                         lastTouch = now;
@@ -3968,7 +3970,7 @@ void loop() {
                         // looking at is still the thing you came here for.
                         if (engine.isHunted(s_confirmMac, s_rawScanIsBle)) {
                             engine.clearHunt();
-                            Theme::showToast("HUNT STOPPED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("HUNT STOPPED", "ХВАТИТ ИСКАТЬ"), nullptr, Theme::CYAN);
                         } else {
                             if (s_rawScanIsBle) engine.huntBle(s_confirmMac, s_confirmLabel);
                             else                engine.huntWifi(s_confirmMac, s_confirmLabel);
@@ -4178,7 +4180,7 @@ void loop() {
                     // Switched off by a mode: say so, rather than doing nothing
                     // and reading as a broken row.
                     if (uiSettingsRowIsOff(row)) {
-                        Theme::showToast("BORING MODE IS ON", nullptr, Theme::CYAN);
+                        Theme::showToast(Theme::tr("BORING MODE IS ON", "СКУЧНЫЙ РЕЖИМ"), nullptr, Theme::CYAN);
                         gestureActive = false;
                         break;
                     }
@@ -4191,11 +4193,11 @@ void loop() {
                         // reboot; before either existed there were none.
                         case SettingsRow::WATCH_TARGET:
                             engine.clearWatch();
-                            Theme::showToast("WATCH STOPPED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("WATCH STOPPED", "ХВАТИТ СЛЕДИТЬ"), nullptr, Theme::CYAN);
                             break;
                         case SettingsRow::HUNT_TARGET:
                             engine.clearHunt();
-                            Theme::showToast("HUNT STOPPED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("HUNT STOPPED", "ХВАТИТ ИСКАТЬ"), nullptr, Theme::CYAN);
                             break;
                         case SettingsRow::THEME:      Settings::cyclePalette(); break;
                         case SettingsRow::BACKGROUND: Settings::cycleBackground(); break;
@@ -4430,7 +4432,7 @@ void loop() {
                         engine.startUpdateRadio();
                         if (!OtaWifi::begin()) {
                             engine.stopUpdateRadio();
-                            Theme::showToast("CAN'T START UPDATE", updateRefusedWhy(), Theme::AMBER);
+                            Theme::showToast(Theme::tr("CAN'T START UPDATE", "НЕ МОГУ ОБНОВИТЬ"), updateRefusedWhy(), Theme::AMBER);
                         }
                         break;
                     case UpdateHit::NETWORK: {
@@ -4455,7 +4457,7 @@ void loop() {
                         engine.startUpdateRadio();
                         if (!OtaBle::begin()) {
                             engine.stopUpdateRadio();
-                            Theme::showToast("CAN'T START UPDATE", "Leave and try again", Theme::AMBER);
+                            Theme::showToast(Theme::tr("CAN'T START UPDATE", "НЕ МОГУ ОБНОВИТЬ"), Theme::tr("Leave and try again", "Выйди и попробуй снова"), Theme::AMBER);
                         }
                         break;
                     case UpdateHit::SWITCH:        uiUpdateAskSwitch(true);  break;
@@ -4463,7 +4465,7 @@ void loop() {
                     case UpdateHit::SWITCH_CONFIRM:
                         uiUpdateAskSwitch(false);
                         if (OtaCore::switchToOther() != OtaCore::Fail::NONE)
-                            Theme::showToast("CAN'T SWITCH", "That version won't start", Theme::AMBER);
+                            Theme::showToast(Theme::tr("CAN'T SWITCH", "НЕ ПЕРЕКЛЮЧИТЬ"), Theme::tr("That version won't start", "Та версия не стартует"), Theme::AMBER);
                         break;
                     case UpdateHit::CANCEL:
                     case UpdateHit::OK:
@@ -4506,7 +4508,7 @@ void loop() {
                 s_passForNets = false;
                 const bool ok = OtaWifi::saveNetwork(uiWifiPassSsid(), uiWifiPassText());
                 uiWifiPassClear();
-                Theme::showToast(ok ? "SAVED" : "LIST FULL", ok ? "Checked at the next boot" : "Remove one first",
+                Theme::showToast(ok ? Theme::tr("SAVED", "СОХРАНЕНО") : Theme::tr("LIST FULL", "СПИСОК ПОЛОН"), ok ? Theme::tr("Checked at the next boot", "Проверю при старте") : Theme::tr("Remove one first", "Сначала удали одну"),
                                  ok ? Theme::CYAN : Theme::AMBER);
                 enterWifiNets();
             } else if (r == WifiPassResult::BACK && s_passForNets) {
@@ -4533,7 +4535,7 @@ void loop() {
                         const int s = uiWifiNetsSelected();
                         if (s >= 0 && s < OtaWifi::savedCount()) {
                             OtaWifi::useSaved((uint8_t)s);
-                            Theme::showToast("TRIED FIRST", OtaWifi::savedSsidAt((uint8_t)s), Theme::CYAN);
+                            Theme::showToast(Theme::tr("TRIED FIRST", "ПРИОРИТЕТ"), OtaWifi::savedSsidAt((uint8_t)s), Theme::CYAN);
                         }
                         break;
                     }
@@ -4542,13 +4544,13 @@ void loop() {
                         if (s >= 0 && s < OtaWifi::savedCount()) {
                             OtaWifi::removeSaved((uint8_t)s);
                             uiWifiNetsSelect(OtaWifi::savedCount() ? (int)OtaWifi::savedUse() : -1);
-                            Theme::showToast("REMOVED", nullptr, Theme::CYAN);
+                            Theme::showToast(Theme::tr("REMOVED", "УДАЛЕНО"), nullptr, Theme::CYAN);
                         }
                         break;
                     }
                     case WifiNetsHit::ADD:
                         if (OtaWifi::savedCount() >= OtaWifi::SAVED_MAX)
-                            Theme::showToast("LIST FULL", "Remove one first", Theme::AMBER);
+                            Theme::showToast(Theme::tr("LIST FULL", "СПИСОК ПОЛОН"), Theme::tr("Remove one first", "Сначала удали одну"), Theme::AMBER);
                         else
                             enterWifiAdd();
                         break;
@@ -4569,11 +4571,11 @@ void loop() {
                         const bool open = engine.rawWifiOpen((uint8_t)row);
                         engine.stopRawScan();
                         if (!ssid[0]) {
-                            Theme::showToast("HIDDEN NETWORK", "No name to save", Theme::AMBER);
+                            Theme::showToast(Theme::tr("HIDDEN NETWORK", "СКРЫТАЯ СЕТЬ"), Theme::tr("No name to save", "Имя неизвестно"), Theme::AMBER);
                             enterWifiNets();
                         } else if (open) {
                             const bool ok = OtaWifi::saveNetwork(ssid, "");
-                            Theme::showToast(ok ? "SAVED" : "LIST FULL", ok ? "Open network" : "Remove one first",
+                            Theme::showToast(ok ? Theme::tr("SAVED", "СОХРАНЕНО") : Theme::tr("LIST FULL", "СПИСОК ПОЛОН"), ok ? Theme::tr("Open network", "Открытая сеть") : Theme::tr("Remove one first", "Сначала удали одну"),
                                              ok ? Theme::CYAN : Theme::AMBER);
                             enterWifiNets();
                         } else {
@@ -4615,9 +4617,9 @@ void loop() {
                         const MeshTalk::Send r = MeshTalk::sendNudge(ver, ssid[0] ? ssid : nullptr, pass, now);
                         memset(pass, 0, sizeof pass);
                         uiSquadUpdateSent(r == MeshTalk::Send::OK, now);
-                        if (r == MeshTalk::Send::NOT_READY)    Theme::showToast("CAN'T SEND", "Messages need a phrase first", Theme::AMBER);
-                        else if (r == MeshTalk::Send::TRANSMIT_OFF) Theme::showToast("CAN'T SEND", "Turn TRANSMIT on in SquachMesh", Theme::AMBER);
-                        else if (r != MeshTalk::Send::OK)      Theme::showToast("CAN'T SEND", "WiFi password too long to share", Theme::AMBER);
+                        if (r == MeshTalk::Send::NOT_READY)    Theme::showToast(Theme::tr("CAN'T SEND", "НЕ МОГУ СЛАТЬ"), Theme::tr("Messages need a phrase first", "Сначала задай фразу"), Theme::AMBER);
+                        else if (r == MeshTalk::Send::TRANSMIT_OFF) Theme::showToast(Theme::tr("CAN'T SEND", "НЕ МОГУ СЛАТЬ"), Theme::tr("Turn TRANSMIT on in BroMesh", "Включи TRANSMIT"), Theme::AMBER);
+                        else if (r != MeshTalk::Send::OK)      Theme::showToast(Theme::tr("CAN'T SEND", "НЕ МОГУ СЛАТЬ"), Theme::tr("WiFi password too long to share", "Пароль слишком длинный"), Theme::AMBER);
                         break;
                     }
                     case SquadUpdateHit::BACK: engine.stopRawScan(); enterUpdate(); break;
@@ -4648,7 +4650,7 @@ void loop() {
                     case InviteHit::ACCEPT: {
                         const MeshTalk::Send r = MeshTalk::inviteAccept(now);
                         if (r == MeshTalk::Send::TRANSMIT_OFF) {
-                            Theme::showToast("CAN'T ANSWER", "Turn TRANSMIT on in SquachMesh", Theme::AMBER);
+                            Theme::showToast(Theme::tr("CAN'T ANSWER", "НЕ МОГУ ОТВЕТИТЬ"), Theme::tr("Turn TRANSMIT on in BroMesh", "Включи TRANSMIT"), Theme::AMBER);
                             MeshTalk::inviteCancel();
                             enterClear();
                         }
@@ -4656,7 +4658,7 @@ void loop() {
                     }
                     case InviteHit::DECLINE: MeshTalk::inviteDecline(); enterClear(); break;
                     case InviteHit::MATCH:   MeshTalk::inviteConfirm(now); break;
-                    case InviteHit::NOMATCH: MeshTalk::inviteCancel(); Theme::showToast("INVITE STOPPED", "The digits did not match", Theme::AMBER); enterClear(); break;
+                    case InviteHit::NOMATCH: MeshTalk::inviteCancel(); Theme::showToast(Theme::tr("INVITE STOPPED", "ЗОВ СНЯТ"), Theme::tr("The digits did not match", "Цифры не сошлись"), Theme::AMBER); enterClear(); break;
                     case InviteHit::CANCEL:  MeshTalk::inviteCancel(); enterClear(); break;
                     case InviteHit::SHOW:    break;     // the screen shows the phrase itself
                     case InviteHit::BACK:
@@ -4693,9 +4695,9 @@ void loop() {
                         if (!mac) break;
                         const MeshTalk::Send r = MeshTalk::inviteStart(mac, uiSquadSelectedName(), now);
                         if (r == MeshTalk::Send::OK)            enterInvite();
-                        else if (r == MeshTalk::Send::NOT_READY) Theme::showToast("NO PHRASE TO SHARE", "Set one under SQUACHMESH first", Theme::AMBER);
-                        else if (r == MeshTalk::Send::TRANSMIT_OFF) Theme::showToast("CAN'T SEND", "Turn TRANSMIT on in SquachMesh", Theme::AMBER);
-                        else                                     Theme::showToast("CAN'T START", "Try again in a moment", Theme::AMBER);
+                        else if (r == MeshTalk::Send::NOT_READY) Theme::showToast(Theme::tr("NO PHRASE TO SHARE", "НЕТ ФРАЗЫ"), Theme::tr("Set one under BROMESH first", "Задай её в BROMESH"), Theme::AMBER);
+                        else if (r == MeshTalk::Send::TRANSMIT_OFF) Theme::showToast(Theme::tr("CAN'T SEND", "НЕ МОГУ СЛАТЬ"), Theme::tr("Turn TRANSMIT on in BroMesh", "Включи TRANSMIT"), Theme::AMBER);
+                        else                                     Theme::showToast(Theme::tr("CAN'T START", "НЕ ВЫШЛО"), Theme::tr("Try again in a moment", "Попробуй чуть позже"), Theme::AMBER);
                         break;
                     }
                     default: break;
@@ -4909,48 +4911,48 @@ void loop() {
             switch (s_pinFlow) {
                 case PinFlow::SET_NEW:
                 case PinFlow::CHANGE_NEW:
-                    if (Security::isDuress(d)) { startPinFlow(s_pinFlow, "THAT IS THE DURESS PIN"); break; }
+                    if (Security::isDuress(d)) { startPinFlow(s_pinFlow, Theme::tr("THAT IS THE DURESS PIN", "ЭТО ПИН-ОБМАНКА")); break; }
                     memcpy(s_pinFirst, d, sizeof s_pinFirst);
                     startPinFlow(s_pinFlow == PinFlow::SET_NEW ? PinFlow::SET_AGAIN : PinFlow::CHANGE_AGAIN);
                     break;
                 case PinFlow::SET_AGAIN:
                 case PinFlow::CHANGE_AGAIN: {
                     const bool first = (s_pinFlow == PinFlow::SET_AGAIN);
-                    if (!same) { startPinFlow(first ? PinFlow::SET_NEW : PinFlow::CHANGE_NEW, "DIDN'T MATCH - AGAIN"); break; }
+                    if (!same) { startPinFlow(first ? PinFlow::SET_NEW : PinFlow::CHANGE_NEW, Theme::tr("DIDN'T MATCH - AGAIN", "НЕ СОШЛОСЬ - ЕЩЁ")); break; }
                     Security::setPin(s_pinFirst);
                     // Said once, where it is set: what the lock is for, and
                     // what it is not.
-                    if (first) Theme::showToast("PIN LOCK ON", "Snoops, not USB cables", Theme::AMBER);
-                    else       Theme::showToast("PIN CHANGED", nullptr, Theme::GREEN);
+                    if (first) Theme::showToast(Theme::tr("PIN LOCK ON", "ПИН ВКЛЮЧЁН"), Theme::tr("Snoops, not USB cables", "От зевак, не от USB"), Theme::AMBER);
+                    else       Theme::showToast(Theme::tr("PIN CHANGED", "ПИН СМЕНЁН"), nullptr, Theme::GREEN);
                     done = true;
                     break;
                 }
                 case PinFlow::OFF_VERIFY:
-                    if (!Security::verify(d)) { startPinFlow(PinFlow::OFF_VERIFY, "WRONG - CURRENT PIN"); break; }
+                    if (!Security::verify(d)) { startPinFlow(PinFlow::OFF_VERIFY, Theme::tr("WRONG - CURRENT PIN", "НЕВЕРНО - ТЕКУЩИЙ ПИН")); break; }
                     Security::disable();
-                    Theme::showToast("PIN LOCK OFF", nullptr, Theme::AMBER);
+                    Theme::showToast(Theme::tr("PIN LOCK OFF", "ПИН СНЯТ"), nullptr, Theme::AMBER);
                     done = true;
                     break;
                 case PinFlow::CHANGE_CUR:
                 case PinFlow::DURESS_CUR:
-                    if (!Security::verify(d)) { startPinFlow(s_pinFlow, "WRONG - CURRENT PIN"); break; }
+                    if (!Security::verify(d)) { startPinFlow(s_pinFlow, Theme::tr("WRONG - CURRENT PIN", "НЕВЕРНО - ТЕКУЩИЙ ПИН")); break; }
                     startPinFlow(s_pinFlow == PinFlow::CHANGE_CUR ? PinFlow::CHANGE_NEW : PinFlow::DURESS_NEW);
                     break;
                 case PinFlow::DURESS_NEW:
-                    if (Security::verify(d)) { startPinFlow(PinFlow::DURESS_NEW, "MUST DIFFER FROM PIN"); break; }
+                    if (Security::verify(d)) { startPinFlow(PinFlow::DURESS_NEW, Theme::tr("MUST DIFFER FROM PIN", "ДОЛЖЕН ОТЛИЧАТЬСЯ")); break; }
                     memcpy(s_pinFirst, d, sizeof s_pinFirst);
                     startPinFlow(PinFlow::DURESS_AGAIN);
                     break;
                 case PinFlow::DURESS_AGAIN:
                     if (!same) { startPinFlow(PinFlow::DURESS_NEW, "DIDN'T MATCH - AGAIN"); break; }
                     Security::setDuress(s_pinFirst);
-                    Theme::showToast("DURESS PIN SET", "Wipes, then unlocks", Theme::RED);
+                    Theme::showToast(Theme::tr("DURESS PIN SET", "ОБМАНКА ГОТОВА"), Theme::tr("Wipes, then unlocks", "Сотрёт и откроет"), Theme::RED);
                     done = true;
                     break;
                 case PinFlow::DURESS_OFF:
                     if (!Security::verify(d)) { startPinFlow(PinFlow::DURESS_OFF, "WRONG - CURRENT PIN"); break; }
                     Security::clearDuress();
-                    Theme::showToast("DURESS PIN OFF", nullptr, Theme::AMBER);
+                    Theme::showToast(Theme::tr("DURESS PIN OFF", "ОБМАНКА СНЯТА"), nullptr, Theme::AMBER);
                     done = true;
                     break;
             }
@@ -4976,13 +4978,14 @@ void loop() {
             const uint32_t wait = Security::lockoutRemainingMs(now);
             static char waitMsg[24];
             if (wait) {
-                snprintf(waitMsg, sizeof waitMsg, "WAIT %lu s", (unsigned long)((wait + 999) / 1000));
+                if (Settings::lang() == 1) snprintf(waitMsg, sizeof waitMsg, "ЖДИ %lu с", (unsigned long)((wait + 999) / 1000));
+                else                       snprintf(waitMsg, sizeof waitMsg, "WAIT %lu s", (unsigned long)((wait + 999) / 1000));
                 uiPhonePinWait(waitMsg);
             } else {
                 uiPhonePinWait(nullptr);
             }
 #if SQUACH_MESH
-            uiPhonePinPrompt(MeshTalk::inbox().unread ? "LOCKED - NEW MESSAGE" : "LOCKED");
+            uiPhonePinPrompt(MeshTalk::inbox().unread ? Theme::tr("LOCKED - NEW MESSAGE", "ЗАКРЫТО - НОВОЕ ПИСЬМО") : Theme::tr("LOCKED", "ЗАКРЫТО"));
 #endif
             drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); });
             if (touchJustDown) uiPhoneTouch(tp.x, tp.y, now, PhoneTouch::DOWN);
@@ -5178,12 +5181,12 @@ void loop() {
                     lastTouch = now;
                     if (uiDeskHitClockEdge(tp.x, tp.y) > 0) Settings::cycleClockBackdrop();
                     else                                    Settings::cyclePrevClockBackdrop();
-                    Theme::showToast(Settings::clockBackdropName(), "CLOCK BG", Theme::CYAN);
+                    Theme::showToast(Settings::clockBackdropName(), Theme::tr("CLOCK BG", "ФОН ЧАСОВ"), Theme::CYAN);
                 } else if (edge && touchJustDown && !Settings::backgroundLocked()) {
                     lastTouch = now;
                     if (tp.x < ez) Settings::cyclePrevDeskBackground();
                     else           Settings::cycleDeskBackground();
-                    Theme::showToast(Settings::backgroundName(Settings::background()), "DESK BACKGROUND", Theme::CYAN);
+                    Theme::showToast(Settings::backgroundName(Settings::background()), Theme::tr("DESK BACKGROUND", "ФОН СТЕНДА"), Theme::CYAN);
                 }
             }
             break;
@@ -5265,7 +5268,7 @@ void loop() {
                 if (uiHuntHitStop(tp.x, tp.y, tft.width(), tft.height())) {
                     lastTouch = now;
                     engine.clearHunt();
-                    Theme::showToast("HUNT STOPPED", nullptr, Theme::CYAN);
+                    Theme::showToast(Theme::tr("HUNT STOPPED", "ХВАТИТ ИСКАТЬ"), nullptr, Theme::CYAN);
                     enterClear();
                 } else if (uiHuntHitBack(tp.x, tp.y, tft.width(), tft.height())) {
                     lastTouch = now;

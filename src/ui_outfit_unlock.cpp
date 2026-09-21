@@ -1,6 +1,7 @@
 // SquachWatch-CYD — OUTFIT UNLOCKED celebration popup implementation
 #include "ui_outfit_unlock.h"
 #include "theme.h"
+#include "settings.h"
 #include "squachy.h"
 #include "detection.h"
 #include <Arduino.h>
@@ -162,10 +163,12 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // Bangers MD face does not shrink, so a portrait screen needs the
     // two-line form. Measured rather than assumed so a font change
     // cannot silently push it off the edge.
-    const char* headOne = s_petCard ? "PET UNLOCKED" : "OUTFIT UNLOCKED";
-    const char* headTwo = s_petCard ? "PET"          : "OUTFIT";
-    const int oneLineW = Theme::bangersTextWidth(headOne, Theme::BangersSize::MD);
-    const bool stacked = oneLineW > (w - 16);
+    const char* headOne = s_petCard ? Theme::tr("PET UNLOCKED", "ПЕТ ОТКРЫТ") : Theme::tr("OUTFIT UNLOCKED", "КОСТЮМ ОТКРЫТ");
+    const char* headTwo = s_petCard ? Theme::tr("PET", "ПЕТ")          : Theme::tr("OUTFIT", "КОСТЮМ");
+    const char* headUnlocked = Theme::tr("UNLOCKED", "ОТКРЫТ");
+    const bool ruHead = Settings::lang() == 1;
+    const int oneLineW = ruHead ? 0 : Theme::bangersTextWidth(headOne, Theme::BangersSize::MD);
+    const bool stacked = !ruHead && oneLineW > (w - 16);
     const int  headTop = panelY + 10;
     const int  lineH   = 30;
     // Opaque plate behind the type. The tunnel and the fire both put
@@ -174,16 +177,26 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // cannot keep legible. Sized off the measured text, not a guess.
     {
         const int plateH = (stacked ? lineH * 2 : lineH) + 12;
+        t.setTextSize(2);
         const int plateW = (stacked
-                            ? Theme::bangersTextWidth("UNLOCKED", Theme::BangersSize::MD)
-                            : oneLineW) + 18;
+                            ? Theme::bangersTextWidth(headUnlocked, Theme::BangersSize::MD)
+                            : (ruHead ? Theme::textWidthRU(t, headOne) : oneLineW)) + 18;
         t.fillRect((w - plateW) / 2, headTop - 6, plateW, plateH, Theme::BG);
         t.drawRect((w - plateW) / 2, headTop - 6, plateW, plateH,
                    Theme::blend(Theme::BG, Theme::VAPOR_PURPLE, 140));
     }
-    if (stacked) {
+    if (ruHead) {
+        // Bangers has no Cyrillic: plain size-2 headline instead of rainbow.
+        t.setTextSize(2);
+        t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
+        int hw = Theme::textWidthRU(t, headOne);
+        if (hw > w - 16) hw = w - 16;
+        t.setCursor((w - hw) / 2, headTop);
+        Theme::printRU(t, headOne);
+        t.setTextSize(1);
+    } else if (stacked) {
         drawRainbowHeadline(t, w / 2, headTop,         headTwo,    now, reveal);
-        drawRainbowHeadline(t, w / 2, headTop + lineH, "UNLOCKED", now, reveal);
+        drawRainbowHeadline(t, w / 2, headTop + lineH, headUnlocked, now, reveal);
     } else {
         drawRainbowHeadline(t, w / 2, headTop, headOne, now, reveal);
     }
@@ -246,22 +259,22 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // WHERE TO FIND THEM, because the row it points at did not exist until
     // this moment -- SettingsRow::PET is skipped entirely while the pet is
     // locked, so earning it makes a new row appear with nothing to say so.
-    const char* name = s_petCard ? "SETTINGS > PET"
+    const char* name = s_petCard ? Theme::tr("SETTINGS > PET", "НАСТРОЙКИ > ПИТОМЕЦ")
                                  : Squachy::outfitNameAt(s_outfitIdx);
     t.setTextSize(2);
     t.setTextColor(Theme::VAPOR_YELLOW);
-    int nw = t.textWidth(name);
+    int nw = Theme::textWidthRU(t, name);
     t.setCursor((w - nw) / 2, footerTop + 2);
-    t.print(name);
+    Theme::printRU(t, name);
 
     // Blinks, so it reads as a prompt rather than a label.
     if (((now / 500) % 2) == 0) {
-        const char* hint = "TAP TO CONTINUE";
+        const char* hint = Theme::tr("TAP TO CONTINUE", "ЖМИ, ЧТОБЫ ДАЛЬШЕ");
         t.setTextSize(1);
         t.setTextColor(Theme::CYAN);
-        int hw = t.textWidth(hint);
+        int hw = Theme::textWidthRU(t, hint);
         t.setCursor((w - hw) / 2, footerTop + 22);
-        t.print(hint);
+        Theme::printRU(t, hint);
     }
 
     Theme::drawGlitchStatic(t, 6, panelY + 2, w - 6, panelY + panelH - 2);

@@ -58,7 +58,7 @@ NimBLECharacteristic* s_info   = nullptr;
 NimBLECharacteristic* s_ctrl   = nullptr;
 NimBLECharacteristic* s_data   = nullptr;
 
-char s_name[20]     = "SquachWatch";
+char s_name[20]     = "BroWatch";
 char s_infoBuf[128] = "";
 
 uint32_t get32(const uint8_t* p) {
@@ -299,7 +299,7 @@ bool begin() {
 
         const NimBLEAddress a = NimBLEDevice::getAddress();
         const uint8_t* m = a.getBase()->val;
-        snprintf(s_name, sizeof s_name, "SquachWatch-%02X%02X", m[1], m[0]);
+        snprintf(s_name, sizeof s_name, "BroWatch-%02X%02X", m[1], m[0]);
     }
 
     snprintf(s_infoBuf, sizeof s_infoBuf, "env=%s;ver=%s;slot=%s;max=%lu;proto=1",

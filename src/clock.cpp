@@ -225,11 +225,17 @@ uint32_t localDay() {
 static const char* const DAY_NAMES[]   = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 static const char* const MONTH_NAMES[] = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                                            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+// BroWatch RU parallels (same order; picked by formatDate below).
+static const char* const DAY_NAMES_RU[]   = { "ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ" };
+static const char* const MONTH_NAMES_RU[] = { "ЯНВ", "ФЕВ", "МАР", "АПР", "МАЙ", "ИЮН",
+                                              "ИЮЛ", "АВГ", "СЕН", "ОКТ", "НОЯ", "ДЕК" };
 
 void formatDate(char* out, size_t n) {
     struct tm t;
-    if (!localNow(t)) { snprintf(out, n, "NO DATE YET"); return; }
-    snprintf(out, n, "%s %s %d", DAY_NAMES[t.tm_wday], MONTH_NAMES[t.tm_mon], t.tm_mday);
+    const bool ru = Settings::lang() == 1;
+    if (!localNow(t)) { snprintf(out, n, "%s", ru ? "ДАТЫ ПОКА НЕТ" : "NO DATE YET"); return; }
+    if (ru) snprintf(out, n, "%s %s %d", DAY_NAMES_RU[t.tm_wday], MONTH_NAMES_RU[t.tm_mon], t.tm_mday);
+    else    snprintf(out, n, "%s %s %d", DAY_NAMES[t.tm_wday], MONTH_NAMES[t.tm_mon], t.tm_mday);
 }
 
 void formatTime(char* out, size_t n, bool twelveHour, bool* pm) {

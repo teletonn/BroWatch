@@ -1,6 +1,7 @@
 // SquachWatch-CYD — ALERT screen implementation
 #include "ui_alert.h"
 #include "theme.h"
+#include "settings.h"
 #include "signatures.h"
 #include "detection.h"
 #include "ignore_list.h"
@@ -489,11 +490,18 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         // line below, where the four fields together ran 174px into a 168px
         // plate and pushed the sighting count off the edge.
         t.setCursor(PLATE_X + 8, BAR_Y - LABEL_DY);
-        t.print("SIGNAL");
+        Theme::printRU(t, Theme::tr("SIGNAL", "СИГНАЛ"));
         t.setTextColor(confColor, Theme::BG);
         const char* cl = confidenceLabel(conf);
-        t.setCursor(PLATE_X + PLATE_W - 8 - t.textWidth(cl), BAR_Y - LABEL_DY);
-        t.print(cl);
+        // BroWatch RU: confidenceLabel() stays EN (host tests link it
+        // without Theme), so map it here at the single call site.
+        if (Settings::lang() == 1) {
+            if (conf == Confidence::HIGH_CONF) cl = "УВЕРЕННО";
+            else if (conf == Confidence::MED_CONF) cl = "СРЕДНЕ";
+            else cl = "СЛАБО";
+        }
+        t.setCursor(PLATE_X + PLATE_W - 8 - Theme::textWidthRU(t, cl), BAR_Y - LABEL_DY);
+        Theme::printRU(t, cl);
         int v = s_last.rssi;
         if (v < -90) v = -90;
         if (v > -40) v = -40;
@@ -513,20 +521,20 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // The first one of its kind, ever, on this board: a line in the gap
     // between the strip and the plate, in the strip's own colour.
     if (s_first || s_night) {
-        const char* fl = (s_first && s_night) ? "* FIRST, AND AT NIGHT *"
-                       : s_first ? "* FIRST OF ITS KIND *" : "* AT NIGHT *";
+        const char* fl = (s_first && s_night) ? Theme::tr("* FIRST, AND AT NIGHT *", "* ПЕРВЫЙ, ДА ЕЩЁ НОЧЬЮ *")
+                       : s_first ? Theme::tr("* FIRST OF ITS KIND *", "* ПЕРВЫЙ ТАКОЙ *") : Theme::tr("* AT NIGHT *", "* НОЧЬЮ *");
         t.setTextSize(1);
         t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
-        t.setCursor(PLATE_X + (PLATE_W - t.textWidth(fl)) / 2, stripHOf(w) + 2);
-        t.print(fl);
+        t.setCursor(PLATE_X + (PLATE_W - Theme::textWidthRU(t, fl)) / 2, stripHOf(w) + 2);
+        Theme::printRU(t, fl);
     } else if (s_lastFree) {
         // Shares the line, and loses it to FIRST or AT NIGHT, both of which
         // are about the catch itself. This one is housekeeping.
-        const char* fl = "* QUIET UNLESS IT NEARS *";
+        const char* fl = Theme::tr("* QUIET UNLESS IT NEARS *", "* ТИХО, ПОКА НЕ БЛИЗКО *");
         t.setTextSize(1);
         t.setTextColor(Theme::CYAN, Theme::BG);
-        t.setCursor(PLATE_X + (PLATE_W - t.textWidth(fl)) / 2, stripHOf(w) + 2);
-        t.print(fl);
+        t.setCursor(PLATE_X + (PLATE_W - Theme::textWidthRU(t, fl)) / 2, stripHOf(w) + 2);
+        Theme::printRU(t, fl);
     }
 
     // ---- the gauge -----------------------------------------------------
@@ -601,7 +609,7 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         // and this is it, so the state costs no new colour, no legend and
         // nothing to learn: the thing is pushed in, and pushed in means done.
         Theme::drawWin95Button(t, bx, by, bw, bh,
-                               already ? "MUTED" : "IGNORE", already);
+                               already ? Theme::tr("MUTED", "ТИХО") : Theme::tr("IGNORE", "ИГНОР"), already);
     }
 
     {
@@ -615,12 +623,12 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         int lineH = t.fontHeight();
         const int lineGap = 3;
         int ty = by + (bh - (lineH * 2 + lineGap)) / 2;
-        int mw = t.textWidth("MORE");
+        int mw = Theme::textWidthRU(t, Theme::tr("MORE", "ЧТО"));
         t.setCursor(bx + (bw - mw) / 2, ty);
-        t.print("MORE");
-        int iw = t.textWidth("INFO");
+        Theme::printRU(t, Theme::tr("MORE", "ЧТО"));
+        int iw = Theme::textWidthRU(t, Theme::tr("INFO", "ЭТО"));
         t.setCursor(bx + (bw - iw) / 2, ty + lineH + lineGap);
-        t.print("INFO");
+        Theme::printRU(t, Theme::tr("INFO", "ЭТО"));
     }
 
     // HUNT -- starts tracking this exact device straight from the alert,
@@ -639,15 +647,15 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         t.setTextSize(2);
         t.setTextColor(Theme::AMBER, Theme::BG);
         t.setTextWrap(false);
-        int hw = t.textWidth("HUNT");
+        int hw = Theme::textWidthRU(t, Theme::tr("HUNT", "ОХОТА"));
         t.setCursor(bx + (bw - hw) / 2, by + (bh - t.fontHeight()) / 2);
-        t.print("HUNT");
+        Theme::printRU(t, Theme::tr("HUNT", "ОХОТА"));
     }
     // SNOOZE between the two: this device, quiet until the board restarts.
     {
         int bx, by, bw, bh;
         snoozeBtnRect(w, h, bx, by, bw, bh);
-        Theme::drawButton(t, bx, by, bw, bh, "SNOOZE", false);
+        Theme::drawButton(t, bx, by, bw, bh, Theme::tr("SNOOZE", "ТИХО"), false);
     }
 
     // TV-static snow over the whole screen during the same random burst

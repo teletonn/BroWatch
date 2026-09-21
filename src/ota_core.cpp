@@ -1,6 +1,7 @@
 // SquachWatch-CYD — the transport-free half of firmware updates. See
 // include/ota_core.h.
 #include "ota_core.h"
+#include "theme.h"   // BroWatch RU failure lines
 #include "ota_pubkey.h"
 #include <Arduino.h>
 #include <Preferences.h>
@@ -130,23 +131,23 @@ void closeLocked() {
 
 const char* failWords(Fail f) {
     switch (f) {
-        case Fail::CANCELLED:       return "Cancelled. Your current version is untouched.";
-        case Fail::LOST_CONNECTION: return "The browser disconnected. Your current version is untouched. Try again closer to the board.";
-        case Fail::BAD_CODE:        return "The wrong code was entered three times. Start again for a new code.";
-        case Fail::TOO_BIG:         return "That firmware is too big for this board. Nothing was changed.";
-        case Fail::NOT_FIRMWARE:    return "That file is not firmware. Nothing was changed.";
-        case Fail::WRITE_ERROR:     return "Could not write to the board's memory. Your current version is untouched.";
-        case Fail::BAD_SIGNATURE:   return "Not an official build for this board, so it was refused. Your current version is untouched.";
-        case Fail::DAMAGED:         return "The firmware arrived damaged. Your current version is untouched. Try again.";
-        case Fail::TIMEOUT:         return "The download stopped. Your current version is untouched.";
-        case Fail::LOCKED:          return "Unlock the board first.";
-        case Fail::RADIO_BUSY:      return "Bluetooth was busy. Leave this screen and try again.";
-        case Fail::WIFI_NOT_FOUND:  return "Couldn't find that WiFi network. Move closer to the router and try again.";
-        case Fail::WIFI_PASSWORD:   return "Couldn't join that WiFi network. Check the password and try again.";
-        case Fail::NO_SITE:         return "Joined WiFi, but couldn't reach squachwatch.com. Check the internet connection.";
-        case Fail::NOT_SIGNED:      return "The latest release can't be installed over the air yet. Use the USB flasher.";
-        case Fail::TOO_OLD:         return "That firmware is older than the one running. Nothing was changed.";
-        case Fail::LOW_MEMORY:      return "Not enough memory to download. Restart the board and try again.";
+        case Fail::CANCELLED:       return Theme::tr("Cancelled. Your current version is untouched.", "Отмена. Текущая версия цела.");
+        case Fail::LOST_CONNECTION: return Theme::tr("The browser disconnected. Your current version is untouched. Try again closer to the board.", "Браузер отвалился. Версия цела. Подойди ближе.");
+        case Fail::BAD_CODE:        return Theme::tr("The wrong code was entered three times. Start again for a new code.", "Три раза неверный код. Начни заново.");
+        case Fail::TOO_BIG:         return Theme::tr("That firmware is too big for this board. Nothing was changed.", "Прошивка велика для платы. Ничего не тронуто.");
+        case Fail::NOT_FIRMWARE:    return Theme::tr("That file is not firmware. Nothing was changed.", "Это не прошивка. Ничего не тронуто.");
+        case Fail::WRITE_ERROR:     return Theme::tr("Could not write to the board's memory. Your current version is untouched.", "Не пишется в память. Версия цела.");
+        case Fail::BAD_SIGNATURE:   return Theme::tr("Not an official build for this board, so it was refused. Your current version is untouched.", "Неофициальная сборка — отказ. Версия цела.");
+        case Fail::DAMAGED:         return Theme::tr("The firmware arrived damaged. Your current version is untouched. Try again.", "Прошивка битая. Версия цела. Повтори.");
+        case Fail::TIMEOUT:         return Theme::tr("The download stopped. Your current version is untouched.", "Загрузка встала. Версия цела.");
+        case Fail::LOCKED:          return Theme::tr("Unlock the board first.", "Сначала разблокируй плату.");
+        case Fail::RADIO_BUSY:      return Theme::tr("Bluetooth was busy. Leave this screen and try again.", "Bluetooth занят. Выйди и повтори.");
+        case Fail::WIFI_NOT_FOUND:  return Theme::tr("Couldn't find that WiFi network. Move closer to the router and try again.", "Сети не видно. Подойди к роутеру.");
+        case Fail::WIFI_PASSWORD:   return Theme::tr("Couldn't join that WiFi network. Check the password and try again.", "Не зайти в сеть. Проверь пароль.");
+        case Fail::NO_SITE:         return Theme::tr("Joined WiFi, but couldn't reach squachwatch.com. Check the internet connection.", "В WiFi вошли, сайта нет. Проверь интернет.");
+        case Fail::NOT_SIGNED:      return Theme::tr("The latest release can't be installed over the air yet. Use the USB flasher.", "По воздуху пока нельзя. Шей по USB.");
+        case Fail::TOO_OLD:         return Theme::tr("That firmware is older than the one running. Nothing was changed.", "Прошивка старее текущей. Ничего не тронуто.");
+        case Fail::LOW_MEMORY:      return Theme::tr("Not enough memory to download. Restart the board and try again.", "Мало памяти. Перезагрузи плату.");
         default:                    return "";
     }
 }

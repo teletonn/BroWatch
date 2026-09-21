@@ -2,6 +2,7 @@
 #include "ui_bingo.h"
 #include "bingo.h"
 #include "theme.h"
+#include "settings.h"
 #include "detection_info.h"
 #include "clock.h"
 #include <Arduino.h>
@@ -65,10 +66,14 @@ void drawCard(TFT_eSPI& t, int w, int h) {
 
     // The count, where a card screen wants it: beside the heading rather
     // than under the grid, which is where the squares are.
-    char head[32];
+    char head[40];
     const uint8_t lines = Bingo::linesCalled();
-    snprintf(head, sizeof head, "%u OF 16   %u LINE%s",
-             (unsigned)Bingo::markedCount(), (unsigned)lines, lines == 1 ? "" : "S");
+    if (Settings::lang() == 1)
+        snprintf(head, sizeof head, "%u ИЗ 16   ЛИНИЙ: %u",
+                 (unsigned)Bingo::markedCount(), (unsigned)lines);
+    else
+        snprintf(head, sizeof head, "%u OF 16   %u LINE%s",
+                 (unsigned)Bingo::markedCount(), (unsigned)lines, lines == 1 ? "" : "S");
     Theme::drawListHeading(t, head, Bingo::markedCount() == Bingo::CELLS ? Theme::AMBER : Theme::CYAN);
 
     t.setTextSize(1);
@@ -118,7 +123,7 @@ void drawCard(TFT_eSPI& t, int w, int h) {
 }
 
 void drawStats(TFT_eSPI& t, int w, int h) {
-    Theme::drawListHeading(t, "BINGO STATS", Theme::VAPOR_PINK);
+    Theme::drawListHeading(t, Theme::tr("BINGO STATS", "БИНГО: СЧЁТ"), Theme::VAPOR_PINK);
     const Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
     t.setTextSize(1);
     int y = TOP + 18;
@@ -126,20 +131,29 @@ void drawStats(TFT_eSPI& t, int w, int h) {
 
     struct Row { const char* k; char v[24]; } rows[6];
     uint8_t n = 0;
-    snprintf(rows[n].v, sizeof rows[n].v, "%u", (unsigned)Bingo::cardsFilled()); rows[n++].k = "CARDS FILLED";
-    snprintf(rows[n].v, sizeof rows[n].v, "%u of 16", (unsigned)Bingo::bestFilled()); rows[n++].k = "BEST CARD";
-    snprintf(rows[n].v, sizeof rows[n].v, "%u weeks", (unsigned)Bingo::streak()); rows[n++].k = "STREAK";
-    snprintf(rows[n].v, sizeof rows[n].v, "%u weeks", (unsigned)Bingo::bestStreak()); rows[n++].k = "BEST STREAK";
-    snprintf(rows[n].v, sizeof rows[n].v, "%u", (unsigned)Bingo::linesEver()); rows[n++].k = "LINES CALLED";
-    snprintf(rows[n].v, sizeof rows[n].v, "%u of 16", (unsigned)Bingo::markedCount()); rows[n++].k = "THIS CARD";
+    const bool ru = Settings::lang() == 1;
+    snprintf(rows[n].v, sizeof rows[n].v, "%u", (unsigned)Bingo::cardsFilled()); rows[n++].k = ru ? "КАРТ ЗАКРЫТО" : "CARDS FILLED";
+    if (ru) snprintf(rows[n].v, sizeof rows[n].v, "%u из 16", (unsigned)Bingo::bestFilled());
+    else    snprintf(rows[n].v, sizeof rows[n].v, "%u of 16", (unsigned)Bingo::bestFilled());
+    rows[n++].k = ru ? "ЛУЧШАЯ КАРТА" : "BEST CARD";
+    if (ru) snprintf(rows[n].v, sizeof rows[n].v, "%u нед.", (unsigned)Bingo::streak());
+    else    snprintf(rows[n].v, sizeof rows[n].v, "%u weeks", (unsigned)Bingo::streak());
+    rows[n++].k = ru ? "СЕРИЯ" : "STREAK";
+    if (ru) snprintf(rows[n].v, sizeof rows[n].v, "%u нед.", (unsigned)Bingo::bestStreak());
+    else    snprintf(rows[n].v, sizeof rows[n].v, "%u weeks", (unsigned)Bingo::bestStreak());
+    rows[n++].k = ru ? "ЛУЧШАЯ СЕРИЯ" : "BEST STREAK";
+    snprintf(rows[n].v, sizeof rows[n].v, "%u", (unsigned)Bingo::linesEver()); rows[n++].k = ru ? "ЛИНИЙ ЗАКРЫТО" : "LINES CALLED";
+    if (ru) snprintf(rows[n].v, sizeof rows[n].v, "%u из 16", (unsigned)Bingo::markedCount());
+    else    snprintf(rows[n].v, sizeof rows[n].v, "%u of 16", (unsigned)Bingo::markedCount());
+    rows[n++].k = ru ? "ЭТА КАРТА" : "THIS CARD";
 
     for (uint8_t i = 0; i < n && y + lineH < bar.y - 20; i++) {
         t.setTextColor(Theme::AMBER, Theme::BG);
         t.setCursor(10, y);
-        t.print(rows[i].k);
+        Theme::printRU(t, rows[i].k);
         t.setTextColor(Theme::WHITE, Theme::BG);
         t.setCursor(w / 2 + 10, y);
-        t.print(rows[i].v);
+        Theme::printRU(t, rows[i].v);
         y += lineH;
     }
 
@@ -182,30 +196,43 @@ void drawConfirm(TFT_eSPI& t, int w, int h) {
     t.setTextWrap(false);
     t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    const char* q = "THROW THIS CARD AWAY?";
-    t.setCursor(px + (pw - t.textWidth(q)) / 2, py + 8);
-    t.print(q);
+    const char* q = Theme::tr("THROW THIS CARD AWAY?", "ВЫКИНУТЬ КАРТУ?");
+    t.setCursor(px + (pw - Theme::textWidthRU(t, q)) / 2, py + 8);
+    Theme::printRU(t, q);
 
-    char marked[20];
-    snprintf(marked, sizeof marked, "%u OF 16 MARKED", (unsigned)Bingo::markedCount());
-    int lw = Theme::bangersTextWidth(marked, Theme::BangersSize::MD);
+    char marked[24];
+    if (Settings::lang() == 1) snprintf(marked, sizeof marked, "%u ИЗ 16", (unsigned)Bingo::markedCount());
+    else                       snprintf(marked, sizeof marked, "%u OF 16 MARKED", (unsigned)Bingo::markedCount());
     const int maxLw = pw - 16;
-    if (lw > maxLw) lw = maxLw;
-    Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26, marked, Theme::RED, Theme::BangersSize::MD);
+    if (Settings::lang() == 1) {
+        // Bangers has no Cyrillic: set the RU headline in font 1 instead.
+        t.setTextSize(2);
+        t.setTextColor(Theme::RED, Theme::BG);
+        int mw2 = Theme::textWidthRU(t, marked);
+        if (mw2 > maxLw) mw2 = maxLw;
+        t.setCursor(px + (pw - mw2) / 2, py + 26);
+        Theme::printRU(t, marked);
+        t.setTextSize(1);
+    } else {
+        int lw = Theme::bangersTextWidth(marked, Theme::BangersSize::MD);
+        if (lw > maxLw) lw = maxLw;
+        Theme::drawBangersText(t, px + (pw - lw) / 2, py + 26, marked, Theme::RED, Theme::BangersSize::MD);
+    }
 
     t.setTextColor(Theme::W95_LIGHT, Theme::BG);
     char lines[3][48];
-    const uint8_t n = Theme::wrapText(t, "A new card loses them, and the streak with them. Lines already called are kept.",
+    const uint8_t n = Theme::wrapTextRU(t, Theme::tr("A new card loses them, and the streak with them. Lines already called are kept.",
+                                                     "Новая карта всё сбросит, и серию тоже. Вызванные линии останутся."),
                                       pw - 16, lines, 3);
     int ly = py + 50;
     for (uint8_t i = 0; i < n; i++) {
-        t.setCursor(px + (pw - t.textWidth(lines[i])) / 2, ly);
-        t.print(lines[i]);
+        t.setCursor(px + (pw - Theme::textWidthRU(t, lines[i])) / 2, ly);
+        Theme::printRU(t, lines[i]);
         ly += 12;
     }
 
-    Theme::drawButton(t, yesX, yesY, yesW, yesH, "DEAL A NEW ONE", false);
-    Theme::drawButton(t, noX,  noY,  noW,  noH,  "KEEP THIS ONE",  false);
+    Theme::drawButton(t, yesX, yesY, yesW, yesH, Theme::tr("DEAL A NEW ONE", "НОВАЯ КАРТА"), false);
+    Theme::drawButton(t, noX,  noY,  noW,  noH,  Theme::tr("KEEP THIS ONE",  "ОСТАВИТЬ"), false);
 }
 
 }  // namespace
@@ -229,11 +256,11 @@ void uiBingoTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     if (s_stats) drawStats(t, w, h);
     else         drawCard(t, w, h);
 
-    Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, s_stats ? "[ CARD ]" : "[ STATS ]", false);
-    Theme::drawButton(t, bar.x[1], bar.y, bar.w[1], bar.h, "[ NEW ]", s_confirm);
+    Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, s_stats ? Theme::tr("[ CARD ]", "[ КАРТА ]") : Theme::tr("[ STATS ]", "[ СТАТ. ]"), false);
+    Theme::drawButton(t, bar.x[1], bar.y, bar.w[1], bar.h, Theme::tr("[ NEW ]", "[ НОВАЯ ]"), s_confirm);
     // OK, not BACK: this leaves for the screen the board lives on, the way
     // Settings' own OK does, rather than stepping back into the menu.
-    Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, "[ OK ]", false);
+    Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, Theme::tr("[ OK ]", "[ ОК ]"), false);
 
     // Over everything else, and last: the panel that was asked for.
     if (s_confirm) drawConfirm(t, w, h);

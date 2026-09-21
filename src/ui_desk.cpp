@@ -129,10 +129,12 @@ void drawGear(TFT_eSPI& t, int cx, int cy, int r, uint16_t col, uint16_t bg) {
 }
 
 void timerLabel(char* out, size_t n, uint32_t now) {
-    if (s_timer == Timer::IDLE) { snprintf(out, n, "FOCUS 25"); return; }
+    const bool ru = Settings::lang() == 1;
+    if (s_timer == Timer::IDLE) { snprintf(out, n, "%s", ru ? "ФОКУС 25" : "FOCUS 25"); return; }
     const uint32_t left = s_timerEnd > now ? s_timerEnd - now : 0;
     const uint32_t sec  = (left + 999) / 1000;
-    snprintf(out, n, "%s %lu:%02lu", s_timer == Timer::FOCUS ? "FOCUS" : "BREAK",
+    const char* what = s_timer == Timer::FOCUS ? (ru ? "ФОКУС" : "FOCUS") : (ru ? "ПЕРЕРЫВ" : "BREAK");
+    snprintf(out, n, "%s %lu:%02lu", what,
              (unsigned long)(sec / 60), (unsigned long)(sec % 60));
 }
 
@@ -214,7 +216,7 @@ static uint8_t messageLines(TFT_eSPI& t, char rows[][48]) {
 static int messageBoxH(TFT_eSPI& t) {
     char rows[3][48];
     const uint8_t n = messageLines(t, rows);
-    const int lineH = (Settings::lang() == 1) ? 10 : Theme::bubbleTextH() + 1;
+    const int lineH = (Settings::lang() == 1) ? 11 : Theme::bubbleTextH() + 1;
     return XP_TITLE + 6 + n * lineH + 10 + 2;
 }
 
@@ -262,7 +264,7 @@ static void drawMessageBox(TFT_eSPI& t, int restTop, float p, uint32_t now) {
     t.drawLine(bx + 5, by + 5, bx + 9, by + 9, XP_BLUE);
     t.drawLine(bx + 13, by + 5, bx + 9, by + 9, XP_BLUE);
     t.setCursor(bx + 18, by + 4);
-    t.print("MESSAGE");
+    Theme::printRU(t, Theme::tr("MESSAGE", "ПИСЬМО"));
     t.fillRoundRect(bx + bw - 15, by + 2, 12, 11, 2, XP_CLOSE);
     t.setTextColor(Theme::WHITE, XP_CLOSE);
     t.setCursor(bx + bw - 12, by + 4);
@@ -283,7 +285,7 @@ static void drawMessageBox(TFT_eSPI& t, int restTop, float p, uint32_t now) {
     const uint8_t n = messageLines(t, rows);
     const bool ru = Settings::lang() == 1;
     if (!ru) Theme::bubbleFontOn(t);
-    const int lineH = ru ? 10 : Theme::bubbleTextH() + 1;
+    const int lineH = ru ? 11 : Theme::bubbleTextH() + 1;
     t.setTextColor(Theme::BLACK, XP_BODY);
     for (uint8_t i = 0; i < n; i++) {
         t.setCursor(bx + 8, cy0 + 4 + i * lineH + (ru ? 0 : Theme::bubbleAscent()));
@@ -390,7 +392,7 @@ void uiDeskTapTimer(uint32_t now) {
         // A running block is stopped by a tap, no confirmation: the cost of
         // a stray tap is one more tap.
         s_timer = Timer::IDLE;
-        Squachy::announce("Timer off. No judgement.");
+        Squachy::announce(Theme::tr("Timer off. No judgement.", "Таймер выкл. Без осуждения."));
     }
 }
 
@@ -421,7 +423,7 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
             sayFocus("Time. Stand up, look at something far away. Five minutes.", now);
         } else {
             s_timer = Timer::IDLE;
-            Squachy::announce("Break's over. Back to it, or don't, I'm a screen.");
+            Squachy::announce(Theme::tr("Break's over. Back to it, or don't, I'm a screen.", "Перерыв окончен. За дело. Или нет, я же экран."));
         }
     }
 
@@ -547,7 +549,7 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
         t.print(date);
     }
     t.setTextSize(1);
-    Theme::drawTitleBar(t, ">> DESK <<");
+    Theme::drawTitleBar(t, ">> ЧАСЫ <<");
 
     // Bangers draws into the same cells the segments use, so the plate, the
     // AM/PM and everything measured off them stay where they are. Each digit
@@ -602,11 +604,13 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     }
 
     if (!set) {
-        const char* m = Clock::guessed() ? "NOT SINCE THE POWER WENT. WIFI AT BOOT SETS IT"
-                                         : "SET BY WIFI AT BOOT, OR TIME <EPOCH> ON SERIAL";
+        const char* m = Clock::guessed() ? Theme::tr("NOT SINCE THE POWER WENT. WIFI AT BOOT SETS IT",
+                                                     "СБРОШЕНЫ ПРИ ВЫКЛЮЧЕНИИ. WIFI ПРИ СТАРТЕ ЧИНИТ")
+                                         : Theme::tr("SET BY WIFI AT BOOT, OR TIME <EPOCH> ON SERIAL",
+                                                     "WIFI ПРИ СТАРТЕ, ЛИБО TIME <EPOCH> ПО USB");
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
-        t.setCursor((w - t.textWidth(m)) / 2, y + dh + 4);
-        t.print(m);
+        t.setCursor((w - Theme::textWidthRU(t, m)) / 2, y + dh + 4);
+        Theme::printRU(t, m);
     }
 
     // The timer's progress, a thin bar under the digits while a block runs.
@@ -707,10 +711,10 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     // button fills its own box.
     int tx, ty, tw, tth, bx, bw;
     timerRects(w, h, tx, ty, tw, tth, bx, bw);
-    char lbl[16];
+    char lbl[24];
     timerLabel(lbl, sizeof lbl, now);
     Theme::drawButton(t, tx, ty, tw, tth, lbl, s_timer != Timer::IDLE);
-    Theme::drawButton(t, bx, ty, bw, tth, "BACK", false);
+    Theme::drawButton(t, bx, ty, bw, tth, Theme::tr("BACK", "НАЗАД"), false);
     {
         int gx, gy, gs;
         gearRect(w, h, gx, gy, gs);

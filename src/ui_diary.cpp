@@ -1,6 +1,7 @@
 // SquachWatch-CYD — Squachy's diary screen implementation
 #include "ui_diary.h"
 #include "theme.h"
+#include "settings.h"
 #include "squachy.h"
 #include <Arduino.h>
 
@@ -22,21 +23,22 @@ static void formatDuration(uint32_t ms, char* buf, size_t n) {
     uint32_t days = sec / 86400; sec %= 86400;
     uint32_t hrs  = sec / 3600;  sec %= 3600;
     uint32_t mins = sec / 60;
-    if (days > 0)      snprintf(buf, n, "%lud %luh", (unsigned long)days, (unsigned long)hrs);
-    else if (hrs > 0)  snprintf(buf, n, "%luh %lum", (unsigned long)hrs, (unsigned long)mins);
-    else if (mins > 0) snprintf(buf, n, "%lum", (unsigned long)mins);
-    else               snprintf(buf, n, "<1m");
+    const bool ru = Settings::lang() == 1;
+    if (days > 0)      snprintf(buf, n, ru ? "%lуд %lуч" : "%lud %luh", (unsigned long)days, (unsigned long)hrs);
+    else if (hrs > 0)  snprintf(buf, n, ru ? "%луч %лум" : "%luh %lum", (unsigned long)hrs, (unsigned long)mins);
+    else if (mins > 0) snprintf(buf, n, ru ? "%лум" : "%lum", (unsigned long)mins);
+    else               snprintf(buf, n, ru ? "<1м" : "<1m");
 }
 
 static void drawStat(TFT_eSPI& t, int w, int y, int h, const char* label, const char* value) {
     t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
     t.setCursor(8, y + (h - t.fontHeight(1)) / 2);
-    t.print(label);
+    Theme::printRU(t, label);
     t.setTextColor(Theme::WHITE, Theme::BG);
-    int vw = t.textWidth(value);
+    int vw = Theme::textWidthRU(t, value);
     t.setCursor(w - 8 - vw, y + (h - t.fontHeight(1)) / 2);
-    t.print(value);
+    Theme::printRU(t, value);
     t.drawFastHLine(4, y + h - 1, w - 8, Theme::PURPLE);
 }
 
@@ -54,26 +56,26 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     char buf[24];
 
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)eng.lifetimeTotal());
-    drawStat(t, w, top + 0 * rowH, rowH, "LIFETIME CATCHES", buf);
+    drawStat(t, w, top + 0 * rowH, rowH, Theme::tr("LIFETIME CATCHES", "ВСЕГО ПОЙМАНО"), buf);
 
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)Squachy::bootCount());
-    drawStat(t, w, top + 1 * rowH, rowH, "BOOTS", buf);
+    drawStat(t, w, top + 1 * rowH, rowH, Theme::tr("BOOTS", "ЗАГРУЗОК"), buf);
 
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)Squachy::petCount());
-    drawStat(t, w, top + 2 * rowH, rowH, "TIMES PETTED", buf);
+    drawStat(t, w, top + 2 * rowH, rowH, Theme::tr("TIMES PETTED", "ГЛАДИЛИ РАЗ"), buf);
 
     formatDuration(Squachy::currentClearStreakMs(), buf, sizeof(buf));
-    drawStat(t, w, top + 3 * rowH, rowH, "CURRENT CLEAR STREAK", buf);
+    drawStat(t, w, top + 3 * rowH, rowH, Theme::tr("CURRENT CLEAR STREAK", "СЕРИЯ БЕЗ НАХОДОК"), buf);
 
     formatDuration(Squachy::bestClearStreakMs(), buf, sizeof(buf));
-    drawStat(t, w, top + 4 * rowH, rowH, "BEST CLEAR STREAK", buf);
+    drawStat(t, w, top + 4 * rowH, rowH, Theme::tr("BEST CLEAR STREAK", "ЛУЧШАЯ СЕРИЯ"), buf);
 
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)Squachy::bestSessionCount());
-    drawStat(t, w, top + 5 * rowH, rowH, "BEST SESSION CATCH", buf);
+    drawStat(t, w, top + 5 * rowH, rowH, Theme::tr("BEST SESSION CATCH", "РЕКОРД ЗА РАЗ"), buf);
 
     DetectionType ft = Squachy::firstDetectionType();
-    drawStat(t, w, top + 6 * rowH, rowH, "FIRST EVER CATCH",
-             ft == DetectionType::UNKNOWN ? "none yet" : detectionTypeName(ft));
+    drawStat(t, w, top + 6 * rowH, rowH, Theme::tr("FIRST EVER CATCH", "ПЕРВАЯ ДОБЫЧА"),
+             ft == DetectionType::UNKNOWN ? Theme::tr("none yet", "пока пусто") : detectionTypeName(ft));
 
     // Whichever type you have logged most, ever. The per-type lifetime
     // counters behind this persist independently of the live counts, which
@@ -87,15 +89,15 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             if (n > bestN) { bestN = n; best = (DetectionType)i; }
         }
         if (bestN == 0) {
-            drawStat(t, w, top + 7 * rowH, rowH, "MOST CAUGHT", "none yet");
+            drawStat(t, w, top + 7 * rowH, rowH, Theme::tr("MOST CAUGHT", "ЧАЩЕ ВСЕХ"), Theme::tr("none yet", "пока пусто"));
         } else {
             snprintf(buf, sizeof(buf), "%s %lu", detectionTypeName(best),
                      (unsigned long)bestN);
-            drawStat(t, w, top + 7 * rowH, rowH, "MOST CAUGHT", buf);
+            drawStat(t, w, top + 7 * rowH, rowH, Theme::tr("MOST CAUGHT", "ЧАЩЕ ВСЕХ"), buf);
         }
     }
 
-    drawStat(t, w, top + 8 * rowH, rowH, "FIRMWARE", FIRMWARE_VERSION);
+    drawStat(t, w, top + 8 * rowH, rowH, Theme::tr("FIRMWARE", "ПРОШИВКА"), FIRMWARE_VERSION);
 
     // Hint, pulsing gently so it doesn't just look like inert label text.
     // Between 65% and 100% of CYAN: the old 10-70% of VAPOR_BLUE rounded to
@@ -104,8 +106,8 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     uint16_t col = Theme::blend(Theme::BG, Theme::CYAN, (uint16_t)(pulse * 255.0f));
     t.setTextSize(1);
     t.setTextColor(col, Theme::BG);
-    const char* hint = "tap anywhere to go back";
-    int hw = t.textWidth(hint);
+    const char* hint = Theme::tr("tap anywhere to go back", "жми куда угодно — назад");
+    int hw = Theme::textWidthRU(t, hint);
     t.setCursor((w - hw) / 2, top + 9 * rowH + 8);
-    t.print(hint);
+    Theme::printRU(t, hint);
 }

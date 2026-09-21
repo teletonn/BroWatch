@@ -18,7 +18,7 @@
 // -- TFT_RGB_ORDER below is still live and worth trying too.
 #pragma once
 
-#define USER_SETUP_INFO    "SquachWatch-CYD / 3.5 inch / ST7796"
+#define USER_SETUP_INFO    "BroWatch / 3.5 inch / ST7796"
 #define ST7796_DRIVER
 // Portrait native (320 wide x 480 tall glass). We rotate to landscape
 // at runtime via setRotation(1), same as the 2.8" board.

@@ -132,6 +132,10 @@ extern const char* const TAB_NAME[TABS];
 MeshMsg::Emote atTab(uint8_t tab, uint8_t i);
 const char*    name(MeshMsg::Emote e);
 const char*    sub(MeshMsg::Emote e);     // a second line under the name, or ""
+// BroWatch RU: display-only parallels, same order. lang: 0 EN, 1 RU.
+const char*    tabNameL(uint8_t i, uint8_t lang);
+const char*    nameL(MeshMsg::Emote e, uint8_t lang);
+const char*    subL(MeshMsg::Emote e, uint8_t lang);
 // What a detection is called out loud, short enough for a bubble: "FLOCK",
 // "GLASSES". The banter uses it too.
 const char*    spokenName(uint8_t detectionType);

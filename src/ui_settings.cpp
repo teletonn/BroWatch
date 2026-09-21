@@ -517,7 +517,7 @@ static void drawSettingsConfirm(TFT_eSPI& t, int w, int h) {
     }
 
     Theme::drawButton(t, okX, okY, okW, okH, ct->verb, false);
-    Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false);
+    Theme::drawButton(t, cnX, cnY, cnW, cnH, tr("CANCEL", "ОТМЕНА"), false);
 }
 
 void uiSettingsScroll(int delta) {
@@ -870,7 +870,7 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             break;
         }
         case SettingsRow::SQUACHMESH:
-            label = "SQUACHMESH";
+            label = Theme::tr("BROMESH", "БРОМЕШ");
             value = Settings::meshSummary();
             break;
 #endif

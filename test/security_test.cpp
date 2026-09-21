@@ -14,6 +14,9 @@
 
 using Security::Check;
 
+// security.cpp reaches for Theme::tr() for RU value labels; not under test.
+namespace Theme { const char* tr(const char* en, const char*) { return en; } }
+
 static bool contains(const uint8_t* hay, size_t n, const char* needle) {
     const size_t m = strlen(needle);
     for (size_t i = 0; i + m <= n; i++)

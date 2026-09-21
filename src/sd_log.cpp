@@ -104,7 +104,7 @@ void SdLog::openDaily() {
     if (!_ready) return;
     uint32_t t = millis();
     uint32_t day = t / (24UL * 60UL * 60UL * 1000UL);
-    snprintf(_filename, sizeof(_filename), "/squachwatch-%lu.log", (unsigned long)day);
+    snprintf(_filename, sizeof(_filename), "/browatch-%lu.log", (unsigned long)day);
 }
 
 void SdLog::logEvent(const Detection& d) {
@@ -137,8 +137,9 @@ void SdLog::logEvent(const Detection& d) {
 void SdLog::wipe() {
     if (!_ready) return;
     // Walk the root and remove every file this firmware writes. Names are
-    // /squachwatch-YYYYMMDD.log; matching on the prefix takes them all rather
-    // than only today's, which is the whole point of a wipe.
+    // /browatch-YYYYMMDD.log (older /squachwatch-*.log from before the
+    // BroWatch rename match too); matching on the prefix takes them all
+    // rather than only today's, which is the whole point of a wipe.
     File dir = SD.open("/");
     if (!dir) return;
     // Collect first, then remove: deleting while iterating openNextFile() is
@@ -151,7 +152,7 @@ void SdLog::wipe() {
         // match the basename either way.
         const char* base = nm;
         for (const char* p = nm; *p; p++) if (*p == '/') base = p + 1;
-        if (strncmp(base, "squachwatch-", 12) == 0) {
+        if (strncmp(base, "browatch-", 9) == 0 || strncmp(base, "squachwatch-", 12) == 0) {
             snprintf(victims[n], sizeof victims[n], "/%s", base);
             n++;
         }

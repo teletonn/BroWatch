@@ -364,7 +364,7 @@ void drawListHeading(TFT_eSPI& t, const char* text, uint16_t color) {
     t.setTextSize(1);
     t.setTextColor(color, BG);
     t.setCursor(8, LIST_TOP + (LIST_HEADING_H - t.fontHeight()) / 2);
-    t.print(text);
+    printRU(t, text);
 }
 
 void drawListRowPanel(TFT_eSPI& t, int w, int y, int hgt) {
@@ -391,8 +391,8 @@ void drawPinnedBack(TFT_eSPI& t, const char* label) {
     t.setTextFont(1);
     t.setTextSize(uiMenuTextSize(t));
     t.setTextColor(CYAN, BG);
-    t.setCursor((w - t.textWidth(label)) / 2, y + (h - t.fontHeight()) / 2);
-    t.print(label);
+    t.setCursor((w - textWidthRU(t, label)) / 2, y + (h - t.fontHeight()) / 2);
+    printRU(t, label);
 }
 
 bool pinnedBackHit(int x, int y, int screenW, int screenH) {
@@ -4196,8 +4196,8 @@ void dimRegion(TFT_eSPI& t, int x, int y, int w, int h, uint8_t amount) {
         t.drawFastHLine(x, yy, w, BG);
 }
 
-static char     s_toastHead[18] = {0};
-static char     s_toastSub[22]  = {0};
+static char     s_toastHead[32] = {0};
+static char     s_toastSub[48]  = {0};
 static uint16_t s_toastAccent   = 0;
 static uint32_t s_toastUntil    = 0;
 
@@ -4216,10 +4216,10 @@ void drawToast(TFT_eSPI& t, uint32_t now) {
 
     const int w = t.width(), h = t.height();
     t.setTextSize(2);
-    int bw = t.textWidth(s_toastHead) + 30;
+    int bw = textWidthRU(t, s_toastHead) + 30;
     if (s_toastSub[0]) {
         t.setTextSize(1);
-        const int sw = t.textWidth(s_toastSub) + 30;
+        const int sw = textWidthRU(t, s_toastSub) + 30;
         if (sw > bw) bw = sw;
     }
     if (bw > w - 20) bw = w - 20;
@@ -4232,13 +4232,13 @@ void drawToast(TFT_eSPI& t, uint32_t now) {
 
     t.setTextSize(2);
     t.setTextColor(s_toastAccent, BG);
-    t.setCursor(bx + (bw - t.textWidth(s_toastHead)) / 2, by + 8);
-    t.print(s_toastHead);
+    t.setCursor(bx + (bw - textWidthRU(t, s_toastHead)) / 2, by + 8);
+    printRU(t, s_toastHead);
     if (s_toastSub[0]) {
         t.setTextSize(1);
         t.setTextColor(WHITE, BG);
-        t.setCursor(bx + (bw - t.textWidth(s_toastSub)) / 2, by + 31);
-        t.print(s_toastSub);
+        t.setCursor(bx + (bw - textWidthRU(t, s_toastSub)) / 2, by + 31);
+        printRU(t, s_toastSub);
     }
 }
 
@@ -9314,7 +9314,7 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
         ly += 12;
     }
 
-    drawButton(t, btnX, btnY, btnW, btnH, "[ GOT IT ]", false, 2);
+    drawButton(t, btnX, btnY, btnW, btnH, tr("[ GOT IT ]", "[ ПОНЯЛ ]"), false, 2);
 }
 
 // ---- Russian text (BroWatch) -------------------------------------------------
@@ -9352,6 +9352,13 @@ const char* tr(const char* en, const char* ru) {
 // (setFreeFont/drawChar) in between. x,y is the pen: same convention as
 // the GFX renderer (ink at x+xOffset, y+yOffset), so textWidthRU() below,
 // which measures the same tables, always agrees with what lands.
+//
+// RU_YSHIFT pulls the ink down to the GLCD baseline: our caps carry
+// yOffset -6 (ink at y-6..y-1) while a GLCD cap sits at y+0..y+6, so
+// unshifted Cyrillic rides ~6px too high next to ASCII/digits. +6 puts
+// caps on the same top line; descenders (Д Щ Ц У) reach one pixel past
+// the 8px cell, which every RU site's line pitch absorbs.
+static const int RU_YSHIFT = 6;
 static void drawRuGlyph(TFT_eSPI& t, int x, int y, uint16_t cp) {
     const uint16_t i = cp - RuCyr8.first;
     const uint8_t sz = t.textsize ? t.textsize : 1;
@@ -9365,7 +9372,7 @@ static void drawRuGlyph(TFT_eSPI& t, int x, int y, uint16_t cp) {
     for (uint8_t yy = 0; yy < gh; yy++) {
         for (uint8_t xx = 0; xx < gw; xx++, bit++) {
             if (!((pgm_read_byte(&bm[bit >> 3]) >> (7 - (bit & 7))) & 1)) continue;
-            const int px = x + (xo + xx) * sz, py = y + (yo + yy) * sz;
+            const int px = x + (xo + xx) * sz, py = y + (yo + RU_YSHIFT + yy) * sz;
             if (sz == 1) t.drawPixel(px, py, fg);
             else         t.fillRect(px, py, sz, sz, fg);
         }

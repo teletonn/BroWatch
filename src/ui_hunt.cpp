@@ -224,9 +224,9 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
         uint8_t backIdx = (rssiN > 6) ? (rssiN - 6) : 0;
         int delta = (int)latestRssi - (int)eng.huntRssiAt(backIdx);
         TrendState cur;
-        if (delta > 3)       { trend = "GETTING WARMER";  trendColor = Theme::GREEN; cur = TrendState::WARMER; }
-        else if (delta < -3) { trend = "GETTING COLDER";  trendColor = Theme::RED;   cur = TrendState::COLDER; }
-        else                 { trend = "HOLDING STEADY";  trendColor = Theme::CYAN;  cur = TrendState::STEADY; }
+        if (delta > 3)       { trend = Theme::tr("GETTING WARMER", "ТЕПЛЕЕ");  trendColor = Theme::GREEN; cur = TrendState::WARMER; }
+        else if (delta < -3) { trend = Theme::tr("GETTING COLDER", "ХОЛОДНЕЕ");  trendColor = Theme::RED;   cur = TrendState::COLDER; }
+        else                 { trend = Theme::tr("HOLDING STEADY", "СТОИМ");  trendColor = Theme::CYAN;  cur = TrendState::STEADY; }
         // Only on an actual change -- not every tick the trend still
         // reads the same way, or he'd never shut up.
         if (cur != s_lastTrend) {
@@ -239,24 +239,25 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     // miss from across a table, and the number moves down to the trend line.
     if (caught) {
         t.setTextSize(2);
-        const int cw2 = t.textWidth("CAUGHT!") + 16, ch2 = t.fontHeight() + 4;
+        const char* cw_ = Theme::tr("CAUGHT!", "ПОЙМАН!");
+        const int cw2 = Theme::textWidthRU(t, cw_) + 16, ch2 = t.fontHeight() + 4;
         const int cx2 = (w - cw2) / 2, cy2 = cy + 6;
         t.fillRect(cx2, cy2, cw2, ch2, Theme::GREEN);
         t.setTextColor(Theme::BLACK, Theme::GREEN);
         t.setCursor(cx2 + 8, cy2 + 2);
-        t.print("CAUGHT!");
+        Theme::printRU(t, cw_);
         trend = rbuf;
         trendColor = Theme::GREEN;
     }
     t.setTextSize(1);
-    int tw = t.textWidth(trend);
+    int tw = Theme::textWidthRU(t, trend);
     t.setTextColor(trendColor, Theme::BG);
     t.setCursor((w - tw) / 2, cy + 8 + readoutH + 2);
-    t.print(trend);
+    Theme::printRU(t, trend);
 
     int bx, by, bw, bh;
     backButtonRect(w, h, bx, by, bw, bh);
-    Theme::drawButton(t, bx, by, bw, bh, "[ BACK ]", false);
+    Theme::drawButton(t, bx, by, bw, bh, Theme::tr("[ BACK ]", "[ НАЗАД ]"), false);
     stopButtonRect(w, h, bx, by, bw, bh);
-    Theme::drawButton(t, bx, by, bw, bh, "[ STOP ]", false);
+    Theme::drawButton(t, bx, by, bw, bh, Theme::tr("[ STOP ]", "[ СТОП ]"), false);
 }

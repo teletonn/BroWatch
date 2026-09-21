@@ -1,6 +1,7 @@
 // SquachWatch-CYD — the PIN lock. See include/security.h.
 #include "security.h"
 #include "ignore_list.h"
+#include "theme.h"   // BroWatch RU value labels
 #include <Preferences.h>
 #include <esp_system.h>   // esp_random(), as meshtalk.cpp uses it
 #include <string.h>
@@ -227,14 +228,14 @@ void cycleAutoLock() {
 }
 const char* autoLockLabel() {
     switch ((AutoLock)s_autoLock) {
-        case AutoLock::OFF:      return "OFF";
-        case AutoLock::ON_SLEEP: return "ON SLEEP";
-        case AutoLock::MIN_1:    return "1 MIN";
-        case AutoLock::MIN_5:    return "5 MIN";
-        case AutoLock::MIN_15:   return "15 MIN";
-        case AutoLock::MIN_30:   return "30 MIN";
+        case AutoLock::OFF:      return Theme::tr("OFF", "ВЫКЛ");
+        case AutoLock::ON_SLEEP: return Theme::tr("ON SLEEP", "ПРИ СНЕ");
+        case AutoLock::MIN_1:    return Theme::tr("1 MIN", "1 МИН");
+        case AutoLock::MIN_5:    return Theme::tr("5 MIN", "5 МИН");
+        case AutoLock::MIN_15:   return Theme::tr("15 MIN", "15 МИН");
+        case AutoLock::MIN_30:   return Theme::tr("30 MIN", "30 МИН");
     }
-    return "OFF";
+    return Theme::tr("OFF", "ВЫКЛ");
 }
 uint32_t autoLockIdleMs() {
     switch ((AutoLock)s_autoLock) {
@@ -257,11 +258,11 @@ void cycleLockAlerts() {
 }
 const char* lockAlertsLabel() {
     switch ((LockAlerts)s_lockAlerts) {
-        case LockAlerts::FULL:      return "FULL";
-        case LockAlerts::TYPE_ONLY: return "TYPE ONLY";
-        case LockAlerts::NONE:      return "NONE";
+        case LockAlerts::FULL:      return Theme::tr("FULL", "ВСЁ");
+        case LockAlerts::TYPE_ONLY: return Theme::tr("TYPE ONLY", "ТОЛЬКО ТИП");
+        case LockAlerts::NONE:      return Theme::tr("NONE", "НИЧЕГО");
     }
-    return "TYPE ONLY";
+    return Theme::tr("TYPE ONLY", "ТОЛЬКО ТИП");
 }
 
 void wipeSecrets() {

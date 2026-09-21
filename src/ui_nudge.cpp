@@ -34,13 +34,13 @@ bool in(int x, int y, int bx, int by, int bw, int bh) {
 
 void centred(TFT_eSPI& t, int y, uint16_t c, const char* s) {
     t.setTextColor(c, Theme::BG);
-    t.setCursor((t.width() - t.textWidth(s)) / 2, y);
-    t.print(s);
+    t.setCursor((t.width() - Theme::textWidthRU(t, s)) / 2, y);
+    Theme::printRU(t, s);
 }
 } // namespace
 
 void uiNudgeInit(TFT_eSPI& t, const char* from, const uint8_t ver[3], uint16_t seconds, uint32_t now) {
-    snprintf(s_from, sizeof s_from, "%s", from && from[0] ? from : "SOMEONE");
+    snprintf(s_from, sizeof s_from, "%s", from && from[0] ? from : Theme::tr("SOMEONE", "КТО-ТО"));
     snprintf(s_ver, sizeof s_ver, "v%u.%u.%u", ver[0], ver[1], ver[2]);
     s_until = now + (uint32_t)seconds * 1000u;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
@@ -55,32 +55,35 @@ void uiNudgeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     (void)eng;
     const int w = t.width(), h = t.height();
     t.fillRect(0, 0, w, h, Theme::BG);
-    Theme::drawListHeading(t, "SQUAD UPDATE", Theme::VAPOR_PINK);
+    Theme::drawListHeading(t, Theme::tr("SQUAD UPDATE", "ОБНОВА ОТРЯДА"), Theme::VAPOR_PINK);
 
     t.setTextSize(1);
     int y = Theme::LIST_TOP + Theme::LIST_HEADING_H + 10;
     char line[48];
-    snprintf(line, sizeof line, "%s asked the squad to update", s_from);
+    if (Settings::lang() == 1) snprintf(line, sizeof line, "%s зовёт обновиться", s_from);
+    else snprintf(line, sizeof line, "%s asked the squad to update", s_from);
     centred(t, y, Theme::WHITE, line);
     y += 12;
-    snprintf(line, sizeof line, "to %s. This board runs %s.", s_ver, OtaCore::runningVersion());
+    if (Settings::lang() == 1) snprintf(line, sizeof line, "до %s. Тут стоит %s.", s_ver, OtaCore::runningVersion());
+    else snprintf(line, sizeof line, "to %s. This board runs %s.", s_ver, OtaCore::runningVersion());
     centred(t, y, Theme::WHITE, line);
     y += 12;
-    centred(t, y, Theme::W95_LIGHT, "It joins WiFi, installs, and restarts.");
+    centred(t, y, Theme::W95_LIGHT, Theme::tr("It joins WiFi, installs, and restarts.", "В WiFi, ставит, ребут."));
     y += 12;
-    centred(t, y, Theme::W95_LIGHT, "Nothing changes if that fails.");
+    centred(t, y, Theme::W95_LIGHT, Theme::tr("Nothing changes if that fails.", "Если сорвётся — всё как было."));
 
     // The count, big, in the middle of what is left.
     const Btns b = btns(t);
     const int left = uiNudgeSecondsLeft(now);
     t.setTextSize(2);
-    snprintf(line, sizeof line, left > 0 ? "UPDATING IN %d" : "UPDATING...", left);
+    if (Settings::lang() == 1) snprintf(line, sizeof line, left > 0 ? "ОБНОВА ЧЕРЕЗ %d" : "ОБНОВЛЯЮСЬ...", left);
+    else snprintf(line, sizeof line, left > 0 ? "UPDATING IN %d" : "UPDATING...", left);
     const int cy = y + 12 + (b.y - (y + 12) - t.fontHeight()) / 2;
     centred(t, cy, Theme::CYAN, line);
     t.setTextSize(1);
 
-    Theme::drawWin95Button(t, b.nowX,  b.y, b.w, BTN_H, "NOW",  false);
-    Theme::drawWin95Button(t, b.skipX, b.y, b.w, BTN_H, "SKIP", false);
+    Theme::drawWin95Button(t, b.nowX,  b.y, b.w, BTN_H, Theme::tr("NOW", "СЕЙЧАС"),  false);
+    Theme::drawWin95Button(t, b.skipX, b.y, b.w, BTN_H, Theme::tr("SKIP", "ПОЗЖЕ"), false);
 }
 
 NudgeHit uiNudgeHit(TFT_eSPI& t, int x, int y) {

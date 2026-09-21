@@ -59,7 +59,7 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, uint8_t idx) {
     // REMOVE, drawn as a real button so it reads as the one thing on the
     // row you can press. Its rect matches uiIgnoreListHitRemove() exactly.
     const int bw = REMOVE_W - 12, bh = 20;
-    Theme::drawButton(t, w - REMOVE_W + 4, y + (hgt - bh) / 2, bw, bh, "REMOVE", false);
+    Theme::drawButton(t, w - REMOVE_W + 4, y + (hgt - bh) / 2, bw, bh, Theme::tr("REMOVE", "УБРАТЬ"), false);
 
     t.drawFastHLine(4, y + hgt - 1, w - 8, Theme::PURPLE);
 }
@@ -73,8 +73,8 @@ void uiIgnoreListTick(TFT_eSPI& t, uint32_t now) {
 
     t.fillRect(0, 0, w, h, Theme::BG);
     Theme::drawTitleBar(t, ">> IGNORED <<");
-    Theme::drawListHeading(t, "IGNORED", Theme::AMBER);
-    Theme::drawPinnedBack(t, "[ BACK ]");
+    Theme::drawListHeading(t, Theme::tr("IGNORED", "ИГНОР"), Theme::AMBER);
+    Theme::drawPinnedBack(t, Theme::tr("[ BACK ]", "[ НАЗАД ]"));
 
     const uint8_t n = IgnoreList::count();
     if (n == 0) {
@@ -82,17 +82,17 @@ void uiIgnoreListTick(TFT_eSPI& t, uint32_t now) {
         // real explanation rather than a blank screen that reads as broken.
         t.setTextSize(Theme::uiMenuTextSize(t));
         t.setTextColor(Theme::WHITE, Theme::BG);
-        const char* m1 = "NOTHING MUTED";
-        t.setCursor((w - t.textWidth(m1)) / 2, h / 2 - 26);
-        t.print(m1);
+        const char* m1 = Theme::tr("NOTHING MUTED", "СПИСОК ПУСТ");
+        t.setCursor((w - Theme::textWidthRU(t, m1)) / 2, h / 2 - 26);
+        Theme::printRU(t, m1);
         t.setTextSize(1);
         t.setTextColor(Theme::CYAN, Theme::BG);
-        const char* m2 = "Tap IGNORE on an alert to mute";
-        const char* m3 = "a device you own.";
-        t.setCursor((w - t.textWidth(m2)) / 2, h / 2 + 2);
-        t.print(m2);
-        t.setCursor((w - t.textWidth(m3)) / 2, h / 2 + 14);
-        t.print(m3);
+        const char* m2 = Theme::tr("Tap IGNORE on an alert to mute", "Жми ИГНОР на тревоге, чтобы");
+        const char* m3 = Theme::tr("a device you own.", "заглушить своё устройство.");
+        t.setCursor((w - Theme::textWidthRU(t, m2)) / 2, h / 2 + 2);
+        Theme::printRU(t, m2);
+        t.setCursor((w - Theme::textWidthRU(t, m3)) / 2, h / 2 + 14);
+        Theme::printRU(t, m3);
         return;
     }
 

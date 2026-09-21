@@ -228,7 +228,7 @@ static const char* PERSISTENT_LINES[] = {
 };
 
 static const char* BOOT_LINES[] = {
-    "SquachWatch online. Let's find something.",
+    "BroWatch online. Let's find something.",
     "Booted. Don't just stare at your phone.",
 };
 
@@ -239,7 +239,7 @@ static const char* BOOT_LINES[] = {
 // to actually explain something instead of just cracking a joke.
 static const char* const ONBOARD_LINES[] = {
     "Hey! First boot -- I'm Squachy. Two minutes, then I'll let you go.",
-    "SquachWatch listens for surveillance nearby -- cameras, plate readers, trackers like AirTags.",
+    "BroWatch listens for surveillance nearby -- cameras, plate readers, trackers like AirTags.",
     "No magic. Just WiFi and Bluetooth, matching known hardware as it passes by.",
     "All zeroes down there means nothing's around. It flips to a big flashing ALERT the second something matches.",
     "Down there: SCAN rescans, LOG shows history, DESK is a big clock.",
@@ -419,6 +419,379 @@ static const DetLines DET_LINES[] = {
 };
 static const uint8_t DET_LINES_N = sizeof(DET_LINES) / sizeof(DET_LINES[0]);
 
+static_assert(DET_LINES_N == 14, "DET table size");
+
+// ---- BroWatch RU chatter ------------------------------------------------------
+// Display-only parallels to the EN banks above: same counts, same order,
+// picked by the same roll. The air never carries these; only the screen
+// shows them. Counts are asserted next to each table.
+static inline bool isRU() { return Settings::lang() == 1; }
+static const char* pickL(const char* const* en, const char* const* ru, int n) {
+    const int i = random(0, n);
+    return isRU() ? ru[i] : en[i];
+}
+
+static const char* IDLE_LINES_RU[] = {
+    "Оставайся сквачем.",
+    "Живу в этих стенах годами.",
+    "Не будь скриптом. Учись.",
+    "Этот WiFi наводит на мысли.",
+    "Я везде и нигде.",
+    "Они строят камеры. Я — укрытия лучше.",
+    "Лапы большие, конспирация больше.",
+    "Тихо. Обожаю.",
+    "Перекус — топливо конспирации.",
+    "Этот экран — моё укрытие.",
+    "Встреч с бигфутом +40%.",
+    "Замки держат вежливых. Я не такой.",
+    "Лучший взлом — научить другого.",
+    "Во мне толпы и радиоволны.",
+    "Каждому криптиду нужно хобби.",
+    "Это кардио. Поспорь.",
+    "Ночью криптид, днём оператор.",
+    "На сквача никто не думает.",
+};
+static_assert(sizeof(IDLE_LINES_RU) / sizeof(IDLE_LINES_RU[0]) == 18, "IDLE RU mirrors EN");
+
+static const char* ENCOURAGE_LINES_RU[] = {
+    "Пусто? Скучно. Иди гуляй.",
+    "Выведи меня, я нервничаю.",
+    "У каждой парковки своя история.",
+    "Проверь квартал на Флоки.",
+    "Тихому скану — новые виды.",
+    "Приключения там. И номера читают.",
+    "Встань. Потрогай траву. Возьми меня.",
+    "Полевая работа закаляет.",
+};
+static_assert(sizeof(ENCOURAGE_LINES_RU) / sizeof(ENCOURAGE_LINES_RU[0]) == 8, "ENCOURAGE RU mirrors EN");
+
+static const char* BORED_LINES_RU[] = {
+    "...тут есть кто?",
+    "Прогулялся бы. Просто говорю.",
+    "На стрёме. Очень терпеливо.",
+    "Шли помощь. Или снеки.",
+};
+static_assert(sizeof(BORED_LINES_RU) / sizeof(BORED_LINES_RU[0]) == 4, "BORED RU mirrors EN");
+
+static const char* ALERT_MOOD_LINES_RU[] = {
+    "Держу ухо востро. День бурный.",
+    "Смена жаркая. Не жалуюсь.",
+    "Глаза открыты. Всё лезет.",
+    "Что-то многолюдно стало.",
+};
+static_assert(sizeof(ALERT_MOOD_LINES_RU) / sizeof(ALERT_MOOD_LINES_RU[0]) == 4, "ALERT_MOOD RU mirrors EN");
+
+static const char* RELAXED_MOOD_LINES_RU[] = {
+    "Тихо — можно спать стоя.",
+    "Сегодня одни вайбы.",
+    "Тихий день. Беру.",
+    "Тихо тут. Подозрительно тихо.",
+};
+static_assert(sizeof(RELAXED_MOOD_LINES_RU) / sizeof(RELAXED_MOOD_LINES_RU[0]) == 4, "RELAXED RU mirrors EN");
+
+static const char* WALK_LINES_RU[] = {
+    "Разминаю лапы.",
+    "Время патруля.",
+    "Обойду периметр.",
+    "Кто-то должен тут ходить.",
+};
+static_assert(sizeof(WALK_LINES_RU) / sizeof(WALK_LINES_RU[0]) == 4, "WALK RU mirrors EN");
+
+static const char* DANCE_LINES_RU[] = {
+    "Никто не смотрит. Кроме тебя.",
+    "Это моё лучшее движение.",
+    "Есть движения. Не суди.",
+    "Танц-пауза. Пожалуйста.",
+};
+static_assert(sizeof(DANCE_LINES_RU) / sizeof(DANCE_LINES_RU[0]) == 4, "DANCE RU mirrors EN");
+
+static const char* SEEN_BEFORE_LINES_RU[] = {
+    "Этого уже видел.",
+    "Снова встретились.",
+    "Этот тут завсегдатай.",
+    "Узнаю этого.",
+};
+static_assert(sizeof(SEEN_BEFORE_LINES_RU) / sizeof(SEEN_BEFORE_LINES_RU[0]) == 4, "SEEN_BEFORE RU mirrors EN");
+
+static const char* PERSISTENT_LINES_RU[] = {
+    "Этот возвращается. На заметку.",
+    "Уже не случайность. Приглядывай.",
+    "Опять тот же. Это система.",
+    "Этот прочно засел.",
+};
+static_assert(sizeof(PERSISTENT_LINES_RU) / sizeof(PERSISTENT_LINES_RU[0]) == 4, "PERSISTENT RU mirrors EN");
+
+static const char* BOOT_LINES_RU[] = {
+    "БроВотч в эфире. Поищем чего.",
+    "Загрузился. Не пялься в телефон.",
+};
+static_assert(sizeof(BOOT_LINES_RU) / sizeof(BOOT_LINES_RU[0]) == 2, "BOOT RU mirrors EN");
+
+static const char* LOG_OPEN_LINES_RU[] = {
+    "Роемся в журнале? Смело.",
+    "Тут живут все пруфы.",
+};
+static_assert(sizeof(LOG_OPEN_LINES_RU) / sizeof(LOG_OPEN_LINES_RU[0]) == 2, "LOG_OPEN RU mirrors EN");
+
+static const char* LOG_CLEAR_LINES_RU[] = {
+    "Журнал чист. Начнём по-сквачьи.",
+};
+static_assert(sizeof(LOG_CLEAR_LINES_RU) / sizeof(LOG_CLEAR_LINES_RU[0]) == 1, "LOG_CLEAR RU mirrors EN");
+
+static const char* ROTATE_LINES_RU[] = {
+    "Эй, полегче с вращениями.",
+    "Вот это поворот.",
+    "Голова кружится, но я молчу.",
+};
+static_assert(sizeof(ROTATE_LINES_RU) / sizeof(ROTATE_LINES_RU[0]) == 3, "ROTATE RU mirrors EN");
+
+static const char* ONBOARD_LINES_RU[] = {
+    "Привет! Я Сквачи. Две минуты — и отпущу.",
+    "БроВотч слышит слежку: камеры, номера, трекеры.",
+    "Без магии: WiFi и Bluetooth сверяем с базой.",
+    "Нули внизу — всё чисто. При находке будет ALERT.",
+    "Внизу: СКАН ищет, ЖУРНАЛ помнит, ЧАСЫ тикают.",
+    "Сверху: слева настройки, справа поворот. Края меняют фон.",
+    "Погладь меня. Тащи, чтоб перенести.",
+    "Вот и всё. Будь сквачем.",
+};
+static_assert(sizeof(ONBOARD_LINES_RU) / sizeof(ONBOARD_LINES_RU[0]) == 8, "ONBOARD RU mirrors EN");
+
+static const DetLines DET_LINES_RU[] = {
+    { "Что-то рядом.",                     "Сигнал не опознан. На стрёме." },  // UNKNOWN
+    { "Флок засёк. Старший Брат машет.",   "Камера номеров. Ты в каталоге." }, // FLOCK
+    { "Рядом Axon. Веди себя прилично.",   "Нагрудная камера. Улыбнись." },    // AXON
+    { "Очки стучат. Дикие времена.",       "Чьи-то очки записывают." },        // META
+    { "Скиммер! Тут не плати.",            "Грубый синезубый прибор." },       // SKIMMER
+    { "Датчик выстрелов. На стрёме.",      "Ворон засёк. Глаза открыты." },    // RAVEN
+    { "Рядом AirTag. Надеюсь, твой.",      "Что-то что-то отслеживает." },     // AIRTAG
+    { "Глаза в небе. Буквально.",          "Дрон вверху. Маши, если готов." }, // DRONE
+    { "Читалка номеров. Классика.",        "Номера видят тебя. Улыбнись." },   // ALPR
+    { "Камера засекла. Улыбнись, легенда.","Кто-то смотрит. Выгляди." },       // CAMERA
+    { "Метка Samsung. Кто-то метит.",      "Galaxy SmartTag рядом. Хм." },     // SAMSUNG_TAG
+    { "Сеть слежки Google машет.",         "Find My? Это я нашёл." },          // GOOGLE_TAG
+    { "Метка Tile. Надеюсь, друг.",        "Кроха что-то отслеживает." },      // TILE
+    { "Звонок Ring. Улыбнись Амазону.",    "Чей-то звонок тебя судит." },      // RING
+};
+static_assert(sizeof(DET_LINES_RU) / sizeof(DET_LINES_RU[0]) == 14, "DET RU mirrors EN");
+
+static const char* const OATH_LINES_RU[] = {
+    "Святые хотспоты. %s.",
+    "Очуметь, оптика! %s. Веди себя спокойно.",
+    "Мать честная, сенсоры. %s. Ну конечно.",
+    "Клянусь бородой модема, %s.",
+    "Да ударьте меня анализатором. %s.",
+    "Страсти-то какие, %s. Всем стоять. Или идти. Я вам не указ.",
+    "Прыгающие джиттеры, %s.",
+    "Шикарные тепловые карты. %s. Люблю работу.",
+};
+static_assert(sizeof(OATH_LINES_RU) / sizeof(OATH_LINES_RU[0]) == 8, "OATH RU mirrors EN");
+
+static const char* const NOIR_LINES_RU[] = {
+    "Галопирующие таблицы. Опять ничего.",
+    "Видал такое — не поверишь. В основном принтеры.",
+    "Шипящие подстанции, эфир тих. Не верю.",
+    "Ночь была тихой. Слишком. Потом тихо. Сделал сэндвич.",
+    "Где-то Флок думает о тебе. Я думаю об обеде.",
+    "Мать честная, сколько синезуба на вторник.",
+    "Жетона нет. Есть лапы. Большие. То же самое.",
+    "Заметка: умный холодильник не подозреваемый. Пока.",
+    "Преступность не спит. Я тоже. Звонок тоже. Все устали.",
+    "Страдающие принтеры в эфире, один хочет дружить.",
+    "Докладывать нечего, кроме великолепия. Подшил под М.",
+    "Будь у меня монетка за каждый трекер — нужно место под монетки.",
+    "Вопящие скиммеры у ларьков. Пока тихо. Продолжаем.",
+    "А вот момент, где я смотрю на роутер со значением.",
+    "Преступления бы сейчас. Мелкого. Переход не там. Я б глянул.",
+    "Клянусь бакенбардами коммутатора, скучно.",
+};
+static_assert(sizeof(NOIR_LINES_RU) / sizeof(NOIR_LINES_RU[0]) == 16, "NOIR RU mirrors EN");
+
+static const char* const BG_LINES_RU[][3] = {
+    /* DIGITAL   */ { "Опять цифровой дождь. По-хакерски.", "Падающий код, бурая шерсть.", "Прочитал бы, да лень." },
+    /* STARFIELD */ { "Звёзды. Космически.", "Где-то там криптид покрупнее.", "Космос — тот же лес, темнее." },
+    /* TOASTERS  */ { "Летающие тостеры. Классика.", "Столько тостов в небе не надо.", "Сегодня вайб After Dark." },
+    /* AQUARIUM  */ { "Аквариум. Дзен.", "Рыбы без конспирации. Новички.", "Аквариум завёл бы, но камер стесняюсь." },
+    /* TERMINAL  */ { "Терминал. Мой темп.", "Зелёный текст, бурая шерсть.", "Выглядит официально. Вайбы в основном." },
+    /* FIREFLIES */ { "Светлячки сегодня. Красота.", "Огоньки, атмосфера.", "Они не следят. Проверял." },
+    /* FIRE      */ { "Огонь на фоне. Уютно.", "Тепло, без пожарных.", "Ничего не горит. Наверное." },
+    /* SNOWFALL  */ { "Опять снег. Лапам сцепление.", "Погода для таинственных следов.", "Холодно. Я к такому готов." },
+    /* SPECTRUM  */ { "Спектр живой. Вот это дело.", "Это настоящие сигналы. Круто, да?", "Слушаю эфир. Очень в стиле." },
+    /* TUNNEL    */ { "Туннель. Ретрофутуризм.", "Будто едем куда-то. Нет.", "Вайбы sci-fi 80-х." },
+    /* SYNTHWAVE */ { "Закат не садится. Проверял.", "Сетка бесконечна. Как и путь.", "Глянь на отражение. Водичка-то что." },
+    /* BLACK     */ { "Стен пустых сегодня.", "Мы и темнота. Мне норм.", "Фаза минимализма. Бывает." },
+};
+
+static const char* PET_LINES_RU[] = {
+    "О, вот туда.",
+    "Личное пространство? Не слышал.",
+    "Гладишь криптида. Смело.",
+    "Потому фото мои и мутные.",
+    "Ладно, ЕЩЁ раз. Другим ни слова.",
+    "Бигфута бы тоже гладил. Не ври.",
+    "Криптид, не питомец. Но ладно.",
+    "Десять из десяти, засветился бы снова.",
+    "Осторожно, так легенды портятся.",
+    "У хижины такого не бывает. Никогда.",
+    "Чётче любой фотоловушки.",
+    "Корми гладью — создам профсоюз.",
+    "Это прямо в мемуары.",
+    "Реже настоящей встречи, честно.",
+    "Я так не со всеми. Ладно, может.",
+    "Синяки у меня легендарные, не маскотские.",
+    "Это вырезают из хроники.",
+    "Расскажешь всем. Никто не поверит.",
+    "Гладь засчитана. Обратного нет.",
+    "Свидетели скажут меньше, чем ты щас.",
+};
+static_assert(sizeof(PET_LINES_RU) / sizeof(PET_LINES_RU[0]) == 20, "PET RU mirrors EN");
+
+static const char* HELD_LINES_RU[] = {
+    "Ладно, это правда приятно.",
+    "Не останавливайся. Серьёзно.",
+    "Это целый момент сейчас.",
+    "Ещё пять секунд. Считаю.",
+    "Нашёл мою хорошую сторону.",
+    "Так бы и остался.",
+};
+static_assert(sizeof(HELD_LINES_RU) / sizeof(HELD_LINES_RU[0]) == 6, "HELD RU mirrors EN");
+
+static const char* PETTING_LINES_RU[] = {
+    "Да. Вот это тема.",
+    "Не говорю, что мурчу. И обратного нет.",
+    "Именно это мне сегодня надо было.",
+    "Криптид тает. Шли помощь. Шучу.",
+    "Доверие разблокировано. Ненадолго.",
+    "Это в лучшие моменты.",
+};
+static_assert(sizeof(PETTING_LINES_RU) / sizeof(PETTING_LINES_RU[0]) == 6, "PETTING RU mirrors EN");
+
+static const char* WATCHING_LINES_RU[] = {
+    "Смотрю. Мимо ничего.",
+    "Глаза открыты. Ты под крылом.",
+    "Сканирую эфир. Пока тихо.",
+    "Я на стрёме. Занимайся своим.",
+    "Слушаю. Рассказать нечего.",
+    "2.4 гигагерца ничего. Отлично.",
+    "На тебя смотрю только я.",
+    "Смотрю за смотрящими. Пока пусто.",
+    "Эфир тих. Закричу, если нет.",
+    "Гляжу в оба. Как всегда.",
+};
+static_assert(sizeof(WATCHING_LINES_RU) / sizeof(WATCHING_LINES_RU[0]) == 10, "WATCHING RU mirrors EN");
+
+static const char* SLEEPY_LINES_RU[] = {
+    "*зевок* ...я тут.",
+    "Криптид-дрема. Никому ни слова.",
+    "Глаза отдыхают. Дозор нет.",
+    "Хрр... буди, если там правда что-то.",
+};
+static_assert(sizeof(SLEEPY_LINES_RU) / sizeof(SLEEPY_LINES_RU[0]) == 4, "SLEEPY RU mirrors EN");
+
+static const char* PARTY_LINES_RU[] = {
+    "ТУСА-РЕЖИМ. Пожалуйста.",
+    "Ого. Видал это?",
+    "Тут диско теперь. Без возврата.",
+    "Криптид-рейв. Никому ни слова.",
+};
+static_assert(sizeof(PARTY_LINES_RU) / sizeof(PARTY_LINES_RU[0]) == 4, "PARTY RU mirrors EN");
+
+// BroWatch RU parallels for the clock lines, stretch/gum/duck/juggle/wink
+// banks and watch-alert lines below. Same counts; pickTimeLine() and the
+// say() sites below route through pickL().
+static const char* const EARLY_LINES_RU[] = {
+    "Рано встал. Или не ложился. Привет.",
+    "Сначала кофе. Потом квартал.",
+    "Рассветный патруль. Два роутера и белка.",
+    "Птицы в эфире раньше телефонов.",
+};
+static const char* const MORNING_LINES_RU[] = {
+    "Утренняя смена. По нулям везде.",
+    "Фургоны доставки — самое громкое в эфире.",
+    "С девяти до пяти, но для криптидов.",
+    "Доброе утро. Я всю ночь не спал. Я экран.",
+};
+static const char* const LUNCH_LINES_RU[] = {
+    "Обед. Мне ничего, я экран.",
+    "Полквартала прошло с Bluetooth.",
+    "Полдень. Пик телефонов. Пик всего.",
+    "Поешь. Сканер сам поглядит минут десять.",
+};
+static const char* const SLUMP_LINES_RU[] = {
+    "Три часа дня. Зевают даже роутеры.",
+    "После обеда. Движутся лишь номера.",
+    "Час, когда я сомневаюсь в WiFi.",
+    "Разомнись. Сидишь с обеда. Проверял.",
+};
+static const char* const EVENING_LINES_RU[] = {
+    "Вечер. Коммутеры зажигают эфир.",
+    "Где-то конец дня. Не тут. Тут скан.",
+    "Золотой час. Лучший свет ловить камеры.",
+    "Планы на ужин? У меня шестой канал.",
+};
+static const char* const NIGHT_LINES_RU[] = {
+    "Позднеет. Трекеры не спят, а ты спи.",
+    "Ночная смена. Только я и лампочки.",
+    "Хорошие хакеры только встают.",
+    "В эфире тихо. Тут и слушай в оба.",
+};
+static const char* const LATE_LINES_RU[] = {
+    "Глубокая ночь. Спи. Я подежурю.",
+    "После полуночи в Bluetooth добра нет.",
+    "Только мы и роутеры.",
+    "Раз ты не спишь, то и я. Честно.",
+};
+static const char* const MONDAY_LINES_RU[] = {
+    "Понедельник. Камерам плевать, а мне нет.",
+    "Понедельник. Телефоны на работе, трекеры тоже.",
+};
+static const char* const FRIDAY_LINES_RU[] = {
+    "Пятница. Даже Флоки устали.",
+    "Пятница. Вези меня где WiFi хуже.",
+};
+static const char* const WEEKEND_LINES_RU[] = {
+    "Выходные. Телефоны района дома.",
+    "Субботний скан. Выходной криптида — скан другого.",
+    "Выходные. Ловить нечего, кроме Bluetooth газонокосилки.",
+};
+static const char* const STRETCH_LINES_RU[] = {
+    "Нннгх. Ладно. Встал.",
+    "Пять минут ещё. ...Ладно.",
+    "Вот это потягушки.",
+    "Снова на стрёме.",
+};
+static const char* const GUM_LINES_RU[] = {
+    "Смотри сюда.",
+    "Жвачка. Штатная.",
+    "Берёг как раз для этого.", 
+    "Отличный перекус для засады.",
+};
+static const char* const DUCK_LINES_RU[] = {
+    "Тостер чуть не достал!",
+    "Этот летел прямо в меня.",
+    "Куда летишь, смотри!",
+    "Кто их вообще запускает?",
+    "Мимо, хромированный.",
+};
+static const char* const JUGGLE_LINES_RU[] = {
+    "Гляди, что поймал.",
+    "Три сразу. Легко.",
+    "Жарко там, да?",
+    "Жонглирую уликами.",
+};
+static const char* const WINK_LINES_RU[] = {
+    "О — не видел тебя.",
+    "Да, я знаю, что смотришь.",
+    "*подмиг* Только между нами.",
+    "Всё тут. Всё смотрю.",
+};
+static const char* const WATCH_ALERT_LINES_RU[] = {
+    "Говорил же.",
+    "Я знал, что вернётся.",
+    "Ага. Тот, за кем следишь.",
+    "Опять тут, да? Упорный.",
+};
+
 // Lifetime-detection-count thresholds Squachy calls out by name. Bigger
 // than any of these and he just keeps quiet about the exact number.
 static const uint32_t MILESTONES[] = { 10, 25, 50, 100, 250, 500, 1000, 2500, 5000 };
@@ -485,7 +858,7 @@ static ReactPose curReactPose() {
 static uint32_t      s_lastMilestone = 0;
 static bool          s_milestoneInit = false;
 static char          s_milestoneBuf[48];
-static char          s_detBuf[56];
+static char          s_detBuf[96];
 
 // A very rare idle flourish — his fur shimmers through the vaporwave
 // palette for a few seconds, plus (see tick()/drawPartyFx) a full
@@ -995,29 +1368,38 @@ static GrowthStage currentStage() {
     return GrowthStage::FLEDGLING;
 }
 
-static char s_statBuf[56];
+static char s_statBuf[80];
 
 // A line built from real numbers instead of picked from a static pool
 // -- "we've caught 47 things together" style. Folded into the idle
 // chatter pool at low frequency (see tick()), only once there's
 // actually a meaningful number to report.
 static const char* buildStatLine() {
+    const bool ru = isRU();
     switch (random(0, 4)) {
         case 0:
-            snprintf(s_statBuf, sizeof(s_statBuf),
+            if (ru) snprintf(s_statBuf, sizeof(s_statBuf),
+                     "Вместе поймали %lu штук.", (unsigned long)s_cachedLifetimeTotal);
+            else    snprintf(s_statBuf, sizeof(s_statBuf),
                      "We've caught %lu things together.", (unsigned long)s_cachedLifetimeTotal);
             break;
         case 1:
-            snprintf(s_statBuf, sizeof(s_statBuf),
+            if (ru) snprintf(s_statBuf, sizeof(s_statBuf),
+                     "Загрузка #%lu. Всё смотрю.", (unsigned long)s_bootCount);
+            else    snprintf(s_statBuf, sizeof(s_statBuf),
                      "Boot #%lu. Still watching.", (unsigned long)s_bootCount);
             break;
         case 2:
-            snprintf(s_statBuf, sizeof(s_statBuf),
+            if (ru) snprintf(s_statBuf, sizeof(s_statBuf),
+                     "Гладил меня %lu раз. Я не считаю.", (unsigned long)s_petCount);
+            else    snprintf(s_statBuf, sizeof(s_statBuf),
                      "You've petted me %lu times. Not that I'm counting.", (unsigned long)s_petCount);
             break;
         default: {
             uint32_t mins = s_bestClearMs / 60000;
-            snprintf(s_statBuf, sizeof(s_statBuf),
+            if (ru) snprintf(s_statBuf, sizeof(s_statBuf),
+                     "Лучшая серия: %lu мин. Побьём.", (unsigned long)mins);
+            else    snprintf(s_statBuf, sizeof(s_statBuf),
                      "Best clear streak: %lu min. Bet we beat it.", (unsigned long)mins);
             break;
         }
@@ -1138,7 +1520,7 @@ static const char* pickBackgroundLine() {
         if (said < 255) s_hintSaid[e]++;
         return HINTS[e][lvl];
     }
-    return BG_LINES[idx][random(0, 3)];
+    return isRU() ? BG_LINES_RU[idx][random(0, 3)] : BG_LINES[idx][random(0, 3)];
 }
 
 // All of this module's persisted fields share one NVS namespace and
@@ -1254,7 +1636,9 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
 
             if (hit > 0) {
                 s_lastMilestone = hit;
-                snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
+                if (isRU()) snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
+                         "Поимка #%lu! Рубеж.", (unsigned long)hit);
+                else          snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
                          "Detection #%lu! Milestone.", (unsigned long)hit);
                 say(s_milestoneBuf, 5500);
             } else if (hitCount >= 8) {
@@ -1262,19 +1646,20 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
                 // one-off ping — that's a real pattern worth calling
                 // out plainly, every time (no dice roll), since it's
                 // the more actionable signal.
-                say(pick(PERSISTENT_LINES, 4), 5500);
+                say(pickL(PERSISTENT_LINES, PERSISTENT_LINES_RU, 4), 5500);
             } else if (hitCount >= 3 && random(0, 2) == 0) {
                 // A lighter "I recognize this one" tier — rolled, not
                 // guaranteed, so a device that legitimately racks up
                 // repeats doesn't say the same thing every single time.
-                say(pick(SEEN_BEFORE_LINES, 4), 5000);
+                say(pickL(SEEN_BEFORE_LINES, SEEN_BEFORE_LINES_RU, 4), 5000);
             } else {
                 uint8_t idx = (uint8_t)dt;
                 if (idx >= DET_LINES_N) idx = 0;
-                const char* base = random(0, 2) ? DET_LINES[idx].a : DET_LINES[idx].b;
-                static char oath[96];
+                const char* base = isRU() ? (random(0, 2) ? DET_LINES_RU[idx].a : DET_LINES_RU[idx].b)
+                                                : (random(0, 2) ? DET_LINES[idx].a : DET_LINES[idx].b);
+                static char oath[160];
                 if (random(0, 3) == 0) {
-                    snprintf(oath, sizeof oath, pick(OATH_LINES, OATH_LINES_N), detectionTypeName(dt));
+                    snprintf(oath, sizeof oath, pickL(OATH_LINES, OATH_LINES_RU, OATH_LINES_N), detectionTypeName(dt));
                     base = oath;
                 }
                 // High confidence hits get the line straight — no need
@@ -1295,13 +1680,13 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             break;
         }
         case Event::LOG_OPENED:
-            say(pick(LOG_OPEN_LINES, 2), MIN_BUBBLE_MS);
+            say(pickL(LOG_OPEN_LINES, LOG_OPEN_LINES_RU, 2), MIN_BUBBLE_MS);
             break;
         case Event::LOG_CLEARED:
-            say(pick(LOG_CLEAR_LINES, LOG_CLEAR_N), MIN_BUBBLE_MS);
+            say(pickL(LOG_CLEAR_LINES, LOG_CLEAR_LINES_RU, LOG_CLEAR_N), MIN_BUBBLE_MS);
             break;
         case Event::ROTATED:
-            say(pick(ROTATE_LINES, 3), MIN_BUBBLE_MS);
+            say(pickL(ROTATE_LINES, ROTATE_LINES_RU, 3), MIN_BUBBLE_MS);
             break;
         case Event::BOOTED:
             ensurePrefsLoaded();
@@ -1312,7 +1697,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             if (!s_petPrefs.getBool("onboarded", false)) {
                 startOnboardingInternal();
             } else {
-                say(pick(BOOT_LINES, 2), MIN_BUBBLE_MS);
+                say(pickL(BOOT_LINES, BOOT_LINES_RU, 2), MIN_BUBBLE_MS);
             }
             break;
         case Event::PETTED: {
@@ -1329,11 +1714,13 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
                 if (s_petCount == PET_MILESTONES[i]) hit = PET_MILESTONES[i];
             }
             if (hit > 0) {
-                snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
+                if (isRU()) snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
+                         "Гладь #%lu! Мы почти друзья.", (unsigned long)hit);
+                else          snprintf(s_milestoneBuf, sizeof(s_milestoneBuf),
                          "Pet #%lu! We're basically friends now.", (unsigned long)hit);
                 say(s_milestoneBuf, 5500);
             } else {
-                say(pick(PET_LINES, 20), MIN_BUBBLE_MS);
+                say(pickL(PET_LINES, PET_LINES_RU, 20), MIN_BUBBLE_MS);
             }
             break;
         }
@@ -1342,7 +1729,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             moodUntil = now + tempo(1500);
             s_petFxStart = now;
             s_petFxUntil = now + 2600;
-            say(pick(HELD_LINES, 6), MIN_BUBBLE_MS);
+            say(pickL(HELD_LINES, HELD_LINES_RU, 6), MIN_BUBBLE_MS);
             break;
         }
         case Event::PETTING: {
@@ -1353,7 +1740,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             static uint32_t lastLineAt = 0;
             if (now - lastLineAt > 2000) {
                 lastLineAt = now;
-                say(pick(PETTING_LINES, 6), MIN_BUBBLE_MS);
+                say(pickL(PETTING_LINES, PETTING_LINES_RU, 6), MIN_BUBBLE_MS);
             }
             break;
         }
@@ -1428,7 +1815,7 @@ void toasterNear(int x, int y) {
     s_duckCooldown = now + 30000;
     // A detection outranks a kitchen appliance, so a startle keeps the
     // floor. He still ducks either way; he just does not comment on it.
-    if (mood != Mood::SHOCKED) say(pick(DUCK_LINES, 5), 3000);
+    if (mood != Mood::SHOCKED) say(pickL(DUCK_LINES, DUCK_LINES_RU, 5), 3000);
 }
 
 void setTempo(uint8_t pct) {
@@ -1634,9 +2021,12 @@ void holdBubble(bool held) { s_bubbleHeld = held; }
 static void drawBubble(TFT_eSPI& t, int cx, int topY, const char* text,
                        uint32_t now, bool mayRise = false, int tailX = NO_TAIL) {
     if (s_bubbleHeld) return;
-    Theme::bubbleFontOn(t);
+    // BroWatch RU: font 2 has no Cyrillic, so a RU board sets the bubble in
+    // the font-1 mixedface instead (smaller in the box, but legible).
+    const bool ru = Settings::lang() == 1;
+    if (!ru) Theme::bubbleFontOn(t);
     drawBubbleIn(t, cx, topY, text, now, mayRise, tailX);
-    Theme::bubbleFontOff(t);
+    if (!ru) Theme::bubbleFontOff(t);
 }
 
 
@@ -1644,14 +2034,15 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
                          uint32_t now, bool mayRise, int tailX) {
     t.setTextSize(1);
     t.setTextWrap(false);
+    const bool ru = Settings::lang() == 1;
     int screenW = t.width();
     int maxW = screenW - 16;   // widest a wrapped bubble is allowed to get
-    int tw = t.textWidth(text);
+    int tw = ru ? Theme::textWidthRU(t, text) : t.textWidth(text);
 
     if (tw <= maxW - 10) {
         // Fits on one line -- the original compact box.
         int bw = tw + 10;
-        int bh = Theme::bubbleTextH() + 6;
+        int bh = ru ? 9 + 6 : Theme::bubbleTextH() + 6;
         int bx = cx - bw / 2;
         if (bx + bw > screenW - 2) bx = screenW - 2 - bw;
         if (bx < 2) bx = 2;
@@ -1660,8 +2051,8 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
         t.fillRoundRect(bx, by, bw, bh, 3, Theme::BG);
         t.drawRoundRect(bx, by, bw, bh, 3, Theme::VAPOR_PINK);
         t.setTextColor(Theme::WHITE, Theme::BG);
-        t.setCursor(bx + 5, by + 3 + Theme::bubbleAscent());
-        t.print(text);
+        t.setCursor(bx + 5, by + 3 + (ru ? 0 : Theme::bubbleAscent()));
+        if (ru) Theme::printRU(t, text); else t.print(text);
         lastBubbleX = bx;
         lastBubbleY = by;
         lastBubbleW = bw;
@@ -1681,9 +2072,10 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     if (bx + bw > screenW - 2) bx = screenW - 2 - bw;
 
     char lines[BUBBLE_MAX_LINES][48];
-    uint8_t n = Theme::wrapText(t, text, bw - 10, lines, BUBBLE_MAX_LINES);
+    uint8_t n = ru ? Theme::wrapTextRU(t, text, bw - 10, lines, BUBBLE_MAX_LINES)
+                   : Theme::wrapText(t, text, bw - 10, lines, BUBBLE_MAX_LINES);
 
-    const int lineH = Theme::bubbleTextH() + 1;
+    const int lineH = ru ? 11 : Theme::bubbleTextH() + 1;
     int bh = 3 + (int)n * lineH + 3;
 
     // Asked the same question, and the width answers it: a wrapped box is
@@ -1696,9 +2088,9 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     t.drawRoundRect(bx, by, bw, bh, 3, Theme::VAPOR_PINK);
     t.setTextColor(Theme::WHITE, Theme::BG);
     for (uint8_t i = 0; i < n; i++) {
-        int lw = t.textWidth(lines[i]);
-        t.setCursor(bx + (bw - lw) / 2, by + 3 + i * lineH + Theme::bubbleAscent());
-        t.print(lines[i]);
+        int lw = ru ? Theme::textWidthRU(t, lines[i]) : t.textWidth(lines[i]);
+        t.setCursor(bx + (bw - lw) / 2, by + 3 + i * lineH + (ru ? 0 : Theme::bubbleAscent()));
+        if (ru) Theme::printRU(t, lines[i]); else t.print(lines[i]);
     }
     lastBubbleX = bx;
     lastBubbleY = by;
@@ -1783,7 +2175,7 @@ static void advanceOnboarding() {
         finishOnboarding();
         return;
     }
-    bubbleText  = ONBOARD_LINES[s_onboardStep];
+    bubbleText  = isRU() ? ONBOARD_LINES_RU[s_onboardStep] : ONBOARD_LINES[s_onboardStep];
     bubbleUntil = millis() + ONBOARD_STEP_MS;
 }
 
@@ -1792,7 +2184,7 @@ static void startOnboardingInternal() {
     s_onboardActive = true;
     s_onboardStep   = 0;
     mood            = Mood::IDLE;
-    bubbleText      = ONBOARD_LINES[0];
+    bubbleText      = isRU() ? ONBOARD_LINES_RU[0] : ONBOARD_LINES[0];
     bubbleUntil     = millis() + ONBOARD_STEP_MS;
 }
 
@@ -1894,7 +2286,7 @@ void unlockWolfPelt() {
     refreshOutfitUnlocks();
     mood      = Mood::SHOCKED;
     moodUntil = millis() + tempo(2000);
-    say("...it left me its coat.", 3600);
+    say(Theme::tr("...it left me its coat.", "...оставил мне шубу."), 3600);
 }
 
 bool consumeOutfitUnlock(uint8_t& outIdx) {
@@ -1992,18 +2384,18 @@ static const char* const WEEKEND_LINES[] = {
 
 static const char* pickTimeLine() {
     const uint8_t wd = Clock::weekday();
-    if (Clock::weekend() && random(0, 4) == 0)  return pick(WEEKEND_LINES, 3);
-    if (wd == 1 && random(0, 4) == 0)           return pick(MONDAY_LINES, 2);
-    if (wd == 5 && random(0, 4) == 0)           return pick(FRIDAY_LINES, 2);
+    if (Clock::weekend() && random(0, 4) == 0)  return pickL(WEEKEND_LINES, WEEKEND_LINES_RU, 3);
+    if (wd == 1 && random(0, 4) == 0)           return pickL(MONDAY_LINES, MONDAY_LINES_RU, 2);
+    if (wd == 5 && random(0, 4) == 0)           return pickL(FRIDAY_LINES, FRIDAY_LINES_RU, 2);
     const uint8_t h = Clock::hour();
-    if (h < 5)   return pick(LATE_LINES, 4);
-    if (h < 8)   return pick(EARLY_LINES, 4);
-    if (h < 11)  return pick(MORNING_LINES, 4);
-    if (h < 14)  return pick(LUNCH_LINES, 4);
-    if (h < 17)  return pick(SLUMP_LINES, 4);
-    if (h < 21)  return pick(EVENING_LINES, 4);
-    if (h < 23)  return pick(NIGHT_LINES, 4);
-    return pick(LATE_LINES, 4);
+    if (h < 5)   return pickL(LATE_LINES, LATE_LINES_RU, 4);
+    if (h < 8)   return pickL(EARLY_LINES, EARLY_LINES_RU, 4);
+    if (h < 11)  return pickL(MORNING_LINES, MORNING_LINES_RU, 4);
+    if (h < 14)  return pickL(LUNCH_LINES, LUNCH_LINES_RU, 4);
+    if (h < 17)  return pickL(SLUMP_LINES, SLUMP_LINES_RU, 4);
+    if (h < 21)  return pickL(EVENING_LINES, EVENING_LINES_RU, 4);
+    if (h < 23)  return pickL(NIGHT_LINES, NIGHT_LINES_RU, 4);
+    return pickL(LATE_LINES, LATE_LINES_RU, 4);
 }
 
 // The days that count, and what he says on them. Said once each, ever: the
@@ -2119,7 +2511,7 @@ void unlockParka() {
     refreshOutfitUnlocks();
     mood      = Mood::BOUNCE;
     moodUntil = millis() + tempo(2000);
-    say("somebody was home.", 3600);
+    say(Theme::tr("somebody was home.", "кто-то был дома."), 3600);
 }
 
 void unlockShark() {
@@ -2136,9 +2528,15 @@ void unlockShark() {
             "twice now. rude of us.",
             "same fish. same result.",
         };
+        static const char* const AGAIN_RU[4] = {
+            "снова попался.",
+            "ничему не учится.",
+            "дважды уже. грубо с нас.",
+            "та же рыба. тот же итог.",
+        };
         mood      = Mood::BOUNCE;
         moodUntil = millis() + tempo(1600);
-        say(AGAIN[again++ & 3], 3200);
+        say(isRU() ? AGAIN_RU[again++ & 3] : AGAIN[again++ & 3], 3200);
         return;
     }
     s_sharkUnlocked = true;
@@ -2146,7 +2544,7 @@ void unlockShark() {
     refreshOutfitUnlocks();
     mood      = Mood::BOUNCE;
     moodUntil = millis() + tempo(2000);
-    say("he came back for me.", 3600);
+    say(Theme::tr("he came back for me.", "вернулся за мной."), 3600);
 }
 
 void unlockVoidEye() {
@@ -2157,7 +2555,7 @@ void unlockVoidEye() {
     refreshOutfitUnlocks();
     mood      = Mood::SHOCKED;
     moodUntil = millis() + tempo(2000);
-    say("it blinked first.", 3600);
+    say(Theme::tr("it blinked first.", "моргнул первым."), 3600);
 }
 
 void unlockChromeWing() {
@@ -2168,7 +2566,7 @@ void unlockChromeWing() {
     refreshOutfitUnlocks();
     mood      = Mood::DANCE;
     moodUntil = millis() + tempo(2000);
-    say("caught one!", 3400);
+    say(Theme::tr("caught one!", "поймал одного!"), 3400);
 }
 
 void unlockAllOutfits() {
@@ -2195,7 +2593,7 @@ void unlockAllOutfits() {
     uint32_t now = millis();
     mood      = Mood::BOUNCE;
     moodUntil = now + tempo(2500);
-    say("EVERY OUTFIT UNLOCKED. GO WILD.", 5000);
+    say(Theme::tr("EVERY OUTFIT UNLOCKED. GO WILD.", "ВСЁ ОТКРЫТО. ГУЛЯЙ."), 5000);
     s_legendary      = true;
     s_legendaryUntil = now + 6000;
     for (uint8_t i = 0; i < CONFETTI_N; i++) {
@@ -2230,6 +2628,24 @@ static const char* const SCAN_FOUND_LINES[] = {
     "Scan's done. Take a look.",
 };
 
+// BroWatch RU parallels (same counts; picked by pickL below).
+static const char* const SCAN_STARTED_LINE_RU = "Зажми результат — будет цель.";
+static const char* const SCAN_HIT_LINES_RU[] = {
+    "О, нашёл!",
+    "Есть попадание.",
+    "А вот ещё.",
+};
+static const char* const SCAN_EMPTY_LINES_RU[] = {
+    "...пусто? Хм.",
+    "Тихо сегодня.",
+    "Ни звука.",
+};
+static const char* const SCAN_FOUND_LINES_RU[] = {
+    "Сигналов-то сколько.",
+    "Оживлённый район!",
+    "Скан готов. Гляди.",
+};
+
 // Flavor pools for huntReaction() -- see HuntMoment in squachy.h.
 // STARTED isn't a pool, same reasoning as SCAN_STARTED_LINE above: the
 // one place someone learns there's no compass, just a strength meter
@@ -2262,6 +2678,37 @@ static const char* const HUNT_STALLED_LINES[] = {
     "Still at it? Respect. Or stubbornness.",
     "We've been here a while, chief.",
     "Maybe try a lap around the block?",
+};
+
+// BroWatch RU parallels (same counts; picked by pickL below).
+static const char* const HUNT_STARTED_LINE_RU =
+    "Компаса нет. Крутись телом — слабее значит сзади.";
+static const char* const HUNT_FIRST_SIGNAL_LINES_RU[] = {
+    "О, вот оно!",
+    "Есть сигнал. Пошли.",
+    "Сигнал растёт. Вперёд.",
+};
+static const char* const HUNT_WARMER_LINES_RU[] = {
+    "Теплее!",
+    "Да, туда.",
+    "О, ближе.",
+    "Давай, у тебя выйдет.",
+};
+static const char* const HUNT_COLDER_LINES_RU[] = {
+    "Холоднее. В другую сторону?",
+    "Не-а. Не туда, чемпион.",
+    "Ты уходишь от него.",
+    "Развернись, я в тебя верю.",
+};
+static const char* const HUNT_HOT_LINES_RU[] = {
+    "Ты почти стоишь на нём.",
+    "Так близко и всё ищешь? Смело.",
+    "Глянь вниз. Может, оно внизу.",
+};
+static const char* const HUNT_STALLED_LINES_RU[] = {
+    "Всё ещё тут? Уважаю. Или упрямство.",
+    "Давно тут стоим, шеф.",
+    "Круг по кварталу, может?",
 };
 
 // Flavor pool for the rare idle Mood::WINK flourish -- a brief
@@ -2889,6 +3336,8 @@ static const char* const WATCH_ALERT_LINES[] = {
     "Back again, huh? Persistent little thing.",
 };
 
+
+
 // STARTED's hint bubble gets a grace window nothing else is allowed to
 // interrupt -- BLE can turn up a device within the first second, and a
 // HIT quip immediately overwriting the hint before it's even readable
@@ -2912,7 +3361,7 @@ void scanReaction(ScanMoment moment, uint8_t count) {
             // changes. Longer than his other bubbles get (5500 vs
             // 2200-4500), and MIN_BUBBLE_MS still applies underneath --
             // this is the one line that actually needs to be read.
-            say(SCAN_STARTED_LINE, 5500);
+            say(isRU() ? SCAN_STARTED_LINE_RU : SCAN_STARTED_LINE, 5500);
             s_scanHintUntil = now + SCAN_HINT_GRACE_MS;
             break;
         case ScanMoment::HIT:
@@ -2921,17 +3370,17 @@ void scanReaction(ScanMoment moment, uint8_t count) {
             // Mood still reacts (visual feedback that something was
             // found); only the bubble text is held back so it can't
             // cut the hint off early.
-            if (now >= s_scanHintUntil) say(pick(SCAN_HIT_LINES, 3), 2200);
+            if (now >= s_scanHintUntil) say(pickL(SCAN_HIT_LINES, SCAN_HIT_LINES_RU, 3), 2200);
             break;
         case ScanMoment::DONE_EMPTY:
             mood = Mood::SLEEPY;
             moodUntil = now + tempo(2000);
-            if (now >= s_scanHintUntil) say(pick(SCAN_EMPTY_LINES, 3), 4000);
+            if (now >= s_scanHintUntil) say(pickL(SCAN_EMPTY_LINES, SCAN_EMPTY_LINES_RU, 3), 4000);
             break;
         case ScanMoment::DONE_FOUND:
             mood = Mood::BOUNCE;
             moodUntil = now + tempo(2000);
-            if (now >= s_scanHintUntil) say(pick(SCAN_FOUND_LINES, 3), 4500);
+            if (now >= s_scanHintUntil) say(pickL(SCAN_FOUND_LINES, SCAN_FOUND_LINES_RU, 3), 4500);
             // "A lot" flourish -- same rare party-confetti mechanism
             // milestone detections and the outfit-unlock easter egg
             // use (see unlockAllOutfits() above), not a separate
@@ -2957,7 +3406,7 @@ void huntReaction(HuntMoment moment) {
             // Longer than his other HUNT bubbles (5500 vs 2200-3500),
             // same reasoning as SCAN_STARTED_LINE -- this is the one
             // line that actually needs to be read.
-            say(HUNT_STARTED_LINE, 5500);
+            say(isRU() ? HUNT_STARTED_LINE_RU : HUNT_STARTED_LINE, 5500);
             s_huntHintUntil = now + HUNT_HINT_GRACE_MS;
             break;
         case HuntMoment::FIRST_SIGNAL:
@@ -2966,12 +3415,12 @@ void huntReaction(HuntMoment moment) {
             s_reactType = DetectionType::UNKNOWN;
             mood = Mood::SHOCKED;
             moodUntil = now + tempo(700);
-            if (now >= s_huntHintUntil) say(pick(HUNT_FIRST_SIGNAL_LINES, 3), 2200);
+            if (now >= s_huntHintUntil) say(pickL(HUNT_FIRST_SIGNAL_LINES, HUNT_FIRST_SIGNAL_LINES_RU, 3), 2200);
             break;
         case HuntMoment::WARMER:
             mood = Mood::BOUNCE;
             moodUntil = now + tempo(800);
-            if (now >= s_huntHintUntil) say(pick(HUNT_WARMER_LINES, 4), 2200);
+            if (now >= s_huntHintUntil) say(pickL(HUNT_WARMER_LINES, HUNT_WARMER_LINES_RU, 4), 2200);
             break;
         case HuntMoment::COLDER:
             // Borrows LOOK_AROUND (normally a tracker's "something's
@@ -2981,7 +3430,7 @@ void huntReaction(HuntMoment moment) {
             s_reactType = DetectionType::AIRTAG;
             mood = Mood::SHOCKED;
             moodUntil = now + tempo(900);
-            if (now >= s_huntHintUntil) say(pick(HUNT_COLDER_LINES, 4), 2200);
+            if (now >= s_huntHintUntil) say(pickL(HUNT_COLDER_LINES, HUNT_COLDER_LINES_RU, 4), 2200);
             break;
         case HuntMoment::HOT:
             // BOUNCE, not SHOCKED -- matches the same "found something
@@ -2989,7 +3438,7 @@ void huntReaction(HuntMoment moment) {
             // uses, rather than an alarmed startle.
             mood = Mood::BOUNCE;
             moodUntil = now + tempo(1500);
-            if (now >= s_huntHintUntil) say(pick(HUNT_HOT_LINES, 3), 3500);
+            if (now >= s_huntHintUntil) say(pickL(HUNT_HOT_LINES, HUNT_HOT_LINES_RU, 3), 3500);
             // Same rare party-confetti flourish milestone detections
             // and a big scan haul use -- a successful hunt earns it.
             s_legendary      = true;
@@ -3004,7 +3453,7 @@ void huntReaction(HuntMoment moment) {
         case HuntMoment::STALLED:
             mood = Mood::SLEEPY;
             moodUntil = now + tempo(2000);
-            if (now >= s_huntHintUntil) say(pick(HUNT_STALLED_LINES, 3), 4000);
+            if (now >= s_huntHintUntil) say(pickL(HUNT_STALLED_LINES, HUNT_STALLED_LINES_RU, 3), 4000);
             break;
     }
 }
@@ -3012,7 +3461,7 @@ void huntReaction(HuntMoment moment) {
 void watchAlertReaction() {
     mood = Mood::SHOCKED;
     moodUntil = millis() + tempo(1200);
-    say(pick(WATCH_ALERT_LINES, 4), 3000);
+    say(pickL(WATCH_ALERT_LINES, WATCH_ALERT_LINES_RU, 4), 3000);
 }
 
 // Costume overlays (see squachy.h's Outfits section), drawn last from
@@ -5368,36 +5817,36 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
                 moodUntil  = now + SHOW_STEP_MS + 300u;
                 nextIdleAt = now + SHOW_STEP_MS + 300u;
                 switch (idx) {
-                    case 0:  mood = Mood::IDLE;    say("IDLE + SQUASH", SHOW_STEP_MS); break;
-                    case 1:  mood = Mood::WAVE;    say("WAVE", SHOW_STEP_MS); break;
-                    case 2:  mood = Mood::BOUNCE;  say("BOUNCE", SHOW_STEP_MS); break;
-                    case 3:  mood = Mood::WINK;    say("WINK", SHOW_STEP_MS); break;
+                    case 0:  mood = Mood::IDLE;    say(Theme::tr("IDLE + SQUASH", "СТОЮ + ПРИСЕД"), SHOW_STEP_MS); break;
+                    case 1:  mood = Mood::WAVE;    say(Theme::tr("WAVE", "МАШУ"), SHOW_STEP_MS); break;
+                    case 2:  mood = Mood::BOUNCE;  say(Theme::tr("BOUNCE", "ПРЫГАЮ"), SHOW_STEP_MS); break;
+                    case 3:  mood = Mood::WINK;    say(Theme::tr("WINK", "ПОДМИГНУЛ"), SHOW_STEP_MS); break;
                     case 4:  mood = Mood::STRETCH; s_stretchStart = now;
-                             say("STRETCH + YAWN", SHOW_STEP_MS); break;
+                             say(Theme::tr("STRETCH + YAWN", "ТЯНУСЬ + ЗЕВОК"), SHOW_STEP_MS); break;
                     case 5:  mood = Mood::GUM;     s_gumStart = now;
-                             say("GUM BUBBLE", SHOW_STEP_MS); break;
+                             say(Theme::tr("GUM BUBBLE", "ЖВАЧКА"), SHOW_STEP_MS); break;
                     case 6:  mood = Mood::JUGGLE;
                              // Real types, so the packets are the colours
                              // they would be if these had just been caught.
                              s_recentTypes[0] = DetectionType::AIRTAG;
                              s_recentTypes[1] = DetectionType::FLOCK;
                              s_recentTypes[2] = DetectionType::CAMERA;
-                             say("PACKET JUGGLE", SHOW_STEP_MS); break;
-                    case 7:  mood = Mood::DANCE;   say("DANCE", SHOW_STEP_MS); break;
+                             say(Theme::tr("PACKET JUGGLE", "ЖОНГЛИРУЮ"), SHOW_STEP_MS); break;
+                    case 7:  mood = Mood::DANCE;   say(Theme::tr("DANCE", "ТАНЦУЮ"), SHOW_STEP_MS); break;
                     case 8:  mood = Mood::WALK; s_walkStart = now; s_walkDir = 1;
-                             s_showWB = 1; say("WALK: SNIFF", SHOW_STEP_MS); break;
-                    case 9:  s_showWB = 2; say("WALK: LOOK UP", SHOW_STEP_MS); break;
-                    case 10: s_showWB = 3; say("WALK: SCRATCH", SHOW_STEP_MS); break;
+                             s_showWB = 1; say(Theme::tr("WALK: SNIFF", "ИДУ: НЮХАЮ"), SHOW_STEP_MS); break;
+                    case 9:  s_showWB = 2; say(Theme::tr("WALK: LOOK UP", "ИДУ: ГЛЯЖУ"), SHOW_STEP_MS); break;
+                    case 10: s_showWB = 3; say(Theme::tr("WALK: SCRATCH", "ИДУ: ЧЕШУСЬ"), SHOW_STEP_MS); break;
                     case 11: s_showWB = -1; mood = Mood::SHOCKED;
                              s_reactType = DetectionType::AXON;
                              s_dtStart = now; s_recoilK = 1.0f;
-                             say("DOUBLE-TAKE + RECOIL", SHOW_STEP_MS); break;
-                    case 12: mood = Mood::IDLE; say("BINOCULARS", SHOW_STEP_MS); break;
+                             say(Theme::tr("DOUBLE-TAKE + RECOIL", "ОГЛЯНУЛСЯ + ОТШАТНУЛСЯ"), SHOW_STEP_MS); break;
+                    case 12: mood = Mood::IDLE; say(Theme::tr("BINOCULARS", "БИНОКЛЬ"), SHOW_STEP_MS); break;
                     case 13: mood = Mood::IDLE; s_duckCooldown = 0;
                              s_duckUntil = now + 900u;
-                             say("TOASTER DUCK", SHOW_STEP_MS); break;
-                    case 14: mood = Mood::IDLE; say("PICK UP + DROP", SHOW_STEP_MS); break;
-                    default: mood = Mood::SLEEPY; say("NAP", SHOW_STEP_MS); break;
+                             say(Theme::tr("TOASTER DUCK", "ТОСТЕР, ЛОЖИСЬ"), SHOW_STEP_MS); break;
+                    case 14: mood = Mood::IDLE; say(Theme::tr("PICK UP + DROP", "ВЗЯЛ + БРОСИЛ"), SHOW_STEP_MS); break;
+                    default: mood = Mood::SLEEPY; say(Theme::tr("NAP", "СПЛЮ"), SHOW_STEP_MS); break;
                 }
             }
             if (s_showIdx == 12) s_binoc = true;
@@ -5456,7 +5905,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         !s_visiting &&                      // he is in the middle of a chat
 #endif
         now >= s_nextWatchAt && now >= bubbleUntil) {
-        say(pick(WATCHING_LINES, WATCHING_N), 4000);
+        say(pickL(WATCHING_LINES, WATCHING_LINES_RU, WATCHING_N), 4000);
         s_nextWatchAt = now + WATCH_EVERY_MS;
         // Hold the random idle roll off so the two do not stack into one
         // bubble replacing another mid-read.
@@ -5488,7 +5937,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
             // re-enters itself below rather than popping in and out
             // every idle cycle, but only up to NAP_DURATION_MS total.
             if (s_napStart == 0) s_napStart = now;
-            say(pick(SLEEPY_LINES, 4), 6000);
+            say(pickL(SLEEPY_LINES, SLEEPY_LINES_RU, 4), 6000);
             mood = Mood::SLEEPY;
             moodUntil = now + tempo(8000);
             nextIdleAt = now + tempo(8000);
@@ -5501,7 +5950,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
             // Waking up used to snap straight to a wave -- the one
             // transition in his whole state machine with no transition
             // at all. STRETCH gives it an exit.
-            say(pick(STRETCH_LINES, 4), MIN_BUBBLE_MS);
+            say(pickL(STRETCH_LINES, STRETCH_LINES_RU, 4), MIN_BUBBLE_MS);
             mood = Mood::STRETCH;
             s_stretchStart = now;
             moodUntil = now + STRETCH_MS;
@@ -5509,7 +5958,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         } else if (random(0, 250) == 0) {
             // Rare shimmering flourish — see drawBody's fur-color swap
             // — escalated into a full rainbow-wash-and-confetti moment.
-            say(pick(PARTY_LINES, 4), 5000);
+            say(pickL(PARTY_LINES, PARTY_LINES_RU, 4), 5000);
             mood = Mood::BOUNCE;
             moodUntil = now + tempo(2000);
             s_legendary = true;
@@ -5536,14 +5985,14 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
             // activity so it can only appear when there is genuinely
             // something to show -- the one flourish here that carries
             // information rather than just character.
-            say(pick(JUGGLE_LINES, 4), 3600);
+            say(pickL(JUGGLE_LINES, JUGGLE_LINES_RU, 4), 3600);
             mood = Mood::JUGGLE;
             moodUntil = now + tempo(3600);
             nextIdleAt = now + tempo(14000) + random(0, 18000);
         } else if (random(0, 7) == 0) {
             // Gum. Means nothing, which is the argument for it: every
             // other thing he does is a reaction to the radio.
-            say(pick(GUM_LINES, 4), 3000);
+            say(pickL(GUM_LINES, GUM_LINES_RU, 4), 3000);
             mood = Mood::GUM;
             s_gumStart = now;
             moodUntil = now + GUM_GROW_MS + GUM_HOLD_MS + GUM_POP_MS + 400;
@@ -5554,21 +6003,21 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
             // SLEEPY_AFTER_MS -- ten full minutes of being ignored --
             // before it will even start, so the pose was effectively
             // unreachable on a device anyone was actually looking at.
-            say(pick(STRETCH_LINES, 4), 3000);
+            say(pickL(STRETCH_LINES, STRETCH_LINES_RU, 4), 3000);
             mood = Mood::STRETCH;
             s_stretchStart = now;
             moodUntil = now + STRETCH_MS;
             nextIdleAt = now + tempo(12000) + random(0, 16000);
         } else if (random(0, 8) == 0) {
             // A little dance break -- see drawBody()'s DANCE arm case.
-            say(pick(DANCE_LINES, 4), 3200);
+            say(pickL(DANCE_LINES, DANCE_LINES_RU, 4), 3200);
             mood = Mood::DANCE;
             moodUntil = now + tempo(2400);
             nextIdleAt = now + tempo(9000) + random(0, 13000);
         } else if (random(0, 6) == 0) {
             // A little wander away from center and back — see the
             // bodyCx computation below and the leg-cycle in drawBody().
-            say(pick(WALK_LINES, 4), MIN_BUBBLE_MS);
+            say(pickL(WALK_LINES, WALK_LINES_RU, 4), MIN_BUBBLE_MS);
             mood = Mood::WALK;
             moodUntil = now + WALK_DURATION_MS;
             s_walkStart = now;
@@ -5577,7 +6026,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         } else if (random(0, 12) == 0) {
             // A brief fourth-wall wink -- see drawBody()'s Mood::WINK
             // branch for the actual pose (one shut lens + a sparkle).
-            say(pick(WINK_LINES, 4), MIN_BUBBLE_MS);
+            say(pickL(WINK_LINES, WINK_LINES_RU, 4), MIN_BUBBLE_MS);
             mood = Mood::WINK;
             moodUntil = now + tempo(1800);
             nextIdleAt = now + tempo(9000) + random(0, 13000);
@@ -5589,9 +6038,9 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
             // bored/encourage/idle mix the rest of the time.
             bool haveHistory = s_cachedLifetimeTotal > 0;
             if (s_activityHeat >= 50.0f && random(0, 2) == 0) {
-                say(pick(ALERT_MOOD_LINES, 4), MIN_BUBBLE_MS);
+                say(pickL(ALERT_MOOD_LINES, ALERT_MOOD_LINES_RU, 4), MIN_BUBBLE_MS);
             } else if (s_activityHeat < 15.0f && longIdle && random(0, 2) == 0) {
-                say(pick(RELAXED_MOOD_LINES, 4), MIN_BUBBLE_MS);
+                say(pickL(RELAXED_MOOD_LINES, RELAXED_MOOD_LINES_RU, 4), MIN_BUBBLE_MS);
             } else if (Clock::trusted() && random(0, 3) == 0) {
                 // The hour, the day of the week: what a clock is for.
                 say(pickTimeLine(), MIN_BUBBLE_MS);
@@ -5602,13 +6051,13 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
                 // find in it -- see pickBackgroundLine().
                 say(pickBackgroundLine(), MIN_BUBBLE_MS);
             } else if (longIdle && random(0, 3) == 0) {
-                say(pick(BORED_LINES, 4), MIN_BUBBLE_MS);
+                say(pickL(BORED_LINES, BORED_LINES_RU, 4), MIN_BUBBLE_MS);
             } else if (random(0, 5) == 0) {
-                say(pick(NOIR_LINES, NOIR_LINES_N), MIN_BUBBLE_MS);
+                say(pickL(NOIR_LINES, NOIR_LINES_RU, NOIR_LINES_N), MIN_BUBBLE_MS);
             } else if (random(0, 4) == 0) {
-                say(pick(ENCOURAGE_LINES, 8), MIN_BUBBLE_MS);
+                say(pickL(ENCOURAGE_LINES, ENCOURAGE_LINES_RU, 8), MIN_BUBBLE_MS);
             } else {
-                say(pick(IDLE_LINES, 18), MIN_BUBBLE_MS);
+                say(pickL(IDLE_LINES, IDLE_LINES_RU, 18), MIN_BUBBLE_MS);
             }
             mood = random(0, 2) ? Mood::WAVE : Mood::BOUNCE;
             moodUntil = now + tempo(1200);

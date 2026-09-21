@@ -57,7 +57,7 @@ RawScanTap uiRawScanHitTest(int x, int y, int screenW, int screenH) {
 static void drawBottomBar(TFT_eSPI& t, int w, int h, bool isBle) {
     int bx, by, bw, bh, ax, ay, aw, ah;
     bottomButtonRects(w, h, bx, by, bw, bh, ax, ay, aw, ah);
-    Theme::drawButton(t, bx, by, bw, bh, "[ BACK ]", false);
+    Theme::drawButton(t, bx, by, bw, bh, Theme::tr("[ BACK ]", "[ НАЗАД ]"), false);
     Theme::drawButton(t, ax, ay, aw, ah, isBle ? "[ WIFI ]" : "[ BLE ]", false);
 }
 
@@ -117,10 +117,10 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     t.setTextSize(1);
     t.setTextWrap(false);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    const char* q = "TRACK THIS TARGET?";
-    int qw = t.textWidth(q);
+    const char* q = Theme::tr("TRACK THIS TARGET?", "СЛЕДИТЬ ЗА ЦЕЛЬЮ?");
+    int qw = Theme::textWidthRU(t, q);
     t.setCursor(px + (pw - qw) / 2, py + 8);
-    t.print(q);
+    Theme::printRU(t, q);
 
     t.setTextColor(Theme::WHITE, Theme::BG);
     int lw = t.textWidth(label);
@@ -132,11 +132,11 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     // Toggling, so the button names the next tap: "WATCH" on something
     // already being watched would be a lie, and pressed state is how every
     // other button in this app says "this one is on".
-    Theme::drawButton(t, wX, wY, wW, wH, watched ? "UNWATCH" : "WATCH", watched);
+    Theme::drawButton(t, wX, wY, wW, wH, watched ? Theme::tr("UNWATCH", "НЕ СЛЕДИТЬ") : Theme::tr("WATCH", "СЛЕДИТЬ"), watched);
     // Toggles like WATCH beside it -- see that button's comment.
-    Theme::drawButton(t, huX, huY, huW, huH, hunted ? "STOP HUNT" : "HUNT", hunted);
-    Theme::drawButton(t, igX, igY, igW, igH, "IGNORE", false);
-    Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false);
+    Theme::drawButton(t, huX, huY, huW, huH, hunted ? Theme::tr("STOP HUNT", "ХВАТИТ") : Theme::tr("HUNT", "ОХОТА"), hunted);
+    Theme::drawButton(t, igX, igY, igW, igH, Theme::tr("IGNORE", "ИГНОР"), false);
+    Theme::drawButton(t, cnX, cnY, cnW, cnH, Theme::tr("CANCEL", "ОТМЕНА"), false);
 }
 
 // Shared by uiRawScanTick() (drawing) and uiRawScanRowAt() (hit
@@ -267,19 +267,20 @@ switch (Settings::background()) {
         uint16_t col = Theme::blend(Theme::GREEN, Theme::CYAN, (uint16_t)(pulse * 200.0f));
         t.setTextSize(3);
         t.setTextColor(col, Theme::BG);
-        const char* msg = "SCANNING...";
-        int mw = t.textWidth(msg);
+        const char* msg = Theme::tr("SCANNING...", "СКАНИРУЮ...");
+        int mw = Theme::textWidthRU(t, msg);
         t.setCursor((w - mw) / 2, bodyTop + bodyH / 3);
-        t.print(msg);
+        Theme::printRU(t, msg);
 
         if (isBle) {
-            char sub[24];
-            snprintf(sub, sizeof(sub), "%u found so far", (unsigned)eng.rawBleCount());
+            char sub[32];
+            if (Settings::lang() == 1) snprintf(sub, sizeof(sub), "нашёл: %u", (unsigned)eng.rawBleCount());
+            else                       snprintf(sub, sizeof(sub), "%u found so far", (unsigned)eng.rawBleCount());
             t.setTextSize(1);
             t.setTextColor(Theme::CYAN, Theme::BG);
-            int sw = t.textWidth(sub);
+            int sw = Theme::textWidthRU(t, sub);
             t.setCursor((w - sw) / 2, bodyTop + bodyH / 3 + 35);
-            t.print(sub);
+            Theme::printRU(t, sub);
         }
 
         drawBottomBar(t, w, h, isBle);
@@ -292,10 +293,10 @@ switch (Settings::background()) {
     if (count == 0) {
         t.setTextSize(3);
         t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
-        const char* msg = "NOTHING FOUND";
-        int mw = t.textWidth(msg);
+        const char* msg = Theme::tr("NOTHING FOUND", "ПУСТО");
+        int mw = Theme::textWidthRU(t, msg);
         t.setCursor((w - mw) / 2, bodyTop + bodyH / 3);
-        t.print(msg);
+        Theme::printRU(t, msg);
 
         drawBottomBar(t, w, h, isBle);
         if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted);
@@ -360,10 +361,12 @@ switch (Settings::background()) {
             t.setTextSize(1);
             t.setTextColor(Theme::WHITE, Theme::BG);
             char line[24];
-            snprintf(line, sizeof(line), "CH%u  %s", (unsigned)eng.rawWifiChannel(idx),
+            if (Settings::lang() == 1) snprintf(line, sizeof(line), "КАН%u  %s", (unsigned)eng.rawWifiChannel(idx),
+                     eng.rawWifiOpen(idx) ? "ОТКРЫТ" : "ЗАКРЫТ");
+            else                       snprintf(line, sizeof(line), "CH%u  %s", (unsigned)eng.rawWifiChannel(idx),
                      eng.rawWifiOpen(idx) ? "OPEN" : "LOCKED");
             t.setCursor(4, y + detailY);
-            t.print(line);
+            Theme::printRU(t, line);
 
             t.setTextColor(Theme::VAPOR_PURPLE, Theme::BG);
             char rssi[12];
