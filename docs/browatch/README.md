@@ -12,6 +12,7 @@
 - [03 — Веб-мост](03-web-most.md) — шлюз USB/Serial + `browatch-web` на порту 40400.
 - [04 — Android](04-android.md) — `browatch-app` (Native Kotlin + BLE).
 - [05 — Ребренд](05-rebrand.md) — BroWatch/BroMesh: что переименовано, что оставлено для совместимости.
+- [06 — Платы](06-platy.md) — инвентарь: какая плата каким env шьётся, MAC, шпаргалка по прошивке.
 
 ## Связанные репозитории
 
