@@ -1,486 +1,215 @@
 # BroWatch
 
-> Русскоязычный форк [SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD): интерфейс на русском (переключатель `LANGUAGE`), шаблоны сообщений и болтовня Сквачи адаптированы, сеть в интерфейсе зовётся BroMesh. Wire-протокол и фразы совместимы с оригиналом.
+**Карманный дозор за «умной» слежкой — и рация для своих.**
+Плата за пятнадцать долларов, которая слышит камеры, трекеры и дроны вокруг тебя,
+а ещё переговаривается с такими же платами рядом: без интернета, аккаунтов и серверов.
 
-> Surveillance-device detector for the ESP32-2432S028R ("Cheap Yellow Display").
-
-BroWatch sniffs the 2.4 GHz airwaves for known wireless signatures
-of Flock Safety cameras, Axon body cameras, recording glasses, card
-skimmers, AirTags, drones, proximity beacons and pentest hardware. It runs
-standalone on a bare CYD board — no PC, no extras, just plug it into USB.
-
-The UI is a vaporwave-themed take on the **SquachWare** aesthetic: matrix
-digital rain, Squachy the mascot, full-screen dramatic ALERT overlays, and
-the glitchy BroWatch wordmark.
+> **BroWatch — русскоязычный форк [SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD).**
+> Мы перевели интерфейс и всю болтовню персонажа, переименовали сеть в **BroMesh**,
+> добавили реакции на входящие сообщения и продолжаем развивать проект дальше.
+> Протокол связи, кодовые фразы и таблицы сигнатур совместимы с оригиналом:
+> наши платы слышат оригинальные, а оригинальные — наши.
 
 <p align="center">
-  <a href="https://squachwatch.com/emulator/" title="Drive it in your browser">
-    <img src="docs/demo.gif" width="640"
-         alt="BroWatch booting, Squachy in the VOID EYE costume on the synthwave sunset, a Flock camera detection card, his reaction to it, and a visiting BroWatch walking on to say hello">
-  </a>
+  <img src="docs/demo.gif" width="640"
+       alt="BroWatch загружается, Сквачи в костюме VOID EYE на синтвейв-закате, карточка детекции камеры Flock, его реакция, и заходящий в гости второй BroWatch">
 </p>
 
 <p align="center">
-  <b>That is the firmware itself, not a mockup.</b><br>
-  Every frame above was rendered by the same C++ that runs on the board,
-  compiled for a PC.<br>
-  <a href="https://squachwatch.com/emulator/"><b>Click it to drive it in your browser &rarr;</b></a>
+  <b>Это сама прошивка, а не мокап.</b><br>
+  Каждый кадр выше отрисован тем же C++, что крутится на плате, только собранным под ПК.
 </p>
 
-## What it detects
+---
 
-| Type | What | How |
+## Зачем это нужно
+
+Город обвешан камерами, которые читают номера, узнают лица и слушают эфир.
+Трекеры в рюкзаке, «умные» очки на прохожем, дрон над двором — всё это вещает,
+и почти всё это можно услышать, если знать, что искать.
+
+BroWatch — не про то, чтобы следить за людьми. Он про то, чтобы **видеть, кто смотрит на тебя**,
+и чтобы у твоей команды была связь, которую не выключат снаружи.
+
+Отсюда две идеи, на которых держится проект:
+
+- **Прозрачность снизу.** Мы не ждём, пока кто-то расскажет, как устроена слежка, — мы слушаем эфир
+  и показываем это на экране. Сигнатуры открыты, каждую можно проверить по реестру IEEE, а не
+  верить на слово.
+- **Горизонтальные связи.** Ни центра, ни сервера, ни аккаунта. Платы договариваются фразой из пяти
+  слов и работают как одноранговая сеть. Знание не собирается в одном месте, потому что места нет.
+
+Это инструмент для исследователя, игрушка для компании друзей и хороший повод собраться —
+всё в одной плате.
+
+Подробнее про то, зачем мы это делаем, — в [docs/IDEOLOGIYA.md](docs/IDEOLOGIYA.md).
+Как этим пользоваться, шаг за шагом, — в [docs/GAJD.md](docs/GAJD.md).
+
+## Что умеет
+
+### Детектор: 17 типов целей
+
+Плата пассивно слушает Wi-Fi и Bluetooth 2.4 ГГц и сверяет пакеты с таблицами сигнатур.
+Ничего не передаёт, пока ты сам не разрешишь.
+
+| Тип | Что ищет | Как |
 |---|---|---|
-| `FLOCK` | Flock Safety ALPR cameras | 29 WiFi OUI prefixes + BLE name + company ID `0x09C8` |
-| `AXON` | Axon body cameras, TASERs, LE equipment | 3 WiFi OUI + SSID prefixes `AB2-`/`AB3-`/`AB4-`/`AXON-` |
-| `META` | Camera glasses — Ray-Ban Meta, Snap Spectacles | BLE service UUID `0xFD5F` + Meta / Luxottica / Snap company IDs |
-| `SKIMMER` | Bluetooth card skimmers (HC-05/06/03, RN42, BT04-A) | BT Classic name match + SPP UUID `0x1101` + 3 OUI |
-| `RAVEN` | Raven gunshot detector | Service UUIDs `0x3100`–`0x3500` |
-| `AIRTAG` | Apple AirTag / Find My trackers | Company ID `0x004C` + Find My payload check |
-| `DRONE` | Remote ID drones | Service UUID `0xFFFA`, then the ASTM F3411 message **decoded** — aircraft position, altitude, serial, and the operator's location |
-| `ALPR` | Motorola Solutions / Genetec plate readers | 6 WiFi OUI |
-| `CAMERA` | Generic / covert IP cameras | 17 WiFi OUI (Wyze, Amazon, Tuya, Verkada, Avigilon, Axis, …) |
-| `SAMSUNG_TAG` | Samsung Galaxy SmartTag / SmartTag+ | BLE service UUID `0xFD5A` |
-| `GOOGLE_TAG` | Google Find My Device trackers (Chipolo, Pebblebee, Moto Tag) | BLE service UUID `0xFEAA` |
-| `TILE` | Tile BLE trackers | BLE service UUID `0xFEED` / `0xFEEC` |
-| `RING` | Ring doorbells / cameras | 15 WiFi OUI (Ring LLC's registered block + Amazon's) |
-| `DEAUTH` | WiFi deauthentication floods | Rate-detected burst, not a signature |
-| `EVILTWIN` | Rogue / spoofed access points | One SSID beaconing from two BSSIDs that disagree about encryption |
-| `IBEACON` | Retail proximity beacons | Exact Apple header `4C 00 02 15` — **off by default**, see below |
-| `HACKER` | Flipper Zero, Pwnagotchi, WiFi Pineapple, ESP deauthers | Flipper's service UUIDs `0x3081`–`0x3083`, company ID `0x0E29` and OUI `0C:FA:22`; the Pwnagotchi's own beacon payload; `Pineapple_` and `pwned` SSIDs |
+| `FLOCK` | камеры Flock Safety, читающие номера | 29 префиксов Wi-Fi OUI + BLE-имя + company ID `0x09C8` |
+| `AXON` | боди-камеры Axon, TASER, полицейское железо | 3 OUI + префиксы SSID `AB2-`/`AB3-`/`AB4-`/`AXON-` |
+| `META` | очки с камерой: Ray-Ban Meta, Snap Spectacles | BLE-сервис `0xFD5F` + Meta / Luxottica / Snap |
+| `SKIMMER` | Bluetooth-скиммеры на картах | имя HC-03/05/06, RN42, BT04-A + SPP `0x1101` |
+| `RAVEN` | детектор выстрелов Raven | service UUID `0x3100`–`0x3500` |
+| `AIRTAG` | Apple AirTag и Find My | company ID `0x004C` + проверка payload |
+| `DRONE` | дроны с Remote ID | `0xFFFA`, дальше **декод ASTM F3411**: позиция, высота, серийник и точка оператора |
+| `ALPR` | камеры Motorola / Genetec | 6 OUI |
+| `CAMERA` | обычные и скрытые IP-камеры | 17 OUI (Wyze, Amazon, Tuya, Verkada, Axis…) |
+| `SAMSUNG_TAG` | Galaxy SmartTag / SmartTag+ | `0xFD5A` |
+| `GOOGLE_TAG` | трекеры Find My Device (Chipolo, Pebblebee, Moto Tag) | `0xFEAA` |
+| `TILE` | трекеры Tile | `0xFEED` / `0xFEEC` |
+| `RING` | звонки и камеры Ring | 15 OUI |
+| `DEAUTH` | флуд деаутентификации Wi-Fi | ловится по частоте, а не по сигнатуре |
+| `EVILTWIN` | поддельные точки доступа | один SSID с двух BSSID и разным шифрованием |
+| `IBEACON` | proximity-маяки магазинов | заголовок `4C 00 02 15`, **выключен по умолчанию** |
+| `HACKER` | Flipper Zero, Pwnagotchi, Pineapple, ESP-деаутеры | UUID `0x3081`–`0x3083`, company `0x0E29`, OUI `0C:FA:22`, SSID `Pineapple_`/`pwned` |
 
-### Confidence is per signature, not per type
+Совпадение — полноэкранная карточка **ALERT** с вендором, именем устройства, MAC и шкалой сигнала.
+Тап — закрыть; `SNOOZE` глушит до перезагрузки, `IGNORE` — навсегда.
 
-Every hardware prefix in the firmware was checked against the IEEE registry
-rather than against other detectors. Of 76 rows: **32 High, 4 Medium, 40
-Low**.
+**Достоверность считается по сигнатуре, а не по типу.** Из 76 строк: 32 High, 4 Medium, 40 Low.
+Особенно это видно на `FLOCK`: из 29 префиксов только один зарегистрирован за Flock Safety,
+остальные — обычные Espressif и Liteon, из которых камеры собраны. Поэтому `ALERT FILTER` — это порог,
+и на High проходящий мимо ESP32 попадёт в журнал, но не займёт экран.
 
-That grading matters most on `FLOCK`, where exactly **one** of 29 prefixes is
-registered to Flock Safety and the rest are the generic Espressif and Liteon
-parts they build on — real evidence, shared with every dev board on earth.
-`ALERT FILTER` is a minimum-confidence gate, so setting it to High keeps a
-passing ESP32 in the log without taking over the screen.
+### BroMesh: связь без интернета
 
-The audit also removed `00:0E:58`, which sat here for eleven releases
-labelled "Vigilant" and is registered to **Sonos**. Every speaker in range
-was being logged as a plate reader.
+Две BroWatch в зоне видимости замечают друг друга, и каждая рисует Сквачи соседа как гостя.
+Он заходит, они дают друг другу пять, болтают о погоде и о том, что поймали за день, а иногда
+сами разыгрывают одну из тридцати с лишним сценок — бой тортами, бросок монетки, селфи, танцевальная
+дуэль, — причём на обоих экранах сценка идёт одинаково. Уходит он тогда, когда уйдёт вторая плата.
+Костюм, очки и имя гостя приехали по воздуху в двадцатибайтовом BLE-объявлении.
 
-`IBEACON` ships switched off — not a judgement about importance, one about
-volume. One shop can put more beacons in range than this device would
-otherwise see all week. It is one tap away in `DETECTION FILTER`.
+Это намеренно **не сеть**: без сопряжения, соединения, подтверждений и повторов. Просто broadcast
+«я здесь», и любой в радиусе может его поймать или не поймать. Свой среди своих распознаётся раньше,
+чем до сигнатур доберётся сканер, поэтому две BroWatch никогда не сработают друг на друга.
 
-## Hardware
+`DETECT` — только приём: ты видишь чужих Сквачи и ничего не излучаешь. `TRANSMIT` — та половина,
+что делает тебя видимым, и перед ней стоит полноэкранное предупреждение: что именно уходит,
+как часто и что сможет восстановить человек со сканером (постоянный адрес — это след из твоих
+перемещений). Ничего не отправится, пока ты это не прочитаешь и не нажмёшь YES.
 
-- **ESP32-2432S028R** ("Cheap Yellow Display" / CYD) — about $15.
-  Built-in 320×240 ILI9341 TFT, XPT2046 resistive touch, and an
-  onboard microSD card slot.
+**Сообщения.** Две платы с общей фразой из пяти слов переписываются: одна из готовых строк или
+до 48 символов, набранных на клавиатуре. Приходит как **красный** пузырь с именем отправителя —
+его не спутать с болтовнёй Сквачи. Всё шифруется AES-128-CCM, ключ растягивается из фразы через
+PBKDF2 (20 000 итераций — те самые три секунды «зависания» при вводе фразы). Видно, что ты что-то
+отправил и когда; что именно — нет.
 
-That's it. No buzzer, no GPS, no extra modules. The CYD is the
-whole device.
+**Реакции на сообщение.** Под входящим пузырём (и под письмом в режиме часов) есть два значка:
+палец вверх и палец вниз. Нажал — и на плату отправителя уходит короткое сообщение-ответ,
+прямо из этого экрана, не открывая отдельную форму. Это наш форк целиком и полностью:
+в оригинале такого нет.
 
-## Web Flash
+**Сквад.** Список всех, кто когда-либо был слышен с твоей фразой, до шестнадцати, и он переживает
+перезагрузку. `ADD TO SQUAD` добавляет соседа без набора фразы: обе платы показывают одни и те же
+четыре цифры, вы сверяете их вслух, и фраза уходит под одноразовым ключом (X25519). Третья плата
+посередине не сможет притвориться каждой из вас — цифры на экранах не сойдутся.
 
-No build tools, no IDE, no cloning anything — flash a board straight
-from your browser:
+**Охота на лиса.** `HUNT` нацеливает шкалу сигнала на выбранную плату: компаса нет, поэтому
+ты поворачиваешься корпусом и идёшь туда, где стрелка не падает. Два замера подряд на расстоянии
+руки — и шкала говорит `CAUGHT!`.
 
-**[https://squachwatch.com/](https://squachwatch.com/)**
+### Режим часов, таймер и светодиод
 
-Works in Firefox, Chrome, Edge, or Brave on desktop. Pick your board (2.8" CYD,
-AWOK 2.4" or RL Phantom 2.4"), plug in, click Connect & Install, done.
+**DESK MODE** превращает плату в то, что лежит рядом с клавиатурой: твой фон, дата и время крупными
+цифрами, Сквачи внизу и фокус-таймер. `FOCUS 25` запускает двадцать пять минут: сцена гаснет,
+Сквачи замирает, а когда время выходит — светодиод на спине зеленеет и начинается пятиминутный
+перерыв. Детектор при этом продолжает работать: находка показывается маленькой карточкой, а письмо
+от сквада встаёт на место Сквачи — полароид с портретом отправителя, его именем на полях и временем.
 
-## Build
+RGB-светодиод на спине рассказывает, что происходит, не глядя на экран: медленное «дыхание» в цвете
+темы, когда всё тихо; вспышки в цвете находки, пока висит карточка; двойной блинк на непрочитанное
+сообщение; вспышка, когда заходит свой.
 
-Three steps:
+### Костюмы
 
-1. Install [PlatformIO](https://platformio.org/) (CLI or VS Code extension).
-2. Clone the repo:
-   ```sh
-   git clone https://github.com/teletonn/BroWatch
-   cd BroWatch
-   ```
-3. Build and flash:
-   ```sh
-   pio run -t upload
-   ```
-
-The first build pulls the TFT_eSPI, XPT2046, and NimBLE-Arduino
-libraries; after that it's incremental.
-
-A full beginner-friendly walkthrough is in [docs/BUILD.md](docs/BUILD.md).
-
-## Usage
-
-1. Plug the CYD into USB-C.
-2. The splash runs for a second and a half, stamped with the build's own
-   version (from `git describe`, so a working-tree build says so).
-3. The main screen appears: your chosen background, Squachy, and live
-   per-type counters. He says something reassuring every thirty seconds.
-4. The three soft buttons at the bottom:
-   - **`[ SCAN ]`** — return to the main (idle) screen.
-   - **`[ LOG ]`** — open the rolling 200-entry detection log.
-   - **`[ DESK ]`** — desk mode: the big clock, with Squachy under it.
-   - On the LOG screen the third button is **`[ CLR ]`** — wipe the log and return.
-5. When something is detected, the device **flashes a full-screen ALERT**:
-   a header strip in the detection's own colour with the type in the
-   Bangers face, a data plate with the vendor, the device's own name where
-   it broadcasts one, its MAC and a signal meter, and a gauge showing what
-   was found with the instrument grid over it. Tap anywhere to dismiss
-   early, or it clears itself after 60 seconds.
-
-If a microSD card is present, every detection is also appended to
-`squachwatch-<day>.log` (CSV: `ts,type,rssi,mac,channel,vendor,ssid`).
-
-### The clock
-
-There is no GPS, and the board never joins a network to scan. But it does
-join one for the update check at boot, and for UPDATE OVER WIFI, and the
-clock rides along: one NTP round trip while the radio is up anyway, about a
-second. The zone is yours to pick, and there are three ways: the web
-flasher's **Set Time & Zone** button sends this computer's clock and zone
-down the same cable right after flashing; the first time the clock is set
-with no zone chosen, a card on the main screen asks, with the live time in
-the zone it shows so you can see when it's right; and **TIME ZONE** on the
-DESK MODE page changes it later. Daylight saving takes care of itself. Without
-a saved network the clock can still be set over serial with a `TIME <epoch>`
-line at 2,000,000 baud, and `ZONE US EASTERN` sets the zone the same way.
-And every squad hello carries the sender's clock and zone, so a board with
-neither takes them from the first member it hears: update one board by USB
-and the rest of the squad know the time within a minute of meeting it.
-Until the clock is set, timestamps count from boot. The board keeps a
-note of the time in flash every ten minutes, and a cold boot with no clock
-starts from that note: not the right time, since nobody knows how long the
-power was off, but never earlier than the note, which keeps the day count
-honest. Such a clock is used for the date only; the LOG times, the night
-tag, the hour lines and the desk digits wait for a real answer.
-
-Once it is set, the LOG shows the real time of each catch (or the date, for
-one from another day); the alert card says **AT NIGHT** for anything caught
-between eleven and five, and Squachy's line sharpens to match; he says hello
-once a day with the date in it, knows whether it's Monday, lunch, the three
-o'clock slump or two in the morning, and counts the days since the board
-first knew the date: a week, a month, a hundred days, a year.
-
-**BANTER** on the APPEARANCE page sets how much he talks when nothing is
-happening: IMPORTANT (idle chatter off; he still speaks for a catch, a
-message, a newer release and the daily hello), LESS, NORMAL or MORE. The
-set pieces two Squachys act out follow the same setting.
-
-### Desk mode
-
-<p align="center">
-  <img src="docs/desk-mode.gif" width="640"
-       alt="Desk mode: the date and time in big digits over the fire scene with Squachy talking below; a catch appears as a small card; a squad message drops out from behind the clock with the sender's polaroid; the focus timer starts; the LOG shows real times; the time zone card asks once.">
-</p>
-
-**DESK MODE** in Settings turns the board into the thing beside the
-keyboard: your background, the date and the time in big seven-segment
-digits on a plate over it, Squachy underneath doing what he does, and a
-focus timer. **FOCUS 25** starts twenty-five minutes: the scene clears, he
-goes still and quiet, and when it runs out the light on the back goes
-green, he tells you to stand up, and a five-minute break counts down on its
-own. A tap on the running timer stops it. The desk keeps its own
-background, picked with a tap at the left or right edge and remembered
-separately from the main screen's. Detection keeps running behind all of
-it: a catch shows as a small card by the buttons instead of the full
-ALERT (tap it for the full card), and a squad message stands where Squachy
-stands, as a polaroid of the sender's Squachy with his name in the margin,
-the message on a note beside it and the time it came, until you tap it.
-The power saver never dims this screen.
-
-## The status light
-
-The RGB LED on the back of the 2.8" CYD (on the front of the RL Phantom)
-tells you what the screen is doing without the screen. A slow breathe in the
-theme's colour when nothing is happening; three flashes and a hold in the
-detection's own colour when something is, for as long as the alert card is
-up; a double-blink for an unread message; a blip when a squad member walks
-on; cyan while an update downloads and green or red for how it went. It goes
-dark on the lock screen and through a wipe, so a duress restart looks like any
-other restart from the back too.
-
-**Settings → APPEARANCE → STATUS LIGHT**: the master switch, alerts and
-messages on or off, idle breathe or solid or off, an idle colour that follows
-the theme, the background, or one of nine fixed colours, brightness in five
-steps, and a TEST row that plays the lot in six seconds. Boards whose LED pins
-have not been checked (the AWOK and the 3.5") compile it out and say so on
-that screen.
-
-## BroMesh
-
-> **Work in progress.** It is in this release because it works — two boards
-> find each other and each draws the other's Squachy — but it has had days of
-> testing, not months. Both halves are **off** until you turn them on, and one
-> of them costs you something; the device asks before it lets you near the
-> switch.
-
-<p align="center">
-  <img src="docs/squachmesh.gif" width="640"
-       alt="Two BroWatches in range of each other. One Squachy walks in, they greet each other, and the pair stand around talking.">
-</p>
-
-Two BroWatches in range of each other notice, and each one draws the
-other's Squachy as a visitor. He walks in, they high five, they stand around
-talking — now and then breaking into one of the thirty-odd emotes on their
-own, a pie fight, a coin toss, a selfie, a dance-off, the same one on both
-screens with the same result — and he goes home when the other board does.
-His outfit, his shades and his name all travelled over the air in a
-twenty-byte BLE advert. The name is one row, **NAME** under BROMESH: a
-curated one until somebody types one on the payphone, where **SHUFFLE**
-steps through the curated list for anyone who would rather not type.
-Whichever it is, the visitor wears it on a sticker on his chest.
-
-It is deliberately not a network. No pairing, no connection, no
-acknowledgement, no retry — a broadcast that says who is here, and anybody in
-earshot may or may not catch it. A peer is recognised inside the scan callback
-and returns before the signature tables ever see it, so two of these can never
-set each other off.
-
-**Settings → BROMESH**, and it asks first. `DETECT` is receive-only: you
-see other people's Squachys and broadcast nothing at all. `TRANSMIT` is the
-half that makes you visible, and a full-screen warning stands in front of that
-menu spelling out what goes out, how often, and what somebody with a scanner
-can reconstruct from it — a fixed address that never changes is a trail of
-where you have been. Nothing is transmitted until you have read that and
-chosen YES.
-
-That warning is not a formality. Broadcasting a stable identifier at strangers
-is the exact behaviour this device exists to catch other people's hardware
-doing. Offering it is defensible; switching it on quietly would not be.
-
-### Messages
-
-<p align="center">
-  <img src="docs/squachmesh-messages.gif" width="640"
-       alt="A visiting Squachy sends a typed message that lands in a red speech bubble; a ready-made reply is chosen, confirmed and sent, the visitor answers, and the phrase picker shows its big alphabet and word list.">
-</p>
-
-Two BroWatches that share a five-word phrase can message each other: one
-of 24 ready-made lines, or up to 48 characters typed on the payphone or the
-QWERTY board. A message arrives as a **red** bubble with the sender's name in
-it, so it is never mistaken for the Squachys' own chatter, and nothing is sent
-until you have confirmed it.
-
-**Settings → BROMESH → MESSAGES**, then **PHRASE**: one of you ROLLs five
-words and reads them out, the other ENTERs the same five. Setting a phrase
-freezes the screen for about three seconds on purpose — it is 20,000 rounds of
-PBKDF2, which every guess at your phrase has to pay too. A seven-card tutorial
-runs the first time MESSAGES is switched on, and the **?** on the message
-screen replays it; it never transmits anything.
-
-Messages are AES-128-CCM, keyed from the phrase, with a nonce that cannot
-repeat even across a crash, and every board checks its cipher against frames
-made by an independent implementation at each boot. What stays visible is
-that you sent something, and when: the contents are encrypted, the fact of a
-message is not.
-
-### Joining without typing
-
-<p align="center">
-  <img src="docs/squad-invite.gif" width="640"
-       alt="Two boards side by side: one taps ADD TO SQUAD, the other's board asks and accepts, both show the same four digits, the phrase goes over, and the second board is in without typing anything.">
-</p>
-
-The typed phrase is the reliable way in and always will be. The convenient
-way is **ADD**, beside INVITE and HUNT on the SQUAD screen (the **+N** next to
-a visitor). Pick a board in range and tap it; their board asks them whether
-they want in. Both screens then show the same four digits, which the two of
-you compare out loud, and the phrase goes across sealed under a key that
-exists for that one exchange and no other. The digits are derived from both
-boards' keys, so a third board in the middle pretending to be each of you to
-the other leaves the two screens disagreeing — say NO and nothing was sent.
-The new member's board answers with a sealed hello the moment it has the
-phrase, the inviter's shows **ADDED**, and both drop back to the main screen
-on their own. If nothing comes back, the inviter's screen says so and offers
-to show the phrase for typing.
-
-Boards that have shown they hold your phrase read **MEMBER** on that screen,
-and ADD only offers itself to strangers. Anyone with the phrase can invite
-anyone; the phrase is the membership, and leaving somebody out means a new
-phrase on every board.
-
-### Your squad
-
-**Settings → BROMESH → SQUAD** is the roster: everybody who has ever been
-heard holding your phrase, here or not, up to sixteen, kept across restarts.
-Each member shows in the outfit from their latest advert, with how many
-separate times you have met, those in range first. INVITE works when they
-are here, AWAY says when they are not, and FORGET drops them after asking
-once; they come back the next time they are heard with the phrase. A new
-phrase clears the roster, because a new phrase is a new squad.
-
-### Fox hunt
-
-**HUNT** on either SQUAD screen aims HUNT MODE's signal gauge at that board.
-It is the same meter the detector uses for a tag: no compass, so you turn
-your body and walk toward where the needle does not fall. Two readings in a
-row at arm's length and the gauge says **CAUGHT!**, Squachy bounces, and the
-light on the back flashes green. The fox needs TRANSMIT on; the hunters need
-DETECT on, which they have if they can see the SQUAD screen at all.
-
-**SHOW PHRASE** on the PHRASE screen is on by default. Off, the five words
-become dashes, the board never prints them, and the only way into the squad
-from that board's side is ADD TO SQUAD, in person.
-
-### Knowing there is an update
-
-Two ways, neither of which installs anything. At boot, a board with a saved
-WiFi network joins it for about a second, asks squachwatch.com for the latest
-version of its own build, and lets go again, all before Bluetooth starts;
-**UPDATE CHECK** on the SYSTEM page turns that off. And every board's hello
-to its squad carries its version, so a board that hears a member running
-something newer knows without touching WiFi. Either way Squachy says it once
-on the main screen, the SYSTEM row reads UPDATE, and UPDATE FIRMWARE names
-the version until you install it.
-
-**WIFI NETWORKS** on the SYSTEM page is where the board keeps the networks it
-knows: up to six, with USE marking the one it tries first. ADD picks one from
-a scan and takes the password on the board's keyboard; it is not checked by
-joining, since joining means giving Bluetooth up until a restart, but at the
-next boot check, and each row then says how that went: joined, wrong
-password, or not found. At boot the board scans, joins the USE network if it
-is there and otherwise the strongest saved one that is, so home and work both
-just work. The update flow does the same, and only shows its own list when
-none of the saved networks is in range. REMOVE takes one off the list.
-
-### Smaller things
-
-- **Arrows on NEARBY.** Each device shows a green up-arrow when it has come
-  closer since its last reading and a red down-arrow when it has moved away;
-  under four dB of change shows nothing, which is what a still device does.
-- **First of its kind.** The first time this board ever catches a type, the
-  card says so and Squachy marks the occasion when you get back to him.
-- **FILL on the message screen.** Eight openings that end in a blank, MEET AT,
-  I'M AT, BACK IN and the rest; pick one and the keyboard opens with it typed.
-- **Read receipts.** When a squad member opens your message their board says
-  so, and yours shows a READ toast with their name. A reader with TRANSMIT off
-  can't send one, so you see sent and never read, which is the truth.
-- **SNOOZE on an alert.** Quiets that one device until the board restarts. It
-  is still scanned, counted and logged; only the alert stops. IGNORE is the
-  same thing kept for good.
-- **Banter about something.** Two Squachys now talk about the weather on
-  screen, what was caught earlier, each other's outfits, how many times
-  they've met, the squad's size, and the length of the day, one exchange in
-  three, when there's something to say.
-
-### Updating the squad
-
-**Settings → SYSTEM → UPDATE FIRMWARE → UPDATE SQUAD** tells every board in
-range with your phrase to install the version this one is running. Each of
-them shows a thirty-second countdown with SKIP, joins WiFi, installs the
-signed release from squachwatch.com, restarts, and reports back by name to
-the board that asked. The sender can share its own saved network with the
-nudge, sealed with the phrase; the receiving boards use it once and forget it.
-
-A board listens because it holds your phrase, which is the same trust it
-already gives you for messages and the invite; **REMOTE UPDATE** on its
-SECURITY screen turns that off for anyone who wants it off. A locked board
-ignores the whole thing regardless. So the order on release day is: update
-one board by hand, then UPDATE SQUAD from it.
-
-## Every outfit
-
-Squachy has fourteen costumes. Most are earned by detection count; four are
-hidden behind things nobody tells you about, on the background they belong
-to. Two of them are in the animation at the top of this page.
+У Сквачи четырнадцать костюмов. Большинство выдаётся за число пойманных сигналов, четыре спрятаны
+за пасхалками на своих фонах — о них никто не расскажет.
 
 <p align="center">
   <img src="docs/outfits.png" width="880"
-       alt="All fourteen of Squachy's outfits, rendered by the firmware">
+       alt="Все четырнадцать костюмов Сквачи, отрисованные прошивкой">
 </p>
 
-No fabricated marketing shots, which was the promise here before there was
-anything to show. Every panel above was drawn by the firmware, one render
-per costume, and the labels are read out of the source rather than typed
-next to it — so a renamed or newly added outfit cannot end up captioned
-wrongly. Regenerate with `python3 make_gallery.py` in `sim/`.
+## Где это применять
 
-## Project layout
+### В исследованиях
 
-```
-BroWatch/
-├── platformio.ini
-├── README.md
-├── LICENSE
-├── docs/
-│   ├── FAQ.md                    (what it does, hardware, legality)
-│   ├── DESIGN.md                 (the contract — single source of truth)
-│   ├── BUILD.md                  (friendly walkthrough)
-│   ├── PINOUT.md                 (CYD pin map)
-│   ├── DETECTIONS.md             (per-signature provenance)
-│   └── SQUACHWARE-AESTHETIC.md   (CSS → RGB565 mapping)
-├── include/
-│   ├── state.h                   (DetectionType, Detection, Confidence)
-│   ├── theme.h                   (palette, backgrounds, icons, chrome)
-│   ├── signatures.h              (the tables and their lookups)
-│   ├── detection.h
-│   ├── remote_id.h               (ASTM F3411 decoder)
-│   ├── clock.h                   (wall clock: NTP at the boot check, zones, the calendar)
-│   ├── ignore_list.h             (per-device alert suppression)
-│   ├── status_light.h            (the RGB LED and its rules)
-│   ├── meshmsg.h                 (sealed frames: messages, emotes, nudges, invites)
-│   ├── squachmesh.h              (the SquachMesh wire format -- read first)
-│   ├── settings.h
-│   ├── squachy.h                 (the mascot)
-│   ├── bangers_font.h            (generated 1bpp display face)
-│   ├── cyd_user_setup.h          (TFT_eSPI config for the CYD)
-│   └── ui_*.h
-├── src/
-│   ├── main.cpp                  (setup/loop, state machine, touch)
-│   ├── theme.cpp                 (backgrounds, per-type icons, chrome)
-│   ├── squachy.cpp               (the mascot, his outfits and his lines)
-│   ├── signatures.cpp
-│   ├── detection.cpp             (WiFi promiscuous + NimBLE scan)
-│   ├── remote_id.cpp
-│   ├── clock.cpp
-│   ├── ignore_list.cpp
-│   ├── pet.cpp
-│   ├── squachmesh.cpp            (SquachMesh encode/decode, no radio)
-│   ├── meshtalk.cpp              (messages, the squad update, the invite)
-│   ├── meshcrypto.cpp            (AES-CCM, PBKDF2, and X25519 for invites)
-│   ├── status_light.cpp
-│   ├── sd_log.cpp
-│   └── ui_*.cpp
-├── test/                         (host tests -- `make -C test`, no framework)
-└── sim/                          (PC emulator — compiles src/ natively)
-    ├── Makefile                  (`make` for the CLI, `make wasm` for the web build)
-    ├── *.h                       (Arduino/TFT_eSPI/NVS shims)
-    ├── make_readme_demo.py       (renders the animation at the top of this file)
-    ├── make_demo.py              (the older background tour)
-    ├── make_mesh_demo.py         (renders the SquachMesh clip above)
-    ├── make_gallery.py           (renders the outfit sheet above)
-    ├── make_social.py            (renders the repo's social preview card)
-    └── web/                      (the browser build)
-```
+BroWatch — это готовый полевой инструмент для гражданской науки. Можно месяцами собирать, какие
+сигнатуры встречаются в районе, с какой достоверностью, в какое время суток, и накладывать это
+на карту города. Открытые таблицы и журнал на SD-карте дают данные, которые можно проверять
+и перепроверять. Устройство показывает не «вот шпион», а «вот совпадение и вот насколько оно
+надёжное» — и это честнее любого чёрного ящика.
 
-## License
+### В играх
 
-**GNU General Public License v3.0 (GPL-3.0).** See [LICENSE](LICENSE).
+Тот же эфир — хорошая площадка для живых игр: прятки с трекерами, геокешинг, «найди маяк»,
+командные квесты, где одна плата прячется, а другие её ищут по шкале сигнала. BroMesh превращает
+несколько плат в отряд со своей зашифрованной связью и общими сценками. Никакой инфраструктуры —
+достаточно нескольких плат и фразы.
 
-## Credits
+### В школах и кружках робототехники
 
-- Flock Safety OUI research: [@NitekryDPaul](https://x.com/NitekryDPaul),
-  DeFlockJoplin, [`colonelpanichacks/flock-you`](https://github.com/colonelpanichacks/flock-you)
-  (MIT).
-- Axon / skimmer / SSID prefix data: compiled with assistance from
-  Gemini (Google), expanded against public sources.
-- AirTag manufacturer-data format: public Apple FindMy spec.
-- AWOK 2.4" board port (ESP32-Marauder V6.1 hardware): **bkbroiler**,
-  who did the actual pin-mapping and shared-bus touch-calibration work
-  that made this board possible.
+Плата стоит как пара пицц, а внутри — настоящая embedded-разработка: ESP32, Wi-Fi в promiscuous
+режиме, BLE-сканер, шифрование, графика на TFT и конечный автомат на несколько экранов. Всё открыто,
+собирается бесплатными инструментами, а результат виден сразу и руками. Хорошие темы для занятий:
 
-## Status
+- разобрать, как работает сигнатура Wi-Fi и почему OUI — это ещё не доказательство;
+- объяснить AES-CCM и PBKDF2 на примере своих же сообщений;
+- написать свою сценку-эмоут для двух плат;
+- собрать карту находок класса за неделю и обсудить, что она говорит о районе.
 
-**Shipping.** Releases are cut by pushing a `v*.*.*` tag; the flasher above
-is rebuilt and redeployed by the same CI run, so the web flasher always
-matches the newest release.
+Отдельно это повод поговорить с детьми о приватности и слежке без страшилок — на живом железе,
+которое они сами держат в руках.
 
-Detection is reliable for the high-priority targets (Flock, Axon, skimmer,
-camera glasses). Remote ID and iBeacon are exact-format matches. Raven,
-generic ALPR and the Google tracker network are best-effort — see
-[docs/DETECTIONS.md](docs/DETECTIONS.md) for per-signature provenance and
-the confidence each one earns.
+## Куда развиваемся
 
-Verified on real hardware. There is also a PC emulator in `sim/` that
-compiles the actual `src/` against shims, and a host test suite in `test/`
-(`make -C test`) covering the decoders, the signature tables and the
-emulator's own fidelity to the display library.
+Проект живой, и вот что мы хотим к нему добавить. Подробно — в [docs/ROADMAP.md](docs/ROADMAP.md).
+
+- **LoRa-модули.** BLE работает на десятки метров, а в лесу, в походе и на слёте этого мало.
+  Планируем модули SX1262/SX1276: дальняя связь без интернета и вышек, те же кадры и то же
+  шифрование поверх радио, гибрид BLE + LoRa, чтобы плата сама выбирала, каким каналом говорить.
+- **Веб-приложение.** `browatch-web` — шлюз по USB/Serial и браузерный чат с автообновлением:
+  живые детекции, карта, пикер шаблонов сообщений и история. Плата в роли модема, компьютер — в роли
+  большого экрана.
+- **Нативные приложения.** Android и iOS через BLE: перенести в телефон часть того, что умеет плата —
+  приём детекций, чат BroMesh, инвайты в сквад, пеленгацию. Телефон в кармане, плата — как ключ к сети.
+
+## Что за железо
+
+- **ESP32-2432S028R** («Cheap Yellow Display») — около 15 долларов: экран 320×240, резистивный тач
+  и слот microSD на борту. Плата и есть всё устройство, докупать нечего.
+- Поддерживаются и другие: AWOK 2.4" на ESP32-Marauder, RL Phantom 2.4" (резистивный и ёмкостный).
+  Список плат и чем какая шьётся — в [docs/browatch/06-platy.md](docs/browatch/06-platy.md).
+
+## Лицензия
+
+**GNU General Public License v3.0 (GPL-3.0).** См. [LICENSE](LICENSE).
+
+Как и оригинал: код открыт, и производные остаются открытыми.
+
+## Благодарности
+
+- Оригинальный проект: [SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD)
+  и [squachwatch.com](https://squachwatch.com/) — вся база детектора, анимация и дизайн родом оттуда.
+- Исследование OUI Flock Safety: [@NitekryDPaul](https://x.com/NitekryDPaul), DeFlockJoplin,
+  [`colonelpanichacks/flock-you`](https://github.com/colonelpanichacks/flock-you) (MIT).
+- Данные по Axon, скиммерам и SSID-префиксам собраны с публичных источников.
+- Формат manufacturer-data AirTag: открытая спецификация Apple FindMy.
+- Порт платы AWOK 2.4" (ESP32-Marauder V6.1): **bkbroiler** — распиновка и калибровка тача.
+
+## Сообщество
+
+Всё самое живое — в Telegram: **[t.me/nerosekta](https://t.me/nerosekta)**.
+
+Там можно **получить готовое устройство**, если паять не хочется. Там же разбираем, как устроены
+нейросети и микроконтроллеры, обсуждаем LoRa и технологии вообще — без воды и хайпа.
+Заходи, если тебе интересно, как это работает внутри.
