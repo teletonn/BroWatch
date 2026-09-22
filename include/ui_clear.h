@@ -34,6 +34,16 @@ uint32_t uiMascotStepMs();
 void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
                   bool advance = true, bool scanMenu = false);
 
+#if MESH_COMPANION
+// COMPANION mode's footer panel, drawn where the detection counters are in
+// BROMESH: three soft keys -- CHANNELS, CONTACTS, MESSAGES -- plus the link
+// state, so the main screen is a way into the node's conversations rather
+// than a wall of counters for objects this mode is not looking for. The
+// rectangles are filled in by the draw; this reads them.
+enum class CompanionHit : uint8_t { NONE, CHANNELS, CONTACTS, MESSAGES };
+CompanionHit uiClearCompanionHit(int x, int y);
+#endif
+
 #if SQUACH_MESH
 // SPIKE: the peer currently visiting, or nullptr. Owned by whatever discovers
 // peers -- for now that is only the emulator's --peer flag, so the CLEAR screen

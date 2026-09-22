@@ -412,6 +412,12 @@ namespace Settings {
     bool        companionScanPause();
     void        toggleCompanionScanPause();
     const char* companionModeLabel();
+    // THE BOUND NODE. The radio this board was last told to talk to, kept in
+    // NVS so a reboot (or leaving and re-entering COMPANION) reconnects to it
+    // with no screen taps. Returns false when nothing is bound yet.
+    bool        getCompanionNode(uint8_t mac[6], uint8_t* addrType);
+    void        setCompanionNode(const uint8_t mac[6], uint8_t addrType);
+    void        clearCompanionNode();
 #endif
 #endif
 

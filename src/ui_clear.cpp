@@ -7,6 +7,9 @@
 #include "theme.h"
 #include "settings.h"
 #include "meshtalk.h"
+#if MESH_COMPANION
+#include "mesh_link.h"
+#endif
 #if SQUACH_MESH
 #include "squachmesh.h"
 #include "meshtutor.h"
@@ -2637,6 +2640,77 @@ static void drawCounterLine(TFT_eSPI& t, int w, int y, const DetectionEngine& en
     if (ru) Theme::printRU(t, buf); else t.print(buf);
 }
 
+#if MESH_COMPANION
+// ---- COMPANION mode's footer panel -----------------------------------------
+// The detection counters are for objects this mode is not looking for. In
+// their place: the node's own three places -- CHANNELS, CONTACTS, MESSAGES --
+// as soft keys, with the link state above them where the row is tall enough
+// for one. The rectangles are cached here and read back by uiClearCompanionHit,
+// the same draw-fills-hit-reads pattern the bubble and the squad badge use.
+static int  s_cpX[3] = {0, 0, 0};
+static int  s_cpW[3] = {0, 0, 0};
+static int  s_cpY = 0, s_cpH = 0;
+static bool s_cpOn = false;
+
+static void drawCompanionPanel(TFT_eSPI& t, int w, int top, int bottom) {
+    s_cpOn = false;
+    const int h = bottom - top;
+    if (h < 16) return;
+
+    const bool ru = Settings::lang() == 1;
+    const uint16_t stateCol = MeshLink::connected() ? Theme::GREEN
+                            : (MeshLink::state() == MeshLink::State::ERROR ? Theme::RED : Theme::AMBER);
+
+    // The state row only where there is room for it above the keys.
+    const int statusH = (h >= 40) ? 11 : 0;
+    const int gap = 6, margin = 8;
+    const int btnH = h - statusH - (statusH ? 2 : 0);
+    const int btnY = top + statusH + (statusH ? 2 : 0);
+    const int bw   = (w - 2 * margin - 2 * gap) / 3;
+
+    t.setTextSize(1);
+    t.setTextWrap(false);
+
+    if (statusH) {
+        t.fillRect(margin, top, w - 2 * margin, statusH, Theme::BG);
+        t.setTextColor(stateCol, Theme::BG);
+        t.setCursor(margin, top);
+        char sb[40];
+        snprintf(sb, sizeof sb, "%s  %s", Settings::companionTargetLabel(), MeshLink::stateLabel());
+        Theme::printRU(t, sb);
+    }
+
+    const uint8_t unread = MeshLink::unreadCount();
+    char l0[16], l1[16], l2[16];
+    snprintf(l0, sizeof l0, "%s%u", Theme::tr("CHAN", "КАН"), (unsigned)MeshLink::channelCount());
+    snprintf(l1, sizeof l1, "%s%u", Theme::tr("CONT", "КОН"), (unsigned)MeshLink::contactCount());
+    snprintf(l2, sizeof l2, "%s%u", Theme::tr("MSGS", "ЧАТ"), (unsigned)unread);
+    (void)ru;
+
+    const int xs[3] = { margin, margin + bw + gap, margin + 2 * (bw + gap) };
+    for (int i = 0; i < 3; i++) { s_cpX[i] = xs[i]; s_cpW[i] = bw; }
+    s_cpY = btnY; s_cpH = btnH; s_cpOn = true;
+
+    Theme::drawWin95Button(t, xs[0], btnY, bw, btnH, l0, false);
+    Theme::drawWin95Button(t, xs[1], btnY, bw, btnH, l1, false);
+    Theme::drawWin95Button(t, xs[2], btnY, bw, btnH, l2, false);
+    // Unread mail: a red rim on the message key, so a message that arrived
+    // while the screen was elsewhere is visible without opening anything.
+    if (unread) t.drawRect(xs[2] - 1, btnY - 1, bw + 2, btnH + 2, Theme::RED);
+}
+
+CompanionHit uiClearCompanionHit(int x, int y) {
+    if (!Settings::companionMode() || !s_cpOn) return CompanionHit::NONE;
+    const int slop = 6;
+    for (int i = 0; i < 3; i++) {
+        if (x >= s_cpX[i] - slop && x < s_cpX[i] + s_cpW[i] + slop &&
+            y >= s_cpY - slop && y < s_cpY + s_cpH + slop)
+            return (CompanionHit)((int)CompanionHit::CHANNELS + i);
+    }
+    return CompanionHit::NONE;
+}
+#endif
+
 #if SQUACH_MESH
 // The ordinary visit: ours on the left at SMALL, the guest walking in on the
 // right, the high five, the conversation and the set pieces. Drawn into the
@@ -3198,7 +3272,15 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     uint8_t base      = counterN / counterRows;
     uint8_t remainder = counterN % counterRows;
     uint8_t start = 0;
-    for (uint8_t row = 0; row < counterRows; row++) {
+#if MESH_COMPANION
+    // COMPANION mode replaces the whole counter block with its own panel.
+    const bool companion = Settings::companionMode();
+    if (companion && DrawBand::has(countersTop, bar.y))
+        drawCompanionPanel(t, w, countersTop, bar.y - 4);
+#else
+    const bool companion = false;
+#endif
+    for (uint8_t row = 0; row < counterRows && !companion; row++) {
         uint8_t n = base + (row < remainder ? 1 : 0);
         const int rowY = counterTextTop + row * lineH;
         // `start` advances either way: the rows share one list of types, so a

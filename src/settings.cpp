@@ -3,6 +3,7 @@
 #include "clock.h"
 #include "theme.h"
 #include <Preferences.h>
+#include <string.h>
 
 namespace Settings {
 
@@ -37,6 +38,13 @@ static uint8_t     s_companionTgt  = 0;
 // background scan can stay on; a user who wants the radio to itself can turn
 // it off. (WiFi transport will force a pause regardless.)
 static bool        s_companionScanPause = false;
+// The node this board auto-reconnects to (see getCompanionNode). Seven bytes
+// in NVS: the six-byte BLE address, MSB-first as the connect path wants it,
+// then the address type in the low bit. A separate "set" flag, because all
+// zeros is a legal (if unlikely) address and the two states must not collapse.
+static uint8_t     s_companionNode[6] = {0};
+static uint8_t     s_companionNodeType = 0;
+static bool        s_companionNodeSet  = false;
 #endif
 #endif
 static bool        s_infoPrimerShown = false;
@@ -273,6 +281,14 @@ void load() {
     s_companionTgt      = s_prefs.getUChar("cmptgt", 0);
     if (s_companionTgt > 1) s_companionTgt = 0;
     s_companionScanPause= s_prefs.getBool("cmpscan", false);
+    {
+        uint8_t buf[7];
+        if (s_prefs.getBytes("cmpnode", buf, sizeof buf) == sizeof buf) {
+            memcpy(s_companionNode, buf, 6);
+            s_companionNodeType = buf[6] & 1;
+            s_companionNodeSet  = true;
+        }
+    }
 #endif
 #endif
     s_infoPrimerShown = s_prefs.getBool("infoprimer", false);
@@ -786,6 +802,26 @@ const char* companionTargetLabel() {
 }
 const char* companionModeLabel() {
     return Theme::tr(s_companionMode ? "COMPANION" : "BROMESH", s_companionMode ? "КОМПАНЬОН" : "БРОМЕШ");
+}
+bool getCompanionNode(uint8_t mac[6], uint8_t* addrType) {
+    if (!s_companionNodeSet) return false;
+    memcpy(mac, s_companionNode, 6);
+    if (addrType) *addrType = s_companionNodeType;
+    return true;
+}
+void setCompanionNode(const uint8_t mac[6], uint8_t addrType) {
+    memcpy(s_companionNode, mac, 6);
+    s_companionNodeType = addrType & 1;
+    s_companionNodeSet  = true;
+    uint8_t buf[7];
+    memcpy(buf, mac, 6);
+    buf[6] = s_companionNodeType;
+    s_prefs.putBytes("cmpnode", buf, sizeof buf);
+}
+void clearCompanionNode() {
+    s_companionNodeSet = false;
+    memset(s_companionNode, 0, sizeof s_companionNode);
+    s_prefs.remove("cmpnode");
 }
 #endif
 

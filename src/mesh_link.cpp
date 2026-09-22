@@ -107,6 +107,27 @@ NimBLERemoteCharacteristic* s_fromRadio = nullptr;
 uint32_t s_ownNodeNum = 0;
 bool     s_haveComplete = false;
 
+// -------- the bound node (auto-reconnect) --------
+// `s_auto` is the standing instruction to be connected; it survives attempts
+// and losses and is only cleared by a deliberate drop. `s_boundMac` is in the
+// MSB-first order NimBLEAddress wants (see detection.cpp's reversal).
+volatile bool s_auto      = false;
+volatile bool s_pickSingle = false;   // auto, nothing bound: take a lone node
+bool          s_haveBound = false;
+uint8_t       s_boundMac[6] = {0,0,0,0,0,0};
+uint8_t       s_boundType   = 0;
+volatile uint32_t s_nextTryAt = 0;
+volatile uint32_t s_scanSince = 0;
+constexpr uint32_t RETRY_MS = 5000;
+// How long to let a scan settle before trusting that exactly one node is all
+// there is -- a second radio can take a moment to advertise.
+constexpr uint32_t PICK_SETTLE_MS = 6000;
+// The node we actually got in: remembered so a successful connection can be
+// bound to NVS by the caller, whoever started it.
+uint8_t       s_linkedMac[6] = {0,0,0,0,0,0};
+uint8_t       s_linkedType   = 0;
+volatile bool s_linkedValid  = false;
+
 // =====================================================================
 //  protobuf, by hand. Only the handful of fields this feature needs.
 // =====================================================================
@@ -463,6 +484,9 @@ void doConnect(uint8_t index) {
     // Meshtastic will not open its service until the link is encrypted, and
     // with a PIN that means bonding. secureConnection() starts it; the passkey
     // itself arrives in onPassKeyEntry above.
+    memcpy(s_linkedMac, s_nodes[index].mac, 6);
+    s_linkedType  = s_nodes[index].addrType;
+    s_linkedValid = true;
     Serial.println("[meshlink] connected; securing link");
     s_authStatus = 0;
     s_client->secureConnection();
@@ -498,6 +522,9 @@ void doConnect(uint8_t index) {
     }
     s_haveComplete = false;
     s_chanN = 0;
+    s_contactN = 0;
+    memset(s_chans, 0, sizeof s_chans);
+    memset(s_contacts, 0, sizeof s_contacts);
     s_state = State::HANDSHAKE;
     s_stateAt = millis();
     sendWantConfig();
@@ -563,17 +590,49 @@ void taskLoop(void*) {
                 s_state = State::ERROR;
             }
         }
+        // THE BOUND NODE. While the board is told to be connected, a scan in
+        // flight looks for that exact address and connects the moment it
+        // appears; a failed or lost link is retried on a slow clock, so a
+        // node that is switched off is not hammered. Everything here is a
+        // no-op in BROMESH, where s_auto is never set.
+        if (s_auto && s_haveBound) {
+            if (s_state == State::SCANNING) {
+                for (uint8_t i = 0; i < s_nodeN; i++) {
+                    if (memcmp(s_nodes[i].mac, s_boundMac, 6) == 0) { doConnect(i); break; }
+                }
+            } else if ((s_state == State::ERROR || s_state == State::OFF) &&
+                       (int32_t)(millis() - s_nextTryAt) >= 0) {
+                s_nextTryAt = millis() + RETRY_MS;
+                startScan();
+            }
+        } else if (s_auto && s_pickSingle) {
+            if (s_state == State::SCANNING) {
+                if (s_nodeN == 1 && (millis() - s_scanSince) > PICK_SETTLE_MS) {
+                    memcpy(s_boundMac, s_nodes[0].mac, 6);
+                    s_boundType = s_nodes[0].addrType;
+                    s_haveBound = true;
+                    Serial.printf("[meshlink] AUTO: lone node %02X:%02X:%02X:%02X:%02X:%02X, binding\n",
+                                  s_nodes[0].mac[0], s_nodes[0].mac[1], s_nodes[0].mac[2],
+                                  s_nodes[0].mac[3], s_nodes[0].mac[4], s_nodes[0].mac[5]);
+                }
+            } else if ((s_state == State::ERROR || s_state == State::OFF) &&
+                       (int32_t)(millis() - s_nextTryAt) >= 0) {
+                s_nextTryAt = millis() + RETRY_MS;
+                startScan();
+            }
+        }
 #if MESH_COMPANION_AUTOSTART
-        if (s_state == State::SCANNING && s_nodeN > 0) {
-            Serial.printf("[meshlink] AUTOSTART: node %02X:%02X:%02X:%02X:%02X:%02X found, connecting\n",
+        // Bench build: bind the first node seen and hand off to the ordinary
+        // auto-reconnect path above, so what the bench exercises is exactly
+        // what a real board does after a reboot.
+        if (!s_auto && s_nodeN > 0) {
+            Serial.printf("[meshlink] AUTOSTART: binding node %02X:%02X:%02X:%02X:%02X:%02X\n",
                           s_nodes[0].mac[0], s_nodes[0].mac[1], s_nodes[0].mac[2],
                           s_nodes[0].mac[3], s_nodes[0].mac[4], s_nodes[0].mac[5]);
-            doConnect(0);
-        } else if (s_state == State::ERROR && millis() - s_stateAt > 3000) {
-            // Bench build: keep trying, so a fix can be observed without a
-            // reflash between attempts.
-            Serial.println("[meshlink] AUTOSTART: retrying");
-            startScan();
+            memcpy(s_boundMac, s_nodes[0].mac, 6);
+            s_boundType = s_nodes[0].addrType;
+            s_haveBound = true;
+            s_auto      = true;
         }
 #endif
         vTaskDelay(pdMS_TO_TICKS(20));
@@ -619,6 +678,8 @@ void tick(uint32_t now) {
 }
 
 void shutdown() {
+    s_auto = false;
+    s_pickSingle = false;
     if (s_reqQ) { Req r; memset(&r, 0, sizeof r); r.kind = Req::DISCONNECT; xQueueSend(s_reqQ, &r, 0); }
     s_scanning = false;
 }
@@ -628,6 +689,7 @@ Target target()          { return s_target; }
 
 void startScan() {
     s_scanning = true;
+    s_scanSince = millis();
     if (s_state == State::OFF || s_state == State::ERROR) s_state = State::SCANNING;
     if (s_reqQ) { Req r; memset(&r, 0, sizeof r); r.kind = Req::SCAN_ON; xQueueSend(s_reqQ, &r, 0); }
 }
@@ -646,8 +708,33 @@ void connect(uint8_t index) {
     xQueueSend(s_reqQ, &r, 0);
 }
 void disconnect() {
+    s_auto = false;                 // a deliberate drop is not undone behind the user
+    s_pickSingle = false;
     if (!s_reqQ) return;
     Req r; memset(&r, 0, sizeof r); r.kind = Req::DISCONNECT; xQueueSend(s_reqQ, &r, 0);
+}
+void autoConnect(const uint8_t mac[6], uint8_t addrType) {
+    memcpy(s_boundMac, mac, 6);
+    s_boundType = addrType & 1;
+    s_haveBound = true;
+    s_pickSingle = false;
+    s_auto      = true;
+    s_nextTryAt = 0;
+    startScan();
+}
+void autoStart() {
+    s_haveBound  = false;
+    s_pickSingle = true;
+    s_auto       = true;
+    s_nextTryAt  = 0;
+    startScan();
+}
+bool autoActive() { return s_auto; }
+bool linkedMac(uint8_t mac[6], uint8_t* addrType) {
+    if (!s_linkedValid) return false;
+    memcpy(mac, s_linkedMac, 6);
+    if (addrType) *addrType = s_linkedType;
+    return true;
 }
 State state() { return s_state; }
 bool  connected() { return s_state == State::READY; }
@@ -708,6 +795,14 @@ const Message& inboxAt(uint8_t i) {
     int idx = (int)s_inboxHead - 1 - (int)i;
     while (idx < 0) idx += INBOX_N;
     return s_inbox[idx % INBOX_N];
+}
+uint8_t unreadCount() {
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < s_inboxLen; i++) if (inboxAt(i).unread) n++;
+    return n;
+}
+void markInboxRead() {
+    for (uint8_t i = 0; i < s_inboxLen; i++) s_inbox[i].unread = false;
 }
 
 void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t target, uint8_t addrType) {

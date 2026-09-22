@@ -1799,6 +1799,7 @@ static void enterMeshNodes() {
     uiMeshNodesInit(*canvas);
 }
 static void enterMeshChat() {
+    MeshLink::markInboxRead();
     state = AppState::MESH_LINK_CHAT;
     transitionStart = millis();
     uiMeshChatInit(*canvas);
@@ -2520,6 +2521,14 @@ void setup() {
     // The companion link's BLE-client task. It does nothing until COMPANION
     // mode is on and a node is picked; in BROMESH it just sits idle.
     MeshLink::begin();
+    // ...and if COMPANION mode was left on, pick the link back up with no
+    // taps: reconnect to the node this board was bound to, or start the hunt
+    // so the NODE screen has something to offer when there is none yet.
+    if (Settings::companionMode()) {
+        uint8_t bmac[6], btype = 0;
+        if (Settings::getCompanionNode(bmac, &btype)) MeshLink::autoConnect(bmac, btype);
+        else                                         MeshLink::autoStart();
+    }
 #endif
 #if defined(BW_BRIDGE)
     // After the radio: the first announce waits for our own MAC anyway.
@@ -2856,6 +2865,27 @@ void loop() {
     MeshTalk::tick(now);
 #if MESH_COMPANION
     MeshLink::tick(now);
+    // The node's mail, surfaced on whichever screen is up: a toast so an
+    // arriving message is seen even when the main screen is not open. Our own
+    // outgoing lines ride the same queue and are skipped.
+    {
+        MeshLink::Message m;
+        while (MeshLink::popMessage(m)) {
+            if (m.outgoing) continue;
+            static char sub[48];
+            snprintf(sub, sizeof sub, "%s: %.30s", m.from, m.body);
+            Theme::showToast(Theme::tr("MESSAGE", "СООБЩЕНИЕ"), sub, Theme::VAPOR_PINK, 3500);
+        }
+    }
+    // A link that came up is bound to NVS the first time, whichever screen
+    // started it, so the next boot reconnects with no taps.
+    if (Settings::companionMode() && MeshLink::connected()) {
+        uint8_t have[6], haveType = 0;
+        if (!Settings::getCompanionNode(have, &haveType)) {
+            uint8_t lmac[6], ltype = 0;
+            if (MeshLink::linkedMac(lmac, &ltype)) Settings::setCompanionNode(lmac, ltype);
+        }
+    }
 #endif
     {
         char who[13];
@@ -3430,6 +3460,22 @@ void loop() {
                 nbStart  = now;
             }
 
+            // COMPANION mode's footer panel, ahead of everything else on this
+            // screen: it sits in the counter row's place and must win over the
+            // edge-zone slivers it overlaps on the left and right.
+#if MESH_COMPANION
+            if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
+                uiClearCompanionHit(tp.x, tp.y) != CompanionHit::NONE) {
+                lastTouch = now;
+                sqActive  = false;
+                switch (uiClearCompanionHit(tp.x, tp.y)) {
+                    case CompanionHit::CHANNELS: enterMeshChannels(); break;
+                    case CompanionHit::CONTACTS: enterMeshContacts(); break;
+                    case CompanionHit::MESSAGES: enterMeshChat();     break;
+                    default: break;
+                }
+            } else
+#endif
             // Any tap at all ends the parade, and is consumed doing it --
             // checked ahead of everything else so a tap cannot both stop
             // the show and cycle a background or pet him on the way out.
@@ -4490,9 +4536,15 @@ void loop() {
                     case MeshMenuRow::MODE:
                         Settings::toggleCompanionMode();
                         // Leaving COMPANION tears the link down; entering it
-                        // starts the hunt for a node.
-                        if (Settings::companionMode()) MeshLink::startScan();
-                        else                           MeshLink::shutdown();
+                        // reconnects to the bound node if there is one, or
+                        // starts the hunt for a new one.
+                        if (Settings::companionMode()) {
+                            uint8_t bmac[6], btype = 0;
+                            if (Settings::getCompanionNode(bmac, &btype)) MeshLink::autoConnect(bmac, btype);
+                            else                                         MeshLink::autoStart();
+                        } else {
+                            MeshLink::shutdown();
+                        }
                         break;
                     case MeshMenuRow::TARGET:   Settings::cycleCompanionTarget(); break;
                     case MeshMenuRow::NODE:     enterMeshNodes();              break;
@@ -4523,9 +4575,18 @@ void loop() {
                     case MeshNodesHit::SCAN:       MeshLink::startScan();  break;
                     case MeshNodesHit::CONNECT: {
                         const int sel = uiMeshNodesSelected();
-                        if (sel >= 0 && sel < MeshLink::nodeCount()) MeshLink::connect((uint8_t)sel);
+                        if (sel >= 0 && sel < MeshLink::nodeCount()) {
+                            // Bind it: this is the node the board will come
+                            // back to on its own from now on.
+                            const MeshLink::Node& nd = MeshLink::nodeAt((uint8_t)sel);
+                            Settings::setCompanionNode(nd.mac, nd.addrType);
+                            MeshLink::autoConnect(nd.mac, nd.addrType);
+                        }
                     } break;
-                    case MeshNodesHit::DISCONNECT: MeshLink::disconnect(); break;
+                    case MeshNodesHit::DISCONNECT:
+                        Settings::clearCompanionNode();
+                        MeshLink::disconnect();
+                        break;
                     case MeshNodesHit::BACK:       enterMeshMenu();        break;
                     default: break;
                 }

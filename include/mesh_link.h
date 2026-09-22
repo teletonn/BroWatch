@@ -78,6 +78,23 @@ State state();
 const char* stateLabel();     // short, for the status row
 bool  connected();
 
+// ---- the bound node (auto-reconnect) ----
+// A node the board should keep talking to with no screen taps: remembered in
+// NVS by main.cpp, handed back here at boot (or when COMPANION is switched
+// on), and then hunted for, connected to, and reconnected to on loss until
+// something stops it. `disconnect()`/`shutdown()` clear the intent -- a user
+// who drops the link is not reconnected behind their back.
+void autoConnect(const uint8_t mac[6], uint8_t addrType);
+// Same intent, but with nothing bound yet: scan, and if exactly one node is
+// in range after a settling delay, bind and connect to it. Two or more nodes
+// and it keeps scanning -- picking between them is the user's call.
+void autoStart();
+bool autoActive();
+// The address of the node the link is (or was last) connected to, so a caller
+// can bind it without having picked it from the node list itself. False when
+// nothing has been linked yet.
+bool linkedMac(uint8_t mac[6], uint8_t* addrType = nullptr);
+
 // ---- channels ----
 constexpr uint8_t CHAN_MAX = 8;
 struct Channel {
@@ -133,6 +150,10 @@ const Message& lastMessage();
 constexpr uint8_t INBOX_N = MSG_MAX;
 uint8_t        inboxCount();
 const Message& inboxAt(uint8_t i);   // 0 is the newest
+// How many inbox messages are still unread, for the main screen's badge.
+uint8_t        unreadCount();
+// Mark everything read. Called when a conversation is opened.
+void           markInboxRead();
 
 // Queue a channel text for the task to send. Returns false when not READY or
 // the text is empty. The copy is bounded by TEXT_MAX.
