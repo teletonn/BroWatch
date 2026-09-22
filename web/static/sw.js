@@ -1,5 +1,5 @@
 /* BroWatch Web — service worker: app-shell в кэш, API всегда из сети. */
-const CACHE = 'bw-0.2.0';
+const CACHE = 'bw-0.2.1';
 const SHELL = ['/', '/static/index.html', '/static/app.js', '/static/style.css',
   '/static/icon.svg', '/static/icon-192.png', '/static/icon-512.png',
   '/manifest.webmanifest'];

@@ -3,6 +3,9 @@
 // A USB-connected board speaks JSON lines on its serial port:
 //
 //   [BW {"t":"peer","mac":"AA:BB:CC:DD:EE:FF","name":"Squachy","client":"bw cyd-ili9341/v1.x"}]
+//   (the board's own announce also carries "nick": the owner's persona —
+//   payphone NAME, else the indexed nickname. The web app speaks ONLY as
+//   this persona and never invents its own.)
 //   [BW {"t":"msg","from":"Squachy","text":"..."}]
 //   [BW {"t":"emote","from":"AA:BB:...","emote":"WAVE"}]
 //   [BW {"t":"detection","type":"FLOCK","mac":"...","rssi":-70,"vendor":"..."}]

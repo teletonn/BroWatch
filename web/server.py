@@ -14,7 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 PORT = int(os.environ.get("BROWATCH_PORT", "40400"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(ROOT, "static")
@@ -74,6 +74,7 @@ def pub_peer(p, t=None):
     """Публичная форма пира для API/SSE."""
     t = t or now()
     return {"id": p["id"], "name": p.get("name") or p["id"],
+            "nick": p.get("nick"),
             "rssi": p.get("rssi"), "client": p.get("client"),
             "lang": p.get("lang"), "last_seen": p.get("last_seen", 0),
             "age_s": max(0, int(t - p.get("last_seen", t))),
@@ -106,7 +107,7 @@ def board_snapshot_locked(t=None):
     return pub_peer(best, t) if best else None
 
 
-def add_peer(pid, name=None, rssi=None, client=None, lang=None):
+def add_peer(pid, name=None, rssi=None, client=None, lang=None, nick=None):
     t = now()
     with store_lock:
         p = peers.get(pid)
@@ -119,6 +120,8 @@ def add_peer(pid, name=None, rssi=None, client=None, lang=None):
         p["last_seen"] = t
         if name is not None:
             p["name"] = name
+        if nick is not None:
+            p["nick"] = nick
         if rssi is not None:
             p["rssi"] = rssi
         if client is not None:
@@ -194,7 +197,7 @@ def ingest(obj):
         if not isinstance(pid, str) or len(pid) > 32:
             return "drop", {"ok": False, "note": "bad peer id"}
         return "peer", add_peer(pid, obj.get("name"), obj.get("rssi"),
-                                obj.get("client"), obj.get("lang"))
+                                obj.get("client"), obj.get("lang"), obj.get("nick"))
     if t in ("msg", "message"):
         frm, text = obj.get("from", "unknown"), obj.get("text", "")
         if mesh_dupe("msg", (frm, text)):
@@ -430,16 +433,9 @@ class H(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "empty text"})
             return self._json(200, add_message(str(frm)[:24], str(text)[:500], via="web"))
         if path == "/api/peers":
-            # Только heartbeat самого веба: id вида web:NAME, client web.
-            # Чужие пиры сюда попасть не могут — их привозит только шлюз
-            # через /api/ingest, как на плате (там сквад — это услышанные).
-            pid = str(obj.get("id") or obj.get("mac") or "")
-            if not pid.startswith("web:") or len(pid) > 32:
-                return self._json(400, {"error": "web heartbeat only: id must start with 'web:'"})
-            if str(obj.get("client", "web")) != "web":
-                return self._json(400, {"error": "web heartbeat only"})
-            name = str(obj.get("name", pid[4:] or "web"))[:24]
-            return self._json(200, add_peer(pid, name, obj.get("rssi"), "web"))
+            # Веб-персоны нет: веб говорит только устами платы (см. /api/bridge/send).
+            # Heartbeat-эндпоинт закрыт, чтобы веб не плодил членов сквада.
+            return self._json(410, {"error": "gone: web has no persona, speak as the board"})
         if path == "/api/emotions":
             return self._json(200, add_emotion(str(obj.get("from", "web"))[:24],
                                                str(obj.get("emote", "?"))[:24], via="web"))
@@ -453,6 +449,16 @@ class H(BaseHTTPRequestHandler):
             # чата (шаблон/эмоция уже расшифрованы клиентом); в очередь плате
             # уходит только {t:send,...}. Сообщение сразу видно в вебе
             # с пометкой «в эфир»: плата свои отправки в inbox не кладёт.
+            #
+            # Персона одна — персона платы (nick из её announce, иначе имя
+            # устройства). Поле from от клиента игнорируется: веб не заводит
+            # своих персонажей. Без платы в эфире — 503, молчание честнее
+            # выдуманного собеседника.
+            with store_lock:
+                b = board_snapshot_locked()
+                persona = ((b.get("nick") or b.get("name")) if b else None)
+            if not persona:
+                return self._json(503, {"error": "board offline"})
             text = str(obj.get("text", "")).strip()
             if not text:
                 return self._json(400, {"error": "text required (display label)"})
@@ -473,13 +479,12 @@ class H(BaseHTTPRequestHandler):
                     return self._json(400, {"error": "emote index 0..34"})
             else:
                 fwd["text"] = text[:48]
-            if "from" in obj:
-                fwd["from"] = str(obj["from"])[:24]
             with store_lock:
                 outbox.append(fwd)
                 outbox[:] = outbox[-50:]
-            m = add_message(str(obj.get("from", "web"))[:24], text[:500], via="board")
-            return self._json(200, {"ok": True, "queued": fwd, "message": m})
+            m = add_message(persona, text[:500], via="board")
+            return self._json(200, {"ok": True, "queued": fwd, "message": m,
+                                    "persona": persona})
         return self._json(404, {"error": "not found"})
 
 

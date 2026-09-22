@@ -47,19 +47,26 @@ def main():
         assert h["ok"] and h["version"], h
         print("health", h["version"], "OK")
 
-        # heartbeat веба принимается, чужой пир — нет
-        r = post("/api/peers", {"id": "web:test", "name": "test", "client": "web"})
-        assert r["id"] == "web:test", r
+        # веб-персоны нет: heartbeat закрыт, чужие пиры отклонялись бы и раньше
         try:
-            call("POST", "/api/peers", {"id": "FAKE", "name": "x"})
-            raise SystemExit("fake peer accepted!")
+            call("POST", "/api/peers", {"id": "web:test", "name": "test", "client": "web"})
+            raise SystemExit("web persona accepted!")
         except urllib.error.HTTPError as e:
-            assert e.code == 400, e.code
-        print("heartbeat gate OK")
+            assert e.code == 410, e.code
+        print("no-web-persona gate OK")
+
+        # без платы в эфире отправка невозможна (свежий сервер, пиров нет)
+        try:
+            call("POST", "/api/bridge/send", {"canned": 12, "text": "x"})
+            raise SystemExit("boardless send accepted!")
+        except urllib.error.HTTPError as e:
+            assert e.code == 503, e.code
+        print("boardless 503 OK")
 
         # мост: announce платы + сквад
         post("/api/ingest", {"t": "peer", "mac": "AA:BB:CC:DD:EE:FF",
-                             "name": "USB-FFFF", "client": "bw rlphantom/v", "lang": "R"})
+                             "name": "USB-FFFF", "nick": "Tester",
+                             "client": "bw rlphantom/v", "lang": "R"})
         post("/api/ingest", {"t": "peer", "mac": "11:22:33:44:55:66",
                              "name": "SHADOW", "client": "bw"})
         sq = get("/api/squad")
@@ -70,12 +77,13 @@ def main():
         assert h["board_online"] is True and h["board"]["id"] == "AA:BB:CC:DD:EE:FF", h
         print("presence + board OK")
 
-        # сообщения мостом и локальные
-        r = post("/api/bridge/send", {"from": "web:test", "canned": 12, "text": "Тут камера Флок."})
-        assert r["ok"] and r["queued"] == {"t": "send", "canned": 12, "from": "web:test"}, r
-        assert r["message"]["via"] == "board", r
+        # сообщения — только от лица платы
+        r = post("/api/bridge/send", {"canned": 12, "text": "Тут камера Флок."})
+        assert r["ok"] and r["queued"] == {"t": "send", "canned": 12}, r
+        assert r["persona"] == "Tester" and r["message"]["via"] == "board", r
+        assert r["message"]["from"] == "Tester", r
         out = get("/api/bridge/outbox")
-        assert out == [{"t": "send", "canned": 12, "from": "web:test"}], out
+        assert out == [{"t": "send", "canned": 12}], out
         assert get("/api/bridge/outbox") == [], "outbox must drain"
         try:
             call("POST", "/api/bridge/send", {"from": "x", "canned": 99, "text": "z"})

@@ -52,19 +52,15 @@
         <div id="emote-grid"></div>
       </div>
       <form id="send" class="crow">
-        <input id="text" placeholder="сообщение…" autocomplete="off" maxlength="200" enterkeyhint="send">
-        <button type="submit" aria-label="Отправить в веб-чат" title="В веб-чат (этот браузер и другие вкладки)">➤</button>
-        <button type="button" id="toboard" title="Отправить текст на плату: она передаст его в mesh-эфир">→плата</button>
+        <input id="text" placeholder="в эфир через плату…" autocomplete="off" maxlength="200" enterkeyhint="send">
+        <button type="submit" id="tosend" aria-label="Отправить в mesh-эфир через плату" title="В эфир через подключённую плату — от её персонажа">➤</button>
       </form>
     </div>
   </section>
 
   <section id="tab-squad" class="tab" aria-label="Отряд">
-    <div class="crow card" id="whoami">
-      <input id="myname" placeholder="моё имя" value="web" maxlength="24" autocomplete="off">
-      <button id="announce">Я тут</button>
-    </div>
-    <div id="board-card" class="card" hidden></div>
+    <div class="card" id="persona">подключаю плату…</div>
+    <div class="card" id="board-card" hidden></div>
     <h3 class="sect">В эфире <span id="range-count"></span></h3>
     <ul id="squad"></ul>
     <h3 class="sect">Недавно были</h3>
@@ -85,7 +81,7 @@
     <div id="bg-pick"></div>
     <label class="check"><input type="checkbox" id="motion"> Анимация фона</label>
     <label class="check"><input type="checkbox" id="notif"> Уведомления браузера (когда вкладка скрыта)</label>
-    <p class="hint">Фон, имя и настройки хранятся в этом браузере. Анимация сама выключается при слабом устройстве.</p>
+    <p class="hint">Фон и настройки хранятся в этом браузере. Анимация сама выключается при слабом устройстве.</p>
     <button id="sheet-close">Закрыть</button>
   </div>
 </div>

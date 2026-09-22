@@ -87,7 +87,9 @@ static void emit(const char* body) {
 }
 
 // The board itself, as a peer the web list never loses: id is the BLE MAC it
-// signs mesh frames with, name is short and stable across reboots.
+// signs mesh frames with, name is short and stable across reboots, nick is
+// the owner's persona (payphone NAME, else the indexed nickname) — the only
+// identity the web app may speak as. No other persona exists on the web side.
 static void emitOwn() {
     const uint8_t* mac = MeshTalk::ownMac();
     char macS[18], name[16], client[64], body[256];
@@ -95,12 +97,15 @@ static void emitOwn() {
     snprintf(name, sizeof name, "USB-%02X%02X", mac[4], mac[5]);
     snprintf(client, sizeof client, "bw %s/%s", SQW_ENV, FIRMWARE_VERSION);
     char lang = Settings::lang() == 1 ? 'R' : 'E';
-    char nameE[32], clientE[96];
+    const char* cn = Squachy::customName();
+    const char* nick = (cn && cn[0]) ? cn : Squachy::nicknameAt(Squachy::nicknameIndex());
+    char nameE[32], clientE[96], nickE[32];
     escJson(name, nameE, sizeof nameE);
     escJson(client, clientE, sizeof clientE);
+    escJson(nick ? nick : "", nickE, sizeof nickE);
     snprintf(body, sizeof body,
-             "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"client\":\"%s\",\"lang\":\"%c\"}",
-             macS, nameE, clientE, lang);
+             "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"nick\":\"%s\",\"client\":\"%s\",\"lang\":\"%c\"}",
+             macS, nameE, nickE, clientE, lang);
     emit(body);
 }
 

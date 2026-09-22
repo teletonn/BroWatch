@@ -10,8 +10,10 @@
    Эмоции: 35 штук MeshMsg::Emote (meshmsg.h), имена/табы/RU-ярлыки =
    EmoteScript NAME/NAME_RU/TAB (src/emote_script.cpp). Мост привозит имя
    (NAME[i][0]); индекс для отправки восстанавливаем по EMOTE_BY_NAME.
-   Presence: пир «в эфире», пока свежак (плата держит 12 с, сервер — 15 с);
-   heartbeat веба каждые 10 с. */
+   Presence: пир «в эфире», пока свежак (плата держит 12 с, сервер — 15 с).
+   У веба своей персоны НЕТ: всё сказанное уходит в эфир через плату от её
+   персонажа (nick из announce платы, иначе имя устройства). Без платы
+   в эфире отправка невозможна — молчание честнее выдуманного собеседника. */
 const $ = id => document.getElementById(id);
 const chatEl = $('chat'), peersBox = $('squad'), recentBox = $('recent'),
       detsBox = $('dets'), statusEl = $('status'), boardPill = $('board-name');
@@ -21,8 +23,6 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('bw_'+k); return v === null ? d : v; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('bw_'+k, v); }catch(e){} }
 };
-const myname = () => ($('myname').value || 'web').slice(0, 24);
-$('myname').value = store.get('name', 'web');
 
 /* ---------- helpers ---------- */
 function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -318,7 +318,7 @@ function renderChat(){
   for(const m of items){
     const dk = dayKey(m.ts);
     if(dk !== lastDay){ lastDay = dk; html += `<div class="day">${esc(dayName(m.ts))}</div>`; }
-    const me = m.from === myname() || m.from === 'web:'+myname();
+    const me = m.via === 'board';   // своё — всё, что ушло через плату
     const via = m.via === 'board' ? '<span class="via">в эфир</span>'
       : m.via === 'mesh' ? '<span class="via">эфир</span>' : '';
     const cls = m.kind === 'emote' ? 'msg emote' : 'msg';
@@ -352,9 +352,9 @@ function notify(n){
 /* ---------- входящие ---------- */
 function onMessage(m, live){
   if(m.id > lastMsgId) lastMsgId = m.id;
-  if(!msgsCache.some(k => k.id === m.id)){
+    if(!msgsCache.some(k => k.id === m.id)){
     msgsCache.push(m); msgsCache = msgsCache.slice(-300);
-    if(live && m.from !== myname() && m.from !== 'web:'+myname()){
+    if(live && m.via !== 'board'){
       notify(1); react('hop');
       const t = `${peerName(m.from)}: ${m.text}`;
       toast(t, 'chat'); notifySys('BroWatch: ' + peerName(m.from), m.text, 'msg'+m.id);
@@ -365,10 +365,10 @@ function onMessage(m, live){
 function onEmotion(e, live){
   const l = emoteLabel(e.emote);
   const m = {kind:'emote', from:e.from, text:e.emote, ts:e.ts, id:'e'+e.ts+e.from+e.emote};
-  if(!msgsCache.some(k => k.id === m.id)){
+    if(!msgsCache.some(k => k.id === m.id)){
     msgsCache.push(m); msgsCache = msgsCache.slice(-300);
     if(e.ts > lastEmoTs) lastEmoTs = e.ts;
-    if(live && e.from !== myname() && e.from !== 'web:'+myname()){
+    if(live && e.via !== 'board'){
       notify(1); emoteReact(e.emote);
       const t = `${peerName(e.from)}: ${l ? l.e+' '+l.ru.toLowerCase() : e.emote}`;
       toast(t, 'chat'); notifySys('BroWatch: ' + peerName(e.from), l ? l.e+' '+l.ru : e.emote, 'emo'+e.ts);
@@ -401,18 +401,21 @@ function renderSquad(){
   const gone = list.filter(p => !p.in_range && !isBoardPeer(p));
   $('squad-count').textContent = here.length || '';
   peersBox.innerHTML = here.length ? here.map(squadRow).join('')
-    : '<div class="empty">Рядом никого — только вы. Члены отряда появятся сами, когда их услышит плата.</div>';
+    : '<div class="empty">Рядом никого. Члены отряда появятся сами, когда их услышит плата, — добавить вручную нельзя.</div>';
   recentBox.innerHTML = gone.length ? gone.map(squadRow).join('')
     : '<div class="empty">Все, кого слышали, до сих пор в эфире.</div>';
   $('range-count').textContent = here.length ? '· ' + here.length : '';
   const b = boardInfo;
+  const pers = $('persona');
   if(boardOnline && b){
     $('board-pill').hidden = false; boardPill.textContent = b.name || b.id;
+    pers.innerHTML = `Вы пишете как <b>${esc(b.nick || b.name || b.id)}</b> — персонаж платы`;
     const bc = $('board-card'); bc.hidden = false;
     bc.innerHTML = `<div class="top"><span class="dot in"></span><span class="nm">⚡ ${esc(b.name || b.id)}</span>`+
       `<span class="tag squad">плата</span></div><div class="last">${esc(b.client || '')} · язык ${esc(b.lang || '?')}</div>`;
   } else {
     $('board-pill').hidden = true; $('board-card').hidden = true;
+    pers.innerHTML = 'Плата не в эфире — подключите её по USB и разблокируйте PIN';
   }
   $('foot-board').textContent = 'плата: ' + (boardOnline && b ? (b.name || b.id) : 'не в эфире');
 }
@@ -537,51 +540,27 @@ function connectSSE(){
   es.onerror = () => { sseLive = false; };
 }
 
-/* ---------- heartbeat: «я тут», как заявить о себе ---------- */
-async function beat(){
-  try{
-    await jpost('/api/peers', {id:'web:'+myname(), name:myname(), client:'web'});
-    store.set('name', myname());
-  }catch(_){}
-}
-$('myname').addEventListener('change', beat);
-$('announce').onclick = async () => { await beat(); tick(); toast('Вы в эфире как ' + myname()); };
-setInterval(beat, 10000);
-
-/* ---------- composer ---------- */
+/* ---------- composer: всё — в эфир через плату, от её персонажа ---------- */
 $('send').onsubmit = async e => {
   e.preventDefault();
   const inp = $('text'), text = inp.value.trim();
   if(!text) return;
-  try{ await jpost('/api/messages', {from:myname(), text}); }catch(_){}
-  inp.value = ''; tick();
-};
-$('toboard').onclick = async () => {
-  const inp = $('text'), text = inp.value.trim();
-  if(!text) return;
   if(!boardOnline){ inp.placeholder = 'плата не в эфире'; toast('Плата не в эфире — текст не уйдёт'); return; }
-  try{ await jpost('/api/bridge/send', {from:myname(), text}); inp.value = ''; }
-  catch(err){ inp.placeholder = 'плата недоступна'; toast('Не ушло: ' + (err && err.error || 'ошибка')); }
+  try{ await jpost('/api/bridge/send', {text}); inp.value = ''; }
+  catch(err){ toast('Не ушло: ' + (err && err.error || 'ошибка')); }
   tick();
 };
-/* Шаблон/эмоция: в эфир через плату, если она есть, иначе локально. */
+/* Шаблон/эмоция: только через плату. Без платы — молчим, а не выдумываем. */
 async function sendCanned(i){
-  const text = CANNED_RU[i];
-  if(boardOnline){
-    try{ await jpost('/api/bridge/send', {from:myname(), canned:i, text}); }
-    catch(err){ toast('Не ушло: ' + (err && err.error || 'ошибка')); }
-  } else {
-    try{ await jpost('/api/messages', {from:myname(), text}); }catch(_){}
-  }
+  if(!boardOnline){ toast('Плата не в эфире — шаблон не уйдёт'); return; }
+  try{ await jpost('/api/bridge/send', {canned:i, text:CANNED_RU[i]}); }
+  catch(err){ toast('Не ушло: ' + (err && err.error || 'ошибка')); }
   tick();
 }
 async function sendEmote(i){
-  const label = EMOTES[i][1] + ' ' + EMOTES[i][2];
-  if(boardOnline){
-    try{ await jpost('/api/bridge/send', {from:myname(), emote:i, text:label}); }catch(err){ toast('Не ушло'); }
-  } else {
-    try{ await jpost('/api/emotions', {from:myname(), emote:EMOTES[i][0]}); }catch(_){}
-  }
+  if(!boardOnline){ toast('Плата не в эфире — эмоция не уйдёт'); return; }
+  try{ await jpost('/api/bridge/send', {emote:i, text:EMOTES[i][1] + ' ' + EMOTES[i][2]}); }
+  catch(err){ toast('Не ушло: ' + (err && err.error || 'ошибка')); }
   emoteReact(EMOTES[i][0]); tick();
 }
 async function sendReaction(i){
@@ -641,7 +620,7 @@ if('serviceWorker' in navigator){
   });
 }
 
-document.addEventListener('visibilitychange', () => { if(!document.hidden){ beat(); tick(); } });
+document.addEventListener('visibilitychange', () => { if(!document.hidden) tick(); });
 connectSSE();
 setInterval(tick, 2000);
-beat(); tick();
+tick();
