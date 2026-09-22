@@ -37,6 +37,8 @@
 #include "bingo.h"
 #include "theme.h"            // the crash card on the splash
 #include "clock.h"            // ...and the ten-minute IGNORE on it
+#include "type_names.h"
+#include "bw_bridge.h"         // USB bridge to browatch-web (-DBW_BRIDGE=1)
 
 // Written every second, read once on the next boot. RTC_NOINIT_ATTR is the
 // point: it survives a software reset WITHOUT being zeroed on the way back
@@ -558,7 +560,11 @@ bool                usingCapTouch = false;
 // see loop()). cyd35's CLEAR screen checks this to fall back from its
 // banded render to direct-to-tft; the other board's `canvas` pointer
 // gets reseated to &tft directly at the point of failure instead.
+#if defined(DONGLE)
+bool                frameBufferOk = false;   // headless: no display, nothing buffered
+#else
 bool                frameBufferOk = true;
+#endif
 DetectionEngine     engine;
 AppState            state     = AppState::BOOT;
 uint32_t            bootStart = 0;
@@ -2209,6 +2215,9 @@ void setup() {
     }
 
 
+#if !defined(DONGLE)
+    // No frame buffer on a headless build: 75 KB of RAM stays free and
+    // frameBufferOk is already false (see its declaration up top).
 #if defined(CYD35)
     // No FULL-screen double buffer on this board — confirmed on real
     // hardware that the 320x480 panel's ~150KB sprite need exceeds the
@@ -2251,11 +2260,16 @@ void setup() {
     }
     frame.setTextSize(1);
 #endif
+#endif  // !DONGLE: no frame buffer without a display
 
     // Builds a 512-byte lookup table and nothing else; it touches no bus
     // and can go anywhere after the display is up.
     FramePush::begin();
 
+#if !defined(DONGLE)
+    // Headless dongle builds skip everything down to the matching #endif:
+    // no display to init for, no touch to probe, and — critically — no
+    // finger to tap through an interactive calibration with.
 #if defined(CYD35)
     // The standalone XPT2046_Touchscreen library (own SPIClass, own
     // IRQ pin) produced constant garbage reads and a free-running IRQ
@@ -2405,6 +2419,7 @@ void setup() {
         Serial.println("Loaded saved touch calibration.");
     }
 #endif
+#endif  // !DONGLE: no display, no touch, no calibration on a headless build
 
     // Seed the PRNG so the digital rain starts in a fresh-looking state
     // on every boot. Analog read on a floating pin is plenty.
@@ -2460,12 +2475,23 @@ void setup() {
     // against a frame built by an independent implementation.
     MeshTalk::begin();
 #endif
+#if defined(BW_BRIDGE)
+    // After the radio: the first announce waits for our own MAC anyway.
+    BwBridge::begin();
+#endif
     applyBrightness();
     // After a wipe the board comes back the way the wipe asked: straight to the
     // main screen, unlocked, with no splash and no boot quip, after a duress
     // PIN -- so it reads as an unlock and not a restart -- or locked after the
     // tenth wrong guess.
     const WipeBoot wb = takeWipeBoot();
+#if defined(DONGLE)
+    // No screens on a headless build: no CLEAR to enter, no boot splash.
+    // A wipe still wipes (physicalNvsWipe ran before this); the board just
+    // comes back as a bridge instead of a mascot.
+    (void)wb;
+    Serial.println("[dongle] headless bridge mode: detection + mesh + USB, no UI");
+#else
     if (wb == WipeBoot::UNLOCKED) {
         Security::forceUnlock();
         enterClear();
@@ -2474,6 +2500,7 @@ void setup() {
         Squachy::trigger(Squachy::Event::BOOTED, DetectionType::UNKNOWN, engine.lifetimeTotal());
         enterBoot();
     }
+#endif
 }
 
 // ---- PRIM: what each drawing primitive costs on the real sprite ----
@@ -2646,6 +2673,29 @@ void loop() {
     // Cheap and unconditional: available() is a register read, and this
     // is the only way in for the one serial command the firmware takes.
     Clock::pollSerial();
+#if defined(DONGLE)
+    // Headless USB-dongle duty cycle: no display, no touch, no UI screens.
+    // Detection radios + mesh + the USB bridge only; the web app (or the
+    // native app over OTG) is the whole user interface. Every source here
+    // is callback-driven (WiFi promiscuous, BLE host task), so a 10 ms
+    // cadence loses nothing.
+    {
+        const uint32_t dnow = millis();
+        Clock::tick(dnow);
+        engine.loop();
+#if SQUACH_MESH
+        Mesh::tick(dnow);
+        MeshTalk::tick(dnow);
+#endif
+        Bingo::tick(dnow);
+#if defined(BW_BRIDGE)
+        BwBridge::tick(dnow, engine);
+#endif
+        OtaCore::tick(dnow);   // confirms a probationary image, so an OTA does not roll back
+        delay(10);
+    }
+    return;
+#endif
     uint32_t frameStartUs = micros();
     FrameProf::begin();
     s_pushAccumUs = 0;
@@ -2680,7 +2730,7 @@ void loop() {
         char sub[40];
         switch (Bingo::takeEvent(bt)) {
             case Bingo::Event::MARKED:
-                snprintf(sub, sizeof sub, "%s  (%u of 16)", detectionTypeName(bt),
+                snprintf(sub, sizeof sub, "%s  (%u of 16)", TypeNames::display(bt),
                          (unsigned)Bingo::markedCount());
                 Theme::showToast(Theme::tr("SQUARE MARKED", "ОТМЕЧЕНО"), sub, Theme::GREEN, 2200);
                 break;
@@ -2728,6 +2778,11 @@ void loop() {
         touchJustUp = false;
     }
     engine.loop();
+#if defined(BW_BRIDGE)
+    // After the engine and the mesh tick source fresh state: mirrors inbox,
+    // detections, emotes and squad to USB for browatch-web. Reads only.
+    BwBridge::tick(now, engine);
+#endif
     floodTick();   // nothing outside a FLOOD_BENCH build
     // The heap at the first pass of loop(), for DIAGNOSTICS' BOOT line.
     static uint32_t s_loopHeapFree = 0, s_loopHeapLargest = 0;
@@ -3805,8 +3860,8 @@ void loop() {
                         const bool wasOn = IgnoreList::contains(s_confirmMac);
                         if (wasOn) IgnoreList::remove(s_confirmMac);
                         else       IgnoreList::add(s_confirmMac, s_confirmType);
-                        Theme::showToast(wasOn ? Theme::tr("UN-IGNORED", "НЕ ИГНОР") : Theme::tr("IGNORED", "ИГНОР"),
-                                         detectionTypeName(s_confirmType),
+                                         Theme::showToast(wasOn ? Theme::tr("UN-IGNORED", "НЕ ИГНОР") : Theme::tr("IGNORED", "ИГНОР"),
+                                          TypeNames::display(s_confirmType),
                                          Theme::colorFor(s_confirmType));
                     } else if (ctap == LogConfirmTap::HUNT) {
                         lastTouch = now;

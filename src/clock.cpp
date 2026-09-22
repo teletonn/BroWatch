@@ -13,6 +13,7 @@
 #include "ui_clear.h"    // PACE, the mascot step clock
 #include "draw_band.h"   // BAND, the 3.5in row gate
 #include "squachy.h"     // TEMPO, his durations
+#include "bw_bridge.h"  // [BW ...] lines go to the USB bridge, not the console
 
 // PRIM, on every build: main.cpp runs the primitive benchmark on its next pass.
 extern volatile bool g_benchPrimNow;
@@ -408,6 +409,11 @@ void pollSerial() {
             Serial.println("[security] locked -- unlock it on the screen first.");
             continue;
         }
+#if defined(BW_BRIDGE)
+        // The USB bridge's lane: gateway.py speaks [BW {...}] on this same
+        // port, and nothing below understands a line starting with '['.
+        if (line[0] == '[') { BwBridge::onLine(line); continue; }
+#endif
 
         if (strncasecmp(line, "FLOOD ", 6) == 0) {
             // A thousand a second is five times the loudest room measured;

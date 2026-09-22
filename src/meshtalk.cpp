@@ -907,6 +907,12 @@ bool takeEmote(EmoteIn& out) {
     return true;
 }
 
+bool peekEmote(EmoteIn& out) {
+    if (!s_emoteHave) return false;
+    out = s_emote;
+    return true;
+}
+
 void setOwnMac(const uint8_t mac[6]) {
     memcpy(s_ownMac, mac, 6);
     s_macSet = true;

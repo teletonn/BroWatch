@@ -93,6 +93,10 @@ struct EmoteIn {
     uint32_t at;
 };
 bool takeEmote(EmoteIn& out);
+// Same slot without consuming: the USB bridge (bw_bridge.cpp) mirrors emotes
+// to the web UI while the CLEAR screen still owns takeEmote() and acts them
+// out. Same loop task on both sides, so no race.
+bool peekEmote(EmoteIn& out);
 
 // ---- the squad update ----------------------------------------------------
 // See meshmsg.h. The sender puts a NUDGE (and, if sharing, its WIFI parts)
