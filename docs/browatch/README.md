@@ -9,7 +9,7 @@
 - [00 — Пошаговый план](00-PLAN.md) — исследование, решения, этапы, критерии готовности.
 - [01 — Обзор и гайд](01-obzor.md) — что это, железо, детекции, BroMesh, прошивка и настройка.
 - [02 — Русификация](02-rusifikaciya.md) — RU/EN режим, шрифт, `tr()/printRU`, что переведено, таблица шаблонов.
-- [03 — Веб-мост](03-web-most.md) — шлюз USB/Serial + `browatch-web` на порту 40400.
+- [03 — Веб-мост](03-web-most.md) — шлюз USB/Serial + веб-приложение `web/` (v0.2.0, PWA) на порту 40400.
 - [04 — Android](04-android.md) — `browatch-app` (Native Kotlin + BLE).
 - [05 — Ребренд](05-rebrand.md) — BroWatch/BroMesh: что переименовано, что оставлено для совместимости.
 - [06 — Платы](06-platy.md) — инвентарь: какая плата каким env шьётся, MAC, шпаргалка по прошивке.
@@ -23,7 +23,7 @@
 
 ## Связанные репозитории
 
-- `/run/media/al/ARCHIVE/code/browatch-web` — веб-приложение + шлюз (порт 40400).
+- `web/` (в этом репо) — веб-приложение + шлюз (порт 40400, v0.2.0); старый отдельный checkout `/run/media/al/ARCHIVE/code/browatch-web` оставлен как есть.
 - `/run/media/al/ARCHIVE/code/browatch-app` — Android-приложение (Kotlin, BLE).
 - `/run/media/al/ARCHIVE/code/SquachWatch-CYD` — апстрим-зеркало с исходной RU-вики (`wiki/01-obzor-i-gayd.md`).
 

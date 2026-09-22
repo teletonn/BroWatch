@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a000f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>BroWatch Web</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<header id="topbar">
+  <canvas id="mascot" width="70" height="70" title="Lil Guy"></canvas>
+  <div class="brand">
+    <h1>BRO<span>WATCH</span> <small>web</small></h1>
+    <div id="status" role="status">подключение…</div>
+  </div>
+  <div id="board-pill" hidden>⚡ <span id="board-name">плата</span></div>
+  <button id="btn-bg" aria-label="Фон и настройки">🎨</button>
+</header>
+
+<nav id="tabs" aria-label="Разделы">
+  <button data-tab="chat" class="on">💬 Чат <b id="unread" hidden></b></button>
+  <button data-tab="squad">👥 Отряд <b id="squad-count"></b></button>
+  <button data-tab="radar">📡 Радар <b id="det-count"></b></button>
+</nav>
+
+<main>
+  <section id="tab-chat" class="tab on" aria-label="Чат">
+    <div id="chat" aria-live="polite"></div>
+    <button id="tonew" hidden>↓ новые сообщения</button>
+    <div id="composer">
+      <div class="crow">
+        <button id="btn-canned" aria-expanded="false">⌨ Шаблоны</button>
+        <button id="btn-emotes" aria-expanded="false">😀 Эмоции</button>
+        <button id="react-like" title="Понравилось — canned 48 в эфир через плату">👍</button>
+        <button id="react-dislike" title="Не понравилось — canned 49 в эфир через плату">👎</button>
+      </div>
+      <div id="canned-panel" hidden>
+        <div class="crow" id="canned-tabs" role="tablist"></div>
+        <div id="canned-lines"></div>
+      </div>
+      <div id="emote-panel" hidden>
+        <div class="crow" id="emote-tabs" role="tablist"></div>
+        <div id="emote-grid"></div>
+      </div>
+      <form id="send" class="crow">
+        <input id="text" placeholder="сообщение…" autocomplete="off" maxlength="200" enterkeyhint="send">
+        <button type="submit" aria-label="Отправить в веб-чат" title="В веб-чат (этот браузер и другие вкладки)">➤</button>
+        <button type="button" id="toboard" title="Отправить текст на плату: она передаст его в mesh-эфир">→плата</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="tab-squad" class="tab" aria-label="Отряд">
+    <div class="crow card" id="whoami">
+      <input id="myname" placeholder="моё имя" value="web" maxlength="24" autocomplete="off">
+      <button id="announce">Я тут</button>
+    </div>
+    <div id="board-card" class="card" hidden></div>
+    <h3 class="sect">В эфире <span id="range-count"></span></h3>
+    <ul id="squad"></ul>
+    <h3 class="sect">Недавно были</h3>
+    <ul id="recent"></ul>
+  </section>
+
+  <section id="tab-radar" class="tab" aria-label="Детекции">
+    <ul id="dets"></ul>
+  </section>
+</main>
+
+<footer id="foot"><span id="ver">v…</span> · <span id="foot-board">плата: …</span></footer>
+<div id="toasts" aria-live="polite"></div>
+
+<div id="sheet" hidden>
+  <div id="sheet-card" role="dialog" aria-label="Фон и настройки">
+    <h2>ФОН <small>как на плате</small></h2>
+    <div id="bg-pick"></div>
+    <label class="check"><input type="checkbox" id="motion"> Анимация фона</label>
+    <label class="check"><input type="checkbox" id="notif"> Уведомления браузера (когда вкладка скрыта)</label>
+    <p class="hint">Фон, имя и настройки хранятся в этом браузере. Анимация сама выключается при слабом устройстве.</p>
+    <button id="sheet-close">Закрыть</button>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

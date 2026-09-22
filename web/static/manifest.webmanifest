@@ -1,0 +1,17 @@
+{
+  "name": "BroWatch Web",
+  "short_name": "BroWatch",
+  "description": "Веб-зеркало BroWatch: чат, отряд и радар платы через USB-мост",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a000f",
+  "theme_color": "#0a000f",
+  "icons": [
+    {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"},
+    {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

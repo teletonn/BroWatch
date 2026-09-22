@@ -1,0 +1,15 @@
+[Unit]
+Description=BroWatch USB bridge gateway (%i)
+BindsTo=dev-%i.device
+After=dev-%i.device browatch-web.service
+
+[Service]
+Type=simple
+# %i — ttyUSB0 и т.п. Скорость: 2000000 для плат, 921600 для ESP32-донгла.
+# Для донгла: systemctl --user edit browatch-gateway@ttyUSB0 --full и поменять baud.
+ExecStart=/usr/bin/python3 %h/.local/share/browatch-web/gateway.py --port /dev/%i --baud 2000000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

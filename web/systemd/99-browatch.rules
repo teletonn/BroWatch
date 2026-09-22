@@ -1,0 +1,5 @@
+# BroWatch: при подключении платы/донгла на CH340 (1a86:7523) —
+# поднять шлюз моста в user-сервисах.
+# Нужен linger (loginctl enable-linger $USER), иначе user-менеджер спит.
+# ID проверьте своим: lsusb | grep -i serial. У плат BroWatch — CH340.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", TAG+="systemd", ENV{SYSTEMD_USER_WANTS}="browatch-gateway@%k.service"

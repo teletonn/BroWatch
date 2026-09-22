@@ -1,0 +1,13 @@
+[Unit]
+Description=BroWatch Web (chat+squad+radar mirror, :40400)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/browatch-web/server.py
+Environment=BROWATCH_PORT=40400
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
