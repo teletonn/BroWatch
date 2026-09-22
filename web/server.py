@@ -35,6 +35,25 @@ subs_lock = threading.Lock()
 outbox = []       # web -> board: [{"t":"send",...}], drained by gateway
 board_cache = {"online": None, "board": None}
 
+# Safety net против повторных кадров моста: hello/reconnect шлюза
+# пересылает бэклог inbox целиком, и без этого окна каждая такая пересылка
+# плодила бы дубликаты в чате. Цена: одинаковый текст от того же отправителя
+# чаще раза в MESH_DUPE_S глотается (только направление mesh, веб-чат не тронут).
+MESH_DUPE_S = 45
+recent_mesh = []  # [(ts, kind, key)] kind: msg|emote|detection
+
+
+def mesh_dupe(kind, key):
+    t = now()
+    with store_lock:
+        recent_mesh[:] = [(ts, k, ke) for (ts, k, ke) in recent_mesh if t - ts <= MESH_DUPE_S]
+        for (_, k, ke) in recent_mesh:
+            if k == kind and ke == key:
+                return True
+        recent_mesh.append((t, kind, key))
+        recent_mesh[:] = recent_mesh[-200:]
+        return False
+
 
 def now():
     return time.time()
@@ -177,12 +196,19 @@ def ingest(obj):
         return "peer", add_peer(pid, obj.get("name"), obj.get("rssi"),
                                 obj.get("client"), obj.get("lang"))
     if t in ("msg", "message"):
-        return "message", add_message(obj.get("from", "unknown"),
-                                      obj.get("text", ""), via="mesh")
+        frm, text = obj.get("from", "unknown"), obj.get("text", "")
+        if mesh_dupe("msg", (frm, text)):
+            return "dupe", {"ok": False, "note": "mesh resend suppressed"}
+        return "message", add_message(frm, text, via="mesh")
     if t == "emote":
-        return "emotion", add_emotion(obj.get("from", "unknown"),
-                                      obj.get("emote", "?"), via="mesh")
+        frm, em = obj.get("from", "unknown"), obj.get("emote", "?")
+        if mesh_dupe("emote", (frm, em)):
+            return "dupe", {"ok": False, "note": "mesh resend suppressed"}
+        return "emotion", add_emotion(frm, em, via="mesh")
     if t == "detection":
+        key = (obj.get("mac"), obj.get("type"))
+        if mesh_dupe("detection", key):
+            return "dupe", {"ok": False, "note": "mesh resend suppressed"}
         d = {"type": obj.get("type"), "mac": obj.get("mac"), "rssi": obj.get("rssi"),
              "vendor": obj.get("vendor"), "ts": now()}
         with store_lock:
@@ -419,7 +445,8 @@ class H(BaseHTTPRequestHandler):
                                                str(obj.get("emote", "?"))[:24], via="web"))
         if path == "/api/ingest":
             kind, payload = ingest(obj)
-            return self._json(200, {"ok": kind != "drop", "kind": kind, "data": payload})
+            ok = kind in ("peer", "message", "emotion", "detection")
+            return self._json(200, {"ok": ok, "kind": kind, "data": payload})
         if path == "/api/bridge/send":
             # Веб -> плата (через gateway.py в Serial): текст, canned-индекс
             # или emote-индекс MeshMsg::Emote. text — подпись для локального
