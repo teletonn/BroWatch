@@ -1,4 +1,4 @@
-# browatch-web API (v0.2.1)
+# browatch-web API (v0.2.2)
 
 База: `http://127.0.0.1:40400` (именно `127.0.0.1`: `localhost` может
 резолвиться в `::1` и падать с connection refused). Всё — JSON, UTF-8.
@@ -24,8 +24,8 @@
 
 ## REST
 
-- `GET /api/health` → `{"ok":true,"version":"0.2.0","port":40400,"peers":N,"in_range":K,"messages":M,"board_online":true,"board":{…}|null}`
-- `GET /api/peers` → недавние пиры: `[{"id":"…","name":"…","nick":"…","rssi":-61,"client":"…","lang":"R","last_seen":…,"age_s":3,"in_range":true}]`
+- `GET /api/health` → `{"ok":true,"version":"0.2.2","port":40400,"peers":N,"in_range":K,"messages":M,"board_online":true,"board":{…}|null}`
+- `GET /api/peers` → недавние пиры: `[{"id":"…","name":"…","nick":"…","outfit":7,"shade":0,"desk":{…}|null,"rssi":-61,"client":"…","lang":"R","last_seen":…,"age_s":3,"in_range":true}]`. `outfit`/`shade` — индексы общих с платой таблиц (скин для Логова, 0..14 / 0..3); `desk` — только у announce платы: `{"squad":0/1,"crowd":1..8,"visit":0/1,"clk":0..2,"clkfont":0/1,"clkbg":0..6,"bg":0..11}` (настройки DESK MODE, Логово их зеркалит).
 - `POST /api/peers` — закрыт: `410 gone` (у веба нет персоны).
 - `GET /api/squad` → то же + `last_msg` (последнее сообщение каждого)
 - `GET /api/messages?since=ID` → `[{"id":1,"from":"…","text":"…","ts":…,"via":"web|board|mesh"}]`.
@@ -57,7 +57,7 @@
 и читает такие же:
 
 - плата → веб (через `gateway.py` → `POST /api/ingest`):
-  - `{"t":"peer","mac":"AA:BB:..","name":"USB-A3B0","nick":"Персона","client":"bw <env>/<версия>","lang":"R"}` — сама плата при старте, каждые 30 с, на hello и на ping; `nick` — персона владельца (payphone NAME, иначе индексный ник):   единственное лицо, от которого говорит веб; соседи по squad — каждые 5 с;
+  - `{"t":"peer","mac":"AA:BB:..","name":"USB-A3B0","nick":"Персона","client":"bw <env>/<версия>","lang":"R","outfit":7,"shade":0,"desk":{"squad":1,"crowd":4,"visit":0,"clk":1,"clkfont":0,"clkbg":0,"bg":1}}` — сама плата при старте, каждые 30 с, на hello и на ping; `nick` — персона владельца (payphone NAME, иначе индексный ник): единственное лицо, от которого говорит веб; `outfit`/`shade` — её скин; `desk` — настройки DESK MODE для Логова; соседи по squad — каждые 5 с (с `"outfit"`/`"shade"` из последней рекламы);
   - `{"t":"msg","from":"…","text":"…"}` — новые входящие mesh-сообщения (текст или расшифрованный canned);
   - `{"t":"emote","from":"AA:BB:..","emote":"WAVE"}` — эмоции (подглядка: на экране платы они тоже проигрываются);
   - `{"t":"detection","type":"FLOCK","mac":"…","rssi":-70,"vendor":"…"}` — свежая детекция из журнала.

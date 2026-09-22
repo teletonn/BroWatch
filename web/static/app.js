@@ -3,6 +3,9 @@
    Маскот: LILGUY 1:1 из прошивки (include/lil_guy.h): 8 кадров 10x10,
    2 бита на пиксель, кадр = (now/80)%8. Цвета из Theme::drawLilGuy:
    hair #00FFF5, skin #FFD0F0, body #B967FF.
+   ЛОГОВО — часы DESK (src/ui_desk.cpp): семисегментные цифры 1:1 (SEG),
+   персонаж платы + сквад в их скинах (outfit/shade из моста), всплывающее
+   ПИСЬМО как XP-коробка платы, карточка детекции, настройки — с платы.
    Фоны: подмножество Settings::Background. Цвета типов — Theme::colorFor,
    имена — TypeNames::ru.
    Шаблоны: CANNED_RU[] 0..49 = src/meshwords.cpp (48/49 — реакции
@@ -87,14 +90,15 @@ const LILGUY = [
   0x000000,0x000440,0x000550,0x000940,0x002A40,0x000B40,0x000B00,0x002F00,0x003FC0,0x00A0A0,
   0x000000,0x000500,0x001950,0x002A50,0x000E40,0x000E40,0x000B00,0x000F00,0x003FE0,0x002820];
 const LIL_PAL = [null, '#00fff5', '#ffd0f0', '#b967ff'];
-function drawLilGuy(ctx, f, x, y, s, flip){
+function drawLilGuy(ctx, f, x, y, s, flip, pal){
+  const P = pal || LIL_PAL;
   for(let yy = 0; yy < 10; yy++){
     const row = LILGUY[f * 10 + yy] >>> 0;
     for(let xx = 0; xx < 10; xx++){
       const c = (row >>> (xx * 2)) & 3;
-      if(!c) continue;
+      if(!c || !P[c]) continue;
       const dx = flip ? 9 - xx : xx;
-      ctx.fillStyle = LIL_PAL[c];
+      ctx.fillStyle = P[c];
       ctx.fillRect(x + dx * s, y + yy * s, s, s);
     }
   }
@@ -418,6 +422,7 @@ function renderSquad(){
     pers.innerHTML = 'Плата не в эфире — подключите её по USB и разблокируйте PIN';
   }
   $('foot-board').textContent = 'плата: ' + (boardOnline && b ? (b.name || b.id) : 'не в эфире');
+  renderDenSettings();
 }
 const isBoardPeer = p => (p.client || '').startsWith('bw ');
 function onSquad(list, live){
@@ -438,6 +443,342 @@ function onLeave(id){
   delete peersCache[id];
   renderSquad();
 }
+
+/* ================= ЛОГОВО: часы DESK с платы (src/ui_desk.cpp) =================
+   Часы семисегментные 1:1 (SEG-биты оттуда), персонаж платы в её скине
+   (outfit/shade из announce) + сквад в своих скинах, всплывающее ПИСЬМО
+   как XP-коробка платы, карточка детекции, местный таймер ФОКУС/ПЕРЕРЫВ.
+   Настройки (сквад вкл/выкл, сколько тел, часы, фон) — с платы, зеркалятся
+   в полоске над сценой; меняются на плате (DESK MODE), здесь только чтение.
+   Без платы — часы идут, сквада и настроек нет: молчание честнее выдумки. */
+const SEG = [0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F];
+/* Скины: [акцент, морда, тело] по индексу аутфита прошивки
+   (NONE..SHARK, общие таблицы — 4 бита в рекламе). Морда одна на всех:
+   вид один, костюмы разные. Цвета тела — с оглядкой на squachy.cpp
+   (VOIDEYE/парка/тень — оттуда буквально). */
+const OUTFIT_COLS = [
+  ['#00fff5','#ffd0f0','#8a5a33'],['#5a3a1a','#ffd0f0','#7a4a22'],
+  ['#ff71ce','#ffd0f0','#aeddff'],['#ffffff','#ffd0f0','#c0c0c8'],
+  ['#3a3a4a','#c8a0d8','#14141c'],['#e03030','#ffd0f0','#2a5ad0'],
+  ['#00cc44','#ffd0f0','#2a5ad0'],['#c0c0ff','#ffd0f0','#2a2a4a'],
+  ['#ffffff','#ffd0f0','#2266ff'],['#f4c20d','#ffd0f0','#2040c0'],
+  ['#aaaaaa','#ffd0f0','#5a5a62'],['#ffffff','#ffd0f0','#d8d8e8'],
+  ['#8a80e0','#ffd0f0','#302c60'],['#ffcf70','#ffd0f0','#ff8a1a'],
+  ['#e8f0f4','#ffd0f0','#5a7a8c']];
+const SHADE_COLS = ['#00fff5','#ff2d78','#00ff88','#b967ff'];  /* CYAN/PINK/GREEN/PURPLE */
+/* Фон платы (Settings::Background) -> фон сцены. Неточных (аквариум, огонь,
+   терминал, туннель) среди веб-фонов нет — едут на ближайший по духу. */
+const DEN_BG = {0:'digital',1:'starfield',2:'toasters',3:'starfield',4:'digital',
+  5:'fireflies',6:'starfield',7:'snowfall',8:'spectrum',9:'starfield',10:'synthwave',11:'black'};
+const DEN_BG_RU = ['ЦИФРОВОЙ ДОЖДЬ','ЗВЁЗДЫ','ТОСТЕРЫ','АКВАРИУМ','ТЕРМИНАЛ','СВЕТЛЯЧКИ',
+  'ОГОНЬ','СНЕГ','ГИБСОН','ТУННЕЛЬ','СИНТВЕЙВ','ЧЁРНЫЙ'];
+const DEN_CLK_K = [0.78, 1.0, 1.3];  /* CLOCK_K платы */
+const denCanvas = $('den'), dctx = denCanvas.getContext('2d');
+let denSeenMsg = 0, denLastDraw = 0, denParts = [], denBgKey = '';
+const denDesk = () => (boardOnline && boardInfo && boardInfo.desk) || null;
+
+function denOutfitPal(o){
+  const c = OUTFIT_COLS[(o|0)] || OUTFIT_COLS[0];
+  return [null, c[0], c[1], c[2]];
+}
+function segDigit(ctx, d, x, y, w, h, th, col){
+  const s = (d >= 0 && d <= 9) ? SEG[d] : 0;
+  const mid = y + h/2 - th/2;
+  const segs = [[1,x+th+1,y,w-2*th-2,th],[2,x+w-th,y+th+1,th,h/2-th-2],
+    [4,x+w-th,mid+th+1,th,h/2-th-2],[8,x+th+1,y+h-th,w-2*th-2,th],
+    [16,x,mid+th+1,th,h/2-th-2],[32,x,y+th+1,th,h/2-th-2],[64,x+th+1,mid,w-2*th-2,th]];
+  ctx.fillStyle = col;
+  for(const [bit,sx,sy,sw,sh] of segs) if(s & bit) ctx.fillRect(sx|0, sy|0, sw|0, sh|0);
+}
+function denWrap(ctx, text, maxW){
+  const words = String(text).split(/\s+/).filter(Boolean), lines = [];
+  let cur = '';
+  for(const w of words){
+    const t = cur ? cur + ' ' + w : w;
+    if(ctx.measureText(t).width > maxW && cur){ lines.push(cur); cur = w; }
+    else cur = t;
+    if(lines.length === 2){ cur = cur.slice(0, 26) + '…'; break; }
+  }
+  if(cur) lines.push(cur);
+  return lines.slice(0, 3);
+}
+function denSize(){
+  const r = denCanvas.getBoundingClientRect();
+  const d = Math.min(devicePixelRatio || 1, 2);
+  const W = Math.max(200, Math.round(r.width)), H = Math.round(r.height) || 340;
+  if(denCanvas.width !== Math.round(W*d) || denCanvas.height !== Math.round(H*d)){
+    denCanvas.width = Math.round(W*d); denCanvas.height = Math.round(H*d);
+    dctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  return [W, H];
+}
+/* Упрощённые фоны сцены — те же ключи, что у страницы, но частицы свои,
+   чтобы сцена жила, даже когда у страницы выбран другой фон. */
+function denBgInit(key, W, H){
+  denParts = []; denBgKey = key;
+  if(key === 'starfield') for(let i = 0; i < 90; i++) denParts.push({x:rnd(0,W), y:rnd(0,H), v:rnd(.1,.6), r:rnd(.5,1.6)});
+  else if(key === 'snowfall') for(let i = 0; i < 70; i++) denParts.push({x:rnd(0,W), y:rnd(0,H), v:rnd(.4,1.4), r:rnd(1,3), ph:rnd(0,6)});
+  else if(key === 'digital'){ const c = Math.floor(W/16); for(let i = 0; i < c; i++) denParts.push({x:i*16, y:rnd(-H,0), v:rnd(2,6)}); }
+  else if(key === 'fireflies') for(let i = 0; i < 26; i++) denParts.push({x:rnd(0,W), y:rnd(0,H), vx:rnd(-.3,.3), vy:rnd(-.25,.25), ph:rnd(0,6)});
+  else if(key === 'toasters') for(let i = 0; i < 4; i++) denParts.push({x:rnd(0,W), y:rnd(0,H*.6), v:rnd(.3,1), s:rnd(10,22)});
+}
+let denT = 0;
+function denBgDraw(key, W, H){
+  denT++;
+  if(key === 'black'){ dctx.fillStyle = '#0a000f'; dctx.fillRect(0,0,W,H); return; }
+  const g0 = dctx.createLinearGradient(0,0,0,H);
+  g0.addColorStop(0,'#0a000f'); g0.addColorStop(1,'#160a24');
+  dctx.fillStyle = g0; dctx.fillRect(0,0,W,H);
+  if(key === 'starfield'){
+    for(const p of denParts){ dctx.fillStyle = '#ffffffaa'; dctx.fillRect(p.x, p.y, p.r, p.r); p.x -= p.v; if(p.x < 0){ p.x = W; p.y = rnd(0,H); } }
+  }else if(key === 'snowfall'){
+    for(const p of denParts){ dctx.fillStyle = '#a0dcffcc'; dctx.beginPath(); dctx.arc(p.x + Math.sin(denT/40+p.ph)*10, p.y, p.r, 0, 7); dctx.fill(); p.y += p.v; if(p.y > H+5){ p.y = -5; p.x = rnd(0,W); } }
+  }else if(key === 'digital'){
+    dctx.font = '13px monospace';
+    for(const p of denParts){ dctx.fillStyle = '#00ff8844'; dctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0], p.x, p.y); p.y += p.v; if(p.y > H+20){ p.y = rnd(-80,-10); p.v = rnd(2,6); } }
+  }else if(key === 'fireflies'){
+    for(const p of denParts){ const a = .3 + .3*Math.sin(denT/30+p.ph); dctx.fillStyle = `rgba(200,255,0,${a})`; dctx.beginPath(); dctx.arc(p.x, p.y, 2.2, 0, 7); dctx.fill(); p.x += p.vx; p.y += p.vy; if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0; }
+  }else if(key === 'toasters'){
+    for(const p of denParts){ dctx.fillStyle = '#c8a24bbb'; dctx.beginPath(); dctx.roundRect(p.x, p.y, p.s*2, p.s, 4); dctx.fill(); p.x -= p.v; if(p.x < -p.s*2){ p.x = W+10; p.y = rnd(0,H*.6); } }
+  }else if(key === 'synthwave'){
+    const g = dctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#0a000f'); g.addColorStop(.5,'#2a0a3a'); g.addColorStop(.58,'#ff2d78'); g.addColorStop(.62,'#0a000f');
+    dctx.fillStyle = g; dctx.fillRect(0,0,W,H);
+    const sx=W/2, sr=Math.min(W,H)*.13, sy=H*.42;
+    const sg = dctx.createLinearGradient(0,sy-sr,0,sy+sr);
+    sg.addColorStop(0,'#fffb96'); sg.addColorStop(1,'#ff2d78');
+    dctx.fillStyle = sg; dctx.beginPath(); dctx.arc(sx,sy,sr,0,7); dctx.fill();
+  }else if(key === 'spectrum'){
+    const n = 24, bw = W/n;
+    for(let i = 0; i < n; i++){
+      const d = detsCache[(detsCache.length-1-i+48) % Math.max(detsCache.length,1)];
+      const h = detsCache.length ? Math.min(H*.5, Math.max(5,(100 + (d?d.rssi:-100)) * H/160)) : 4;
+      dctx.fillStyle = d ? typeColor(d.type) : '#333355';
+      dctx.fillRect(i*bw+1, H-h-24, Math.max(2,bw-2), h);
+    }
+  }else{
+    for(const p of denParts){ dctx.fillStyle = '#ffffff88'; dctx.fillRect(p.x, p.y, 1.4, 1.4); p.x -= .3; if(p.x < 0) p.x = W; }
+    if(!denParts.length) denBgInit('starfield', W, H);
+  }
+  dctx.fillStyle = '#0a000f55'; dctx.fillRect(0,0,W,H);
+}
+/* Свежее входящее письмо mesh (как inbox платы): всплывает XP-коробкой. */
+function denLetter(){
+  const t = Date.now()/1000;
+  let best = null;
+  for(const m of msgsCache){
+    if(m.via !== 'mesh' || typeof m.id !== 'number') continue;
+    if(!m.text || !String(m.text).trim()) continue;
+    if(m.id === denSeenMsg || t - m.ts > 20) continue;
+    if(!best || m.ts > best.ts) best = m;
+  }
+  return best;
+}
+denCanvas.onclick = () => { const l = denLetter(); if(l) denSeenMsg = l.id; };
+function denFrame(){
+  requestAnimationFrame(denFrame);
+  if(document.hidden) return;
+  if(!DESKTOP.matches && activeTab !== 'den') return;
+  const t = performance.now();
+  if(!motionOn && t - denLastDraw < 1000) return;
+  denLastDraw = t;
+  const [W, H] = denSize();
+  const desk = denDesk();
+  const bgKey = DEN_BG[desk ? desk.bg : -1] || 'starfield';
+  if(bgKey !== denBgKey) denBgInit(bgKey, W, H);
+  denBgDraw(bgKey, W, H);
+  const nowMs = Date.now(), now = new Date(nowMs);
+  const k = DEN_CLK_K[(desk && desk.clk <= 2) ? desk.clk : 1] || 1;
+  const bangers = !!(desk && desk.clkfont === 1);
+
+  /* --- плашка часов, как plate платы: дата сверху, время крупно --- */
+  const dh = 40*k, dw = 27*k, th = Math.max(3, 6*k), gap = 5*k, colonW = 9*k;
+  const hh = now.getHours(), h12 = hh % 12 || 12, mm = now.getMinutes();
+  const dig = String(h12) + ':' + String(mm).padStart(2,'0');
+  const cells = dig.replace(':','').length;
+  const digitsW = cells*dw + (cells-1)*gap + colonW + 30*k;
+  const pw = Math.min(W - 12, digitsW + 84*k), px = (W - pw)/2, py = 6;
+  const dateStr = now.toLocaleDateString('ru-RU', {weekday:'short', day:'numeric', month:'long'});
+  dctx.font = '11px system-ui,sans-serif';
+  const dateW = dctx.measureText(dateStr).width;
+  const ph = py + 20 + dh + 10;
+  dctx.fillStyle = 'rgba(10,0,15,.82)';
+  dctx.beginPath(); dctx.roundRect(px, py, pw, ph, 8); dctx.fill();
+  dctx.strokeStyle = '#b967ff'; dctx.lineWidth = 1.5;
+  dctx.beginPath(); dctx.roundRect(px, py, pw, ph, 8); dctx.stroke();
+  dctx.fillStyle = '#00fff5'; dctx.textAlign = 'center'; dctx.textBaseline = 'alphabetic';
+  dctx.fillText(dateStr, W/2, py + 15, Math.max(dateW, pw - 12));
+  let cx = (W - digitsW)/2 + inkLead(dig[0], dw, th);
+  const cy = py + 22, col = '#ff71ce', blink = (nowMs/500|0) % 2 === 0;
+  if(bangers){
+    dctx.fillStyle = col;
+    dctx.font = `900 ${Math.round(dh)}px Impact,'Arial Black',sans-serif`;
+    dctx.fillText(dig, W/2, cy + dh*.82);
+    cx = W/2 + digitsW/2;
+  }else{
+    let xi = 0;
+    const ds = dig.replace(':','');
+    for(let i = 0; i < ds.length; i++){
+      segDigit(dctx, +ds[i], cx + xi, cy, dw, dh, th, col);
+      xi += dw + gap;
+      if(i === (h12 > 9 ? 1 : 0)){
+        if(blink){ dctx.fillStyle = col; dctx.fillRect(cx+xi, cy+dh/3-2, 4, 4); dctx.fillRect(cx+xi, cy+2*dh/3-2, 4, 4); }
+        xi += colonW;
+      }
+    }
+    cx += xi;
+  }
+  dctx.fillStyle = '#fffb96'; dctx.font = 'bold 11px system-ui,sans-serif'; dctx.textAlign = 'left';
+  dctx.fillText(hh < 12 ? 'AM' : 'PM', Math.min(cx + 4, W - 30), cy + dh - 2);
+  const plateBottom = py + ph;
+
+  /* --- письмо: XP-коробка под плашкой --- */
+  const letter = denLetter();
+  if(letter){
+    const bw = Math.min(W - 16, 300);
+    const bx = (W - bw)/2;
+    dctx.font = '12px system-ui,sans-serif';
+    const rows = denWrap(dctx, letter.text, bw - 16);
+    const bh = 15 + 6 + rows.length*15 + 16;
+    const by = plateBottom + 4;
+    dctx.fillStyle = '#0A5FE6';
+    dctx.beginPath(); dctx.roundRect(bx, by, bw, bh, 4); dctx.fill();
+    dctx.fillStyle = '#3D95FF'; dctx.fillRect(bx+1, by+2, bw-2, 3);
+    dctx.fillStyle = '#fff'; dctx.font = 'bold 10px system-ui,sans-serif'; dctx.textAlign = 'left';
+    dctx.fillText('✉ ПИСЬМО · ' + String(letter.from).slice(0, 14), bx + 6, by + 12);
+    dctx.fillStyle = '#D65434';
+    dctx.beginPath(); dctx.roundRect(bx+bw-19, by+2, 14, 11, 2); dctx.fill();
+    dctx.fillStyle = '#fff'; dctx.fillText('x', bx+bw-15, by + 11);
+    dctx.fillStyle = '#ECE9D8'; dctx.fillRect(bx+2, by+15, bw-4, bh-17);
+    dctx.fillStyle = '#000'; dctx.font = '12px system-ui,sans-serif';
+    rows.forEach((r, i) => dctx.fillText(r, bx+8, by+15+16+i*15));
+    dctx.fillStyle = '#D65434'; dctx.font = '10px system-ui,sans-serif'; dctx.textAlign = 'right';
+    dctx.fillText(tHHMM(letter.ts), bx+bw-6, by+bh-5);
+    dctx.textAlign = 'left';
+  }
+
+  /* --- сквад: плата по центру, гости рядом, каждый в своём скине --- */
+  const floorY = H - 34;
+  const frame = Math.floor(t/80) % 8;
+  const label = (x, y, text, dotCol, bold) => {
+    dctx.font = (bold ? 'bold ' : '') + '11px system-ui,sans-serif';
+    const tw = Math.min(dctx.measureText(text).width, 110);
+    dctx.fillStyle = 'rgba(10,0,15,.7)';
+    const lx = x - tw/2 - 8, ly = y - 2;
+    dctx.fillRect(lx, ly, tw + 16, 15);
+    if(dotCol){ dctx.fillStyle = dotCol; dctx.beginPath(); dctx.arc(lx + 7, ly + 7.5, 3, 0, 7); dctx.fill(); }
+    dctx.fillStyle = bold ? '#00fff5' : '#f2eef6';
+    dctx.textAlign = 'center';
+    dctx.fillText(text, x, y + 10, 110);
+    dctx.textAlign = 'left';
+  };
+  const bubble = (x, y, text) => {
+    dctx.font = '11px system-ui,sans-serif';
+    const rows = denWrap(dctx, text, 130);
+    const bw2 = Math.min(140, Math.max(...rows.map(r => dctx.measureText(r).width)) + 14);
+    const bh2 = rows.length*14 + 10;
+    const bx2 = Math.max(4, Math.min(W - bw2 - 4, x - bw2/2)), by2 = Math.max(plateBottom + 2, y - bh2 - 8);
+    dctx.fillStyle = '#f2eef6';
+    dctx.beginPath(); dctx.roundRect(bx2, by2, bw2, bh2, 7); dctx.fill();
+    dctx.fillStyle = '#0a000f';
+    rows.forEach((r, i) => dctx.fillText(r, bx2 + 7, by2 + 14 + i*14));
+    dctx.beginPath();
+    dctx.moveTo(x - 4, by2 + bh2); dctx.lineTo(x + 4, by2 + bh2); dctx.lineTo(x, by2 + bh2 + 6);
+    dctx.fill();
+  };
+  const drawMember = (x, y, s, o, fr, flip) => {
+    drawLilGuy(dctx, fr, x - 5*s, y - 10*s, s, flip, denOutfitPal(o));
+  };
+  const members = Object.values(peersCache)
+    .filter(p => p.in_range && !isBoardPeer(p))
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  const crowdN = desk ? Math.min(Math.max(desk.crowd|0, 1), 8) : 4;
+  const showN = desk && !desk.squad ? 0 : Math.min(members.length, Math.max(crowdN - 1, 1));
+  const shown = members.slice(0, showN);
+  if(!boardOnline){
+    dctx.fillStyle = '#a89bb5'; dctx.font = '13px system-ui,sans-serif'; dctx.textAlign = 'center';
+    dctx.fillText('плата не в эфире — сквад и настройки появятся при подключении', W/2, plateBottom + 24, W - 20);
+    dctx.textAlign = 'left';
+  }else{
+    const b = boardInfo || {};
+    const bs = 6, bx = W/2, by = floorY;
+    const bob = motionOn ? Math.sin(t/320)*2 : 0;
+    drawMember(bx, by + bob, bs, b.outfit, frame, false);
+    const bname = b.nick || b.name || b.id || 'плата';
+    label(bx, by + 6, bname, SHADE_COLS[b.shade|0] || SHADE_COLS[0], true);
+    const n = shown.length, ms = n > 4 ? 4 : 5;
+    shown.forEach((p, i) => {
+      const gx = n === 0 ? bx : 30 + (W - 60) * (n === 1 ? (p.id < b.id ? 0.12 : 0.88) : i/(n - 1 || 1));
+      const bob2 = motionOn ? Math.sin(t/300 + i*1.7)*2.5 : 0;
+      const fr2 = (frame + i*2) % 8;
+      drawMember(gx, floorY + bob2, ms, p.outfit, fr2, gx > bx);
+      const nm = p.nick || p.name || p.id;
+      label(gx, floorY + 6, String(nm).slice(0, 12), SHADE_COLS[p.shade|0] || null, false);
+      const lm = p.last_msg;
+      if(lm && lm.text && String(lm.text).trim() && (Date.now()/1000 - lm.ts) < 600)
+        bubble(gx, floorY - 10*ms + bob2, lm.text);
+    });
+    if(desk && !desk.squad){
+      dctx.fillStyle = '#a89bb5'; dctx.font = '12px system-ui,sans-serif'; dctx.textAlign = 'center';
+      dctx.fillText('сквад выключен на плате (DESK MODE)', W/2, H - 8);
+      dctx.textAlign = 'left';
+    }
+  }
+
+  /* --- карточка детекции, как alert платы: свежая — в углу --- */
+  const dt = Date.now()/1000;
+  const last = detsCache.length ? detsCache[detsCache.length-1] : null;
+  if(last && dt - last.ts < 20){
+    const cw = 150, chh = 40, dx = 6, dy = H - chh - 6;
+    dctx.fillStyle = 'rgba(10,0,15,.85)';
+    dctx.beginPath(); dctx.roundRect(dx, dy, cw, chh, 6); dctx.fill();
+    dctx.strokeStyle = typeColor(last.type || ''); dctx.lineWidth = 2;
+    dctx.beginPath(); dctx.roundRect(dx, dy, cw, chh, 6); dctx.stroke();
+    dctx.fillStyle = typeColor(last.type || ''); dctx.font = 'bold 11px system-ui,sans-serif'; dctx.textAlign = 'left';
+    dctx.fillText('📡 ' + (TYPE_RU[last.type] || last.type || '?'), dx + 8, dy + 15);
+    dctx.fillStyle = '#a89bb5'; dctx.font = '10px system-ui,sans-serif';
+    dctx.fillText(String(last.vendor || last.mac || '') + ' · ' + (last.rssi ?? ''), dx + 8, dy + 30);
+  }
+}
+/* Отступ первой чернильной цифры, как на плате: «1» светит только правыми
+   сегментами, и центровка по ячейкам увела бы время вправо. */
+function inkLead(ch, dw, th){ return ch === '1' ? dw - th : 0; }
+function renderDenSettings(){
+  const el = $('den-settings');
+  const d = denDesk();
+  if(!boardOnline || !d){ el.innerHTML = 'Логово зеркалит часы платы. <b>Плата не в эфире</b> — подключите её по USB.'; return; }
+  const crowd = (d.crowd|0) <= 1 ? 'ОДИН' : 'ДО ' + (d.crowd|0);
+  const clkN = ['мелкие', 'средние', 'крупные'][(d.clk|0)] || 'средние';
+  const bgN = DEN_BG_RU[d.bg] || ('фон ' + d.bg);
+  el.innerHTML = `⚙ платы: сквад <b>${d.squad ? 'вкл' : 'выкл'}</b> · тел <b>${crowd}</b>` +
+    ` · визит <b>${d.visit ? 'полный' : 'рядом'}</b> · часы <b>${clkN}${d.clkfont ? ', Bangers' : ', сегменты'}</b>` +
+    ` · фон <b>${esc(bgN)}</b> — меняются на плате (DESK MODE)`;
+}
+requestAnimationFrame(denFrame);
+
+/* ---------- местный таймер ФОКУС/ПЕРЕРЫВ (плату не трогает) ---------- */
+let denTimer = null;
+function denTimerLabel(){
+  const b = $('den-timer');
+  if(!denTimer){ b.textContent = '⏱ ФОКУС 25'; b.classList.remove('run'); return; }
+  const left = Math.max(0, Math.round((denTimer.end - Date.now())/1000));
+  const what = denTimer.phase === 'focus' ? 'ФОКУС' : 'ПЕРЕРЫВ';
+  b.textContent = `⏱ ${what} ${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+  b.classList.add('run');
+}
+$('den-timer').onclick = () => {
+  if(denTimer){ denTimer = null; toast('Таймер выкл. Без осуждения.'); }
+  else { denTimer = {phase:'focus', end: Date.now() + 25*60*1000}; toast('Двадцать пять минут. Время веду я.'); }
+  denTimerLabel();
+};
+setInterval(() => {
+  if(!denTimer) return;
+  if(Date.now() >= denTimer.end){
+    if(denTimer.phase === 'focus'){ denTimer = {phase:'break', end: Date.now() + 5*60*1000}; toast('Время. Встань, посмотри вдаль. Пять минут.'); }
+    else { denTimer = null; toast('Перерыв окончен. За дело.'); }
+  }
+  denTimerLabel();
+}, 1000);
 
 /* ---------- радар ---------- */
 let detsCache = [];

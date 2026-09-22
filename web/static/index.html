@@ -28,6 +28,7 @@
 
 <nav id="tabs" aria-label="Разделы">
   <button data-tab="chat" class="on">💬 Чат <b id="unread" hidden></b></button>
+  <button data-tab="den">🏠 Логово</button>
   <button data-tab="squad">👥 Отряд <b id="squad-count"></b></button>
   <button data-tab="radar">📡 Радар <b id="det-count"></b></button>
 </nav>
@@ -55,6 +56,15 @@
         <input id="text" placeholder="в эфир через плату…" autocomplete="off" maxlength="200" enterkeyhint="send">
         <button type="submit" id="tosend" aria-label="Отправить в mesh-эфир через плату" title="В эфир через подключённую плату — от её персонажа">➤</button>
       </form>
+    </div>
+  </section>
+
+  <section id="tab-den" class="tab" aria-label="Логово — часы платы">
+    <div class="card" id="den-settings">подключаю плату…</div>
+    <canvas id="den" aria-label="Логово: часы, сквач и отряд"></canvas>
+    <div class="crow" id="den-timer-row">
+      <button id="den-timer">⏱ ФОКУС 25</button>
+      <span id="den-timer-note">таймер местный, плату не трогает</span>
     </div>
   </section>
 

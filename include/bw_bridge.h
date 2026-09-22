@@ -5,7 +5,10 @@
 //   [BW {"t":"peer","mac":"AA:BB:CC:DD:EE:FF","name":"Squachy","client":"bw cyd-ili9341/v1.x"}]
 //   (the board's own announce also carries "nick": the owner's persona —
 //   payphone NAME, else the indexed nickname. The web app speaks ONLY as
-//   this persona and never invents its own.)
+//   this persona and never invents its own. It also carries "outfit"/"shade"
+//   (advert indices, shared tables both sides) and "desk" (the DESK MODE
+//   page's settings: squad/crowd/visit/clk/clkfont/clkbg/bg), so the web den
+//   mirrors the desk; squad snapshots carry "outfit"/"shade" per member.)
 //   [BW {"t":"msg","from":"Squachy","text":"..."}]
 //   [BW {"t":"emote","from":"AA:BB:...","emote":"WAVE"}]
 //   [BW {"t":"detection","type":"FLOCK","mac":"...","rssi":-70,"vendor":"..."}]

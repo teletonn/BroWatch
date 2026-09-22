@@ -121,10 +121,20 @@ def pump(ser):
 
 def demo_loop():
     names = ["Bro-1", "Bro-2", "Phone-Pixel"]
+    looks = {"Bro-1": (4, 1), "Bro-2": (13, 2), "Phone-Pixel": (2, 3)}
     print("gateway: DEMO-режим (без железа)", flush=True)
+    # Демо-плата: announce как у моста, с ником, скином и настройками DESK —
+    # Логово в демо выглядит как с живой платой.
+    post({"t": "peer", "mac": "DE:AD:BE:EF:00:01", "name": "USB-0001",
+          "nick": "ДЕМО", "client": "bw demo/0", "lang": "R",
+          "outfit": 7, "shade": 0,
+          "desk": {"squad": 1, "crowd": 4, "visit": 0,
+                   "clk": 1, "clkfont": 0, "clkbg": 0, "bg": 1}})
     for n in names:
+        o, s = looks[n]
         post({"t": "peer", "mac": "demo:%s" % n, "name": n,
-              "rssi": random.randint(-75, -45), "client": "demo"})
+              "rssi": random.randint(-75, -45), "client": "demo",
+              "outfit": o, "shade": s})
     i = 0
     phrases = ["привет с демо-шлюза", "как слышно?", "тест автообновления"]
     while True:

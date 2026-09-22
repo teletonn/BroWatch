@@ -90,9 +90,13 @@ static void emit(const char* body) {
 // signs mesh frames with, name is short and stable across reboots, nick is
 // the owner's persona (payphone NAME, else the indexed nickname) — the only
 // identity the web app may speak as. No other persona exists on the web side.
+// outfit/shade are the board's own look, so the web den draws its mascot in
+// the same skin; desk carries the DESK MODE page's settings (squad on/off,
+// HOW MANY bodies, full visit, clock size/font/backdrop, desk background),
+// so the web den mirrors the desk rather than free-styling it.
 static void emitOwn() {
     const uint8_t* mac = MeshTalk::ownMac();
-    char macS[18], name[16], client[64], body[256];
+    char macS[18], name[16], client[64], body[448];
     macStr(mac, macS);
     snprintf(name, sizeof name, "USB-%02X%02X", mac[4], mac[5]);
     snprintf(client, sizeof client, "bw %s/%s", SQW_ENV, FIRMWARE_VERSION);
@@ -104,8 +108,19 @@ static void emitOwn() {
     escJson(client, clientE, sizeof clientE);
     escJson(nick ? nick : "", nickE, sizeof nickE);
     snprintf(body, sizeof body,
-             "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"nick\":\"%s\",\"client\":\"%s\",\"lang\":\"%c\"}",
-             macS, nameE, nickE, clientE, lang);
+             "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"nick\":\"%s\",\"client\":\"%s\",\"lang\":\"%c\","
+             "\"outfit\":%u,\"shade\":%u,"
+             "\"desk\":{\"squad\":%u,\"crowd\":%u,\"visit\":%u,"
+             "\"clk\":%u,\"clkfont\":%u,\"clkbg\":%u,\"bg\":%u}}",
+             macS, nameE, nickE, clientE, lang,
+             (unsigned)Squachy::outfitIndex(), (unsigned)Squachy::shadesIndex(),
+             (unsigned)(Settings::deskSquad() ? 1 : 0),
+             (unsigned)Settings::deskCrowd(),
+             (unsigned)(Settings::deskFullVisit() ? 1 : 0),
+             (unsigned)Settings::clockSize(),
+             (unsigned)Settings::clockFont(),
+             (unsigned)Settings::clockBackdrop(),
+             (unsigned)(uint8_t)Settings::deskBackground());
     emit(body);
 }
 
@@ -117,12 +132,16 @@ static void emitSnapshot(uint32_t now) {
     Mesh::SquadMember members[8];
     const uint8_t n = Mesh::squadList(now, members, 8);
     for (uint8_t i = 0; i < n; i++) {
-        char macS[18], body[256], nameE[48];
+        char macS[18], body[320], nameE[48];
         macStr(members[i].mac, macS);
         escJson(peerName(members[i].peer), nameE, sizeof nameE);
+        // outfit/shade ride along from the last advert, so the web den draws
+        // every visitor in his own skin, the way the desk's crowd does.
         snprintf(body, sizeof body,
-                 "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"client\":\"bw\"}",
-                 macS, nameE);
+                 "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"client\":\"bw\","
+                 "\"outfit\":%u,\"shade\":%u}",
+                 macS, nameE,
+                 (unsigned)members[i].peer.outfit, (unsigned)members[i].peer.shade);
         emit(body);
     }
     s_lastPeerMs = now;

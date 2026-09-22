@@ -63,19 +63,31 @@ def main():
             assert e.code == 503, e.code
         print("boardless 503 OK")
 
-        # мост: announce платы + сквад
+        # мост: announce платы + сквад (со скинами и настройками DESK для Логова)
+        desk = {"squad": 1, "crowd": 4, "visit": 0,
+                "clk": 1, "clkfont": 0, "clkbg": 0, "bg": 1}
         post("/api/ingest", {"t": "peer", "mac": "AA:BB:CC:DD:EE:FF",
                              "name": "USB-FFFF", "nick": "Tester",
-                             "client": "bw rlphantom/v", "lang": "R"})
+                             "client": "bw rlphantom/v", "lang": "R",
+                             "outfit": 7, "shade": 2, "desk": desk})
         post("/api/ingest", {"t": "peer", "mac": "11:22:33:44:55:66",
-                             "name": "SHADOW", "client": "bw"})
+                             "name": "SHADOW", "client": "bw",
+                             "outfit": 4, "shade": 1})
+        # мусор вместо скинов отбрасывается, валидное остаётся
+        post("/api/ingest", {"t": "peer", "mac": "11:22:33:44:55:66",
+                             "outfit": 99, "shade": -1, "desk": [1, 2]})
         sq = get("/api/squad")
         by_id = {p["id"]: p for p in sq}
         assert by_id["AA:BB:CC:DD:EE:FF"]["in_range"] is True, sq
         assert by_id["11:22:33:44:55:66"]["in_range"] is True, sq
+        b = by_id["AA:BB:CC:DD:EE:FF"]
+        assert (b["outfit"], b["shade"]) == (7, 2) and b["desk"] == desk, b
+        m = by_id["11:22:33:44:55:66"]
+        assert (m["outfit"], m["shade"]) == (4, 1) and m.get("desk") is None, m
         h = get("/api/health")
         assert h["board_online"] is True and h["board"]["id"] == "AA:BB:CC:DD:EE:FF", h
-        print("presence + board OK")
+        assert h["board"]["desk"] == desk, h
+        print("presence + board + den data OK")
 
         # сообщения — только от лица платы
         r = post("/api/bridge/send", {"canned": 12, "text": "Тут камера Флок."})

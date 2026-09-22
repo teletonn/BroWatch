@@ -14,7 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 PORT = int(os.environ.get("BROWATCH_PORT", "40400"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(ROOT, "static")
@@ -71,10 +71,14 @@ def is_board(p):
 
 
 def pub_peer(p, t=None):
-    """Публичная форма пира для API/SSE."""
+    """Публичная форма пира для API/SSE. outfit/shade — индексы общих таблиц
+    (аутфит/очки с платы, для скинов в Логове); desk — настройки DESK MODE
+    с платы (только у её announce), Логово зеркалит их, а не выдумывает."""
     t = t or now()
     return {"id": p["id"], "name": p.get("name") or p["id"],
             "nick": p.get("nick"),
+            "outfit": p.get("outfit"), "shade": p.get("shade"),
+            "desk": p.get("desk"),
             "rssi": p.get("rssi"), "client": p.get("client"),
             "lang": p.get("lang"), "last_seen": p.get("last_seen", 0),
             "age_s": max(0, int(t - p.get("last_seen", t))),
@@ -107,7 +111,18 @@ def board_snapshot_locked(t=None):
     return pub_peer(best, t) if best else None
 
 
-def add_peer(pid, name=None, rssi=None, client=None, lang=None, nick=None):
+def _int01(v, lo, hi):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(v, bool) or not lo <= n <= hi:
+        return None
+    return n
+
+
+def add_peer(pid, name=None, rssi=None, client=None, lang=None, nick=None,
+             outfit=None, shade=None, desk=None):
     t = now()
     with store_lock:
         p = peers.get(pid)
@@ -128,6 +143,14 @@ def add_peer(pid, name=None, rssi=None, client=None, lang=None, nick=None):
             p["client"] = client
         if lang is not None:
             p["lang"] = lang
+        o = _int01(outfit, 0, 15)
+        if o is not None:
+            p["outfit"] = o
+        s = _int01(shade, 0, 3)
+        if s is not None:
+            p["shade"] = s
+        if isinstance(desk, dict) and desk:
+            p["desk"] = {str(k)[:12]: desk[k] for k in list(desk)[:12]}
         rng = in_range(p, t)
         changed = created or p.get("_pub_range") != rng
         p["_pub_range"] = rng
@@ -197,7 +220,8 @@ def ingest(obj):
         if not isinstance(pid, str) or len(pid) > 32:
             return "drop", {"ok": False, "note": "bad peer id"}
         return "peer", add_peer(pid, obj.get("name"), obj.get("rssi"),
-                                obj.get("client"), obj.get("lang"), obj.get("nick"))
+                                 obj.get("client"), obj.get("lang"), obj.get("nick"),
+                                 obj.get("outfit"), obj.get("shade"), obj.get("desk"))
     if t in ("msg", "message"):
         frm, text = obj.get("from", "unknown"), obj.get("text", "")
         if mesh_dupe("msg", (frm, text)):
