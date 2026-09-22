@@ -27,7 +27,7 @@ class DetectionEngine;
 // so the two can never disagree about what a row means.
 enum class MeshMenuRow : uint8_t {
     MODE, DETECT, TRANSMIT, MESSAGES, CROWD, SQUAD, PHRASE, NAME,     // BROMESH
-    TARGET, NODE, CHANNEL, CHAT,                                      // COMPANION
+    TARGET, NODE, CHANNELS, CONTACTS, CHAT,                           // COMPANION
     BACK, NONE
 };
 

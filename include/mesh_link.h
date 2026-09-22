@@ -82,7 +82,9 @@ bool  connected();
 constexpr uint8_t CHAN_MAX = 8;
 struct Channel {
     uint8_t index;            // the node's channel index (what goes in a packet)
-    char    name[24];
+    char    name[13];         // ChannelSettings.name; empty is the "Default" one
+    uint8_t role;             // 0 DISABLED, 1 PRIMARY, 2 SECONDARY
+    bool    hasPsk;
     bool    present;
 };
 uint8_t        channelCount();
@@ -90,27 +92,53 @@ const Channel& channelAt(uint8_t i);
 void           setSendChannel(uint8_t i);
 uint8_t        sendChannel();
 
+// ---- contacts ----
+// Nodes the radio has heard (Meshtastic NodeInfo). Read from the config dump
+// and from live NODEINFO_APP broadcasts.
+constexpr uint8_t CONTACT_MAX = 32;
+struct Contact {
+    uint32_t num;             // the node number, which is what a DM is sent to
+    char     shortName[6];    // "KD7ABC" style, 4 chars on the mesh
+    char     longName[25];
+    uint8_t  role;
+    bool     hasKey;          // has a public key, so a DM can be encrypted
+    uint32_t lastHeard;
+    bool     used;
+};
+uint8_t        contactCount();
+const Contact& contactAt(uint8_t i);
+// A DM target (0 = none). sendChannelText to the target's channel with
+// `to` set to the contact is a direct message.
+void     setDmTarget(uint32_t num);
+uint32_t dmTarget();
+
 // ---- messages ----
 constexpr uint8_t TEXT_MAX = 200;
+constexpr uint8_t MSG_MAX  = 24;
 struct Message {
     bool     have;
     bool     unread;
     bool     outgoing;        // true: we sent it (shown on the right)
+    bool     direct;          // a DM, not a channel broadcast
     uint8_t  channel;
+    uint32_t fromNum;         // sender node number (0 for us)
+    uint32_t toNum;           // destination node number (broadcast all-ones)
     uint8_t  mac[6];          // the node it came from / went to
-    char     from[24];        // sender's short name, or "YOU"
+    char     from[8];         // sender's short name, or YOU
     char     body[TEXT_MAX + 1];
     uint32_t at;              // millis() when it landed in our queue
 };
 bool           popMessage(Message& out);
 const Message& lastMessage();
-constexpr uint8_t INBOX_N = 12;
+constexpr uint8_t INBOX_N = MSG_MAX;
 uint8_t        inboxCount();
 const Message& inboxAt(uint8_t i);   // 0 is the newest
 
 // Queue a channel text for the task to send. Returns false when not READY or
 // the text is empty. The copy is bounded by TEXT_MAX.
 bool sendChannelText(uint8_t channel, const char* text);
+// A direct message to a contact: the same packet with `to` set to the node.
+bool sendDirectText(uint32_t toNum, const char* text);
 
 // Called from the shared BLE scan callback (host task). detection.cpp only
 // calls this while COMPANION mode is on and the advert looks like a node.

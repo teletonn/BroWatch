@@ -1803,6 +1803,21 @@ static void enterMeshChat() {
     transitionStart = millis();
     uiMeshChatInit(*canvas);
 }
+static void enterMeshChannels() {
+    state = AppState::MESH_LINK_CHANNELS;
+    transitionStart = millis();
+    uiMeshChannelsInit(*canvas);
+}
+static void enterMeshContacts() {
+    state = AppState::MESH_LINK_CONTACTS;
+    transitionStart = millis();
+    uiMeshContactsInit(*canvas);
+}
+static void enterMeshLinkCompose() {
+    state = AppState::MESH_LINK_COMPOSE;
+    transitionStart = millis();
+    uiPhoneInitMessage(*canvas, "");
+}
 #endif
 
 static void enterPhone() {
@@ -4481,10 +4496,8 @@ void loop() {
                         break;
                     case MeshMenuRow::TARGET:   Settings::cycleCompanionTarget(); break;
                     case MeshMenuRow::NODE:     enterMeshNodes();              break;
-                    case MeshMenuRow::CHANNEL: {
-                        const uint8_t cn = MeshLink::channelCount();
-                        if (cn) MeshLink::setSendChannel((uint8_t)((MeshLink::sendChannel() + 1) % cn));
-                    } break;
+                    case MeshMenuRow::CHANNELS: enterMeshChannels();           break;
+                    case MeshMenuRow::CONTACTS: enterMeshContacts();           break;
                     case MeshMenuRow::CHAT:     enterMeshChat();               break;
 #endif
                     case MeshMenuRow::BACK:     enterSettings();               break;
@@ -4505,12 +4518,55 @@ void loop() {
                 int row = -1;
                 switch (uiMeshNodesHit(*canvas, tp.x, tp.y, &row)) {
                     case MeshNodesHit::ROW:
-                        if (row >= 0 && row < MeshLink::nodeCount()) { /* selection only; CONNECT acts */ }
+                        if (row >= 0 && row < MeshLink::nodeCount()) uiMeshNodesSelect(row);
                         break;
                     case MeshNodesHit::SCAN:       MeshLink::startScan();  break;
-                    case MeshNodesHit::CONNECT:    if (row >= 0) MeshLink::connect((uint8_t)row); break;
+                    case MeshNodesHit::CONNECT: {
+                        const int sel = uiMeshNodesSelected();
+                        if (sel >= 0 && sel < MeshLink::nodeCount()) MeshLink::connect((uint8_t)sel);
+                    } break;
                     case MeshNodesHit::DISCONNECT: MeshLink::disconnect(); break;
                     case MeshNodesHit::BACK:       enterMeshMenu();        break;
+                    default: break;
+                }
+            }
+            break;
+        }
+        case AppState::MESH_LINK_CHANNELS: {
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiMeshChannelsTick(t, now, advance); });
+            if (touchJustDown && Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) {
+                lastTouch = now; enterMeshMenu(); break;
+            }
+            if (touchJustDown) {
+                int row = -1;
+                switch (uiMeshChannelsHit(*canvas, tp.x, tp.y, &row)) {
+                    case MeshChannelsHit::ROW:
+                        if (row >= 0 && row < MeshLink::channelCount() && MeshLink::channelAt((uint8_t)row).role != 0) {
+                            MeshLink::setSendChannel(MeshLink::channelAt((uint8_t)row).index);
+                            MeshLink::setDmTarget(0);   // a channel, not a person
+                        }
+                        break;
+                    case MeshChannelsHit::BACK: enterMeshMenu(); break;
+                    default: break;
+                }
+            }
+            break;
+        }
+        case AppState::MESH_LINK_CONTACTS: {
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiMeshContactsTick(t, now, advance); });
+            if (touchJustDown && Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) {
+                lastTouch = now; enterMeshMenu(); break;
+            }
+            if (touchJustDown) {
+                int row = -1;
+                switch (uiMeshContactsHit(*canvas, tp.x, tp.y, &row)) {
+                    case MeshContactsHit::ROW:
+                        if (row >= 0 && row < MeshLink::contactCount()) {
+                            MeshLink::setDmTarget(MeshLink::contactAt((uint8_t)row).num);
+                            enterMeshChat();   // straight into the conversation
+                        }
+                        break;
+                    case MeshContactsHit::BACK: enterMeshMenu(); break;
                     default: break;
                 }
             }
@@ -4525,20 +4581,34 @@ void loop() {
             }
             if (touchJustDown) {
                 switch (uiMeshChatHit(*canvas, tp.x, tp.y)) {
-                    case MeshChatHit::CHANNEL: {
-                        const uint8_t cn = MeshLink::channelCount();
-                        if (cn) MeshLink::setSendChannel((uint8_t)((MeshLink::sendChannel() + 1) % cn));
-                    } break;
-                    case MeshChatHit::WRITE:
-                        // TODO(companion): a text entry that sends through
-                        // MeshLink. The BROMESH compose screen is wired to
-                        // MeshTalk, so it cannot be reused as-is.
-                        Theme::showToast(Theme::tr("WRITE", "ПИСАТЬ"),
-                                         Theme::tr("coming next", "скоро"), Theme::AMBER);
+                    case MeshChatHit::CHANNEL:
+                        // The target button: with a DM up it clears back to the
+                        // channel; on a channel it steps to the next one.
+                        if (MeshLink::dmTarget()) { MeshLink::setDmTarget(0); }
+                        else {
+                            const uint8_t cn = MeshLink::channelCount();
+                            if (cn) MeshLink::setSendChannel((uint8_t)((MeshLink::sendChannel() + 1) % cn));
+                        }
                         break;
-                    case MeshChatHit::BACK:    enterMeshMenu();     break;
+                    case MeshChatHit::WRITE:   enterMeshLinkCompose(); break;
+                    case MeshChatHit::BACK:    enterMeshMenu();    break;
                     default: break;
                 }
+            }
+            break;
+        }
+        case AppState::MESH_LINK_COMPOSE: {
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); });
+            if (touchJustDown)    uiPhoneTouch(tp.x, tp.y, now, PhoneTouch::DOWN);
+            else if (tp.valid)    uiPhoneTouch(tp.x, tp.y, now, PhoneTouch::MOVE);
+            else if (touchJustUp) uiPhoneTouch(tp.x, tp.y, now, PhoneTouch::UP);
+            if (uiPhoneDone()) {
+                const char* m = uiPhoneMessage();
+                if (m && m[0]) {
+                    if (MeshLink::dmTarget()) MeshLink::sendDirectText(MeshLink::dmTarget(), m);
+                    else                      MeshLink::sendChannelText(MeshLink::sendChannel(), m);
+                }
+                enterMeshChat();
             }
             break;
         }

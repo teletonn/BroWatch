@@ -45,11 +45,33 @@ uint8_t  s_nodeN = 0;
 Channel  s_chans[CHAN_MAX];
 uint8_t  s_chanN = 0;
 
-// -------- node-number -> short name, for showing who a DM is from --------
-constexpr uint8_t NODENAME_MAX = 16;
-struct NodeName { uint32_t num; char shortName[16]; };
-NodeName s_names[NODENAME_MAX];
-uint8_t  s_nameN = 0;
+// -------- contacts: every node the radio has told us about --------
+Contact  s_contacts[CONTACT_MAX];
+uint8_t  s_contactN = 0;
+uint32_t s_dmTarget = 0;
+
+static Contact* findContact(uint32_t num) {
+    for (uint8_t i = 0; i < s_contactN; i++)
+        if (s_contacts[i].num == num) return &s_contacts[i];
+    return nullptr;
+}
+static Contact* upsertContact(uint32_t num) {
+    if (!num) return nullptr;
+    Contact* c = findContact(num);
+    if (c) return c;
+    if (s_contactN >= CONTACT_MAX) return nullptr;
+    c = &s_contacts[s_contactN++];
+    memset(c, 0, sizeof *c);
+    c->num = num;
+    c->used = true;
+    return c;
+}
+static const char* nameFor(uint32_t num, char* buf, size_t cap) {
+    Contact* c = findContact(num);
+    if (c && c->shortName[0]) return c->shortName;
+    snprintf(buf, cap, "%04X", (unsigned)(num & 0xFFFF));
+    return buf;
+}
 
 // -------- incoming messages + inbox (task writes, loop reads) --------
 QueueHandle_t s_inboxQ = nullptr;        // Message: the arrival toast
@@ -66,8 +88,9 @@ static void inboxPush(const Message& m) {
 // -------- outgoing requests (loop writes, task reads) --------
 struct Req {
     enum Kind : uint8_t { CONNECT, DISCONNECT, SEND, SCAN_ON, SCAN_OFF } kind;
-    uint8_t channel;
-    char    text[TEXT_MAX + 1];
+    uint8_t  channel;
+    uint32_t to;              // BROADCAST_TO for a channel message, else a node
+    char     text[TEXT_MAX + 1];
 };
 QueueHandle_t s_reqQ = nullptr;
 TaskHandle_t  s_task = nullptr;
@@ -150,66 +173,58 @@ static void wStringField(Pbw& w, uint32_t field, const char* s) {
 }
 
 // =====================================================================
-//  name table
-// =====================================================================
-static void noteNodeName(uint32_t num, const char* shortName) {
-    if (!num || !shortName || !shortName[0]) return;
-    for (uint8_t i = 0; i < s_nameN; i++) {
-        if (s_names[i].num == num) {
-            strncpy(s_names[i].shortName, shortName, sizeof(s_names[i].shortName) - 1);
-            s_names[i].shortName[sizeof(s_names[i].shortName) - 1] = '\0';
-            return;
-        }
-    }
-    if (s_nameN >= NODENAME_MAX) return;
-    s_names[s_nameN].num = num;
-    strncpy(s_names[s_nameN].shortName, shortName, sizeof(s_names[s_nameN].shortName) - 1);
-    s_names[s_nameN].shortName[sizeof(s_names[s_nameN].shortName) - 1] = '\0';
-    s_nameN++;
-}
-static const char* nameFor(uint32_t num, char* buf, size_t cap) {
-    for (uint8_t i = 0; i < s_nameN; i++)
-        if (s_names[i].num == num) return s_names[i].shortName;
-    snprintf(buf, cap, "NODE %04X", (unsigned)(num & 0xFFFF));
-    return buf;
-}
-
 // =====================================================================
 //  parsing a FromRadio
 // =====================================================================
-static void parseUser(Pb b, char* shortOut, size_t cap) {
-    shortOut[0] = '\0';
+// User: id=1, long_name=2, short_name=3, macaddr=4, hw_model=5,
+// is_licensed=6, role=7, public_key=8.
+static void parseUser(Pb b, Contact& c) {
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
-        if (f == 3 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) { size_t c = l < cap - 1 ? l : cap - 1; memcpy(shortOut, d, c); shortOut[c] = '\0'; } }
+        if (f == 2 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) { size_t n = l < sizeof(c.longName) - 1 ? l : sizeof(c.longName) - 1; memcpy(c.longName, d, n); c.longName[n] = '\0'; } }
+        else if (f == 3 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) { size_t n = l < sizeof(c.shortName) - 1 ? l : sizeof(c.shortName) - 1; memcpy(c.shortName, d, n); c.shortName[n] = '\0'; } }
+        else if (f == 7 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; c.role = (uint8_t)v; }
+        else if (f == 8 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) c.hasKey = (l > 0); }
         else if (!pbSkip(b, w)) break;
     }
 }
 static void parseNodeInfo(Pb b) {
-    uint32_t num = 0; char shortName[16] = "";
+    uint32_t num = 0; uint32_t lastHeard = 0; Contact tmp;
+    memset(&tmp, 0, sizeof tmp);
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
         if (f == 1 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; num = (uint32_t)v; }
-        else if (f == 2 && w == 2) { Pb u; if (pbSub(b, u)) parseUser(u, shortName, sizeof shortName); }
+        else if (f == 2 && w == 2) { Pb u; if (pbSub(b, u)) parseUser(u, tmp); }
+        else if (f == 6 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; lastHeard = (uint32_t)v; }
         else if (!pbSkip(b, w)) break;
     }
-    noteNodeName(num, shortName);
+    Contact* c = upsertContact(num);
+    if (!c) return;
+    if (tmp.shortName[0]) { strncpy(c->shortName, tmp.shortName, sizeof(c->shortName) - 1); c->shortName[sizeof(c->shortName) - 1] = '\0'; }
+    if (tmp.longName[0])  { strncpy(c->longName,  tmp.longName,  sizeof(c->longName)  - 1); c->longName[sizeof(c->longName) - 1] = '\0'; }
+    c->role = tmp.role;
+    if (tmp.hasKey) c->hasKey = true;
+    if (lastHeard) c->lastHeard = lastHeard;
 }
+// Channel: index=1, settings=2, role=3. ChannelSettings: channel_num=1,
+// psk=2, name=3.
 static void parseChannel(Pb b) {
-    uint32_t index = 0; char name[24] = "";
+    uint32_t index = 0, role = 0; char name[13] = ""; bool hasPsk = false;
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
         if (f == 1 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; index = (uint32_t)v; }
+        else if (f == 3 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; role = (uint32_t)v; }
         else if (f == 2 && w == 2) {  // ChannelSettings
             Pb s;
             if (pbSub(b, s)) {
                 while (s.ok && s.i < s.n) {
                     uint32_t sf, sw;
                     if (!pbTag(s, sf, sw)) break;
-                    if (sf == 3 && sw == 2) { const uint8_t* d; size_t l; if (pbBytes(s, d, l)) { size_t c = l < sizeof(name) - 1 ? l : sizeof(name) - 1; memcpy(name, d, c); name[c] = '\0'; } }
+                    if (sf == 3 && sw == 2) { const uint8_t* d; size_t l; if (pbBytes(s, d, l)) { size_t n = l < sizeof(name) - 1 ? l : sizeof(name) - 1; memcpy(name, d, n); name[n] = '\0'; } }
+                    else if (sf == 2 && sw == 2) { const uint8_t* d; size_t l; if (pbBytes(s, d, l)) hasPsk = (l > 0); }
                     else if (!pbSkip(s, sw)) break;
                 }
             }
@@ -218,34 +233,42 @@ static void parseChannel(Pb b) {
     }
     if (index < CHAN_MAX) {
         s_chans[index].index = (uint8_t)index;
+        s_chans[index].role = (uint8_t)role;
+        s_chans[index].hasPsk = hasPsk;
         s_chans[index].present = true;
-        if (name[0]) strncpy(s_chans[index].name, name, sizeof(s_chans[index].name) - 1);
-        else snprintf(s_chans[index].name, sizeof(s_chans[index].name), "CH %u", (unsigned)index);
+        if (name[0]) { strncpy(s_chans[index].name, name, sizeof(s_chans[index].name) - 1); s_chans[index].name[sizeof(s_chans[index].name) - 1] = '\0'; }
+        else if (role == 1) snprintf(s_chans[index].name, sizeof(s_chans[index].name), "PRIMARY");
+        else if (role == 0) snprintf(s_chans[index].name, sizeof(s_chans[index].name), "OFF");
+        else                snprintf(s_chans[index].name, sizeof(s_chans[index].name), "CH%u", (unsigned)index);
         if (index + 1 > s_chanN) s_chanN = (uint8_t)(index + 1);
     }
 }
-static void pushIncoming(uint32_t fromNum, uint8_t channel, const uint8_t* text, size_t len) {
+static void pushIncoming(uint32_t fromNum, uint32_t toNum, uint8_t channel, const uint8_t* text, size_t len) {
     Message m;
     memset(&m, 0, sizeof m);
     m.have = true; m.unread = true; m.outgoing = false;
     m.channel = channel;
+    m.fromNum = fromNum;
+    m.toNum = toNum;
+    m.direct = (toNum != 0xFFFFFFFFu && toNum != 0);
     m.at = millis();
-    char nb[24];
+    char nb[8];
     strncpy(m.from, nameFor(fromNum, nb, sizeof nb), sizeof(m.from) - 1);
     size_t c = len < TEXT_MAX ? len : TEXT_MAX;
     memcpy(m.body, text, c); m.body[c] = '\0';
     s_last = m;
     inboxPush(m);
     if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);   // newest first
-    Serial.printf("[meshlink] RX ch%u from %s: %s\n", (unsigned)channel, m.from, m.body);
+    Serial.printf("[meshlink] RX %s ch%u from %s: %s\n", m.direct ? "DM" : "ch", (unsigned)channel, m.from, m.body);
 }
 static void parseMeshPacket(Pb b) {
-    uint32_t fromNum = 0; uint8_t channel = 0;
+    uint32_t fromNum = 0, toNum = 0; uint8_t channel = 0;
     uint32_t portnum = 0; const uint8_t* payload = nullptr; size_t plen = 0;
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
         if (f == 1 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; fromNum = (uint32_t)v; }
+        else if (f == 2 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; toNum = (uint32_t)v; }
         else if (f == 3 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; channel = (uint8_t)v; }
         else if (f == 4 && w == 2) {  // Data
             Pb d;
@@ -262,7 +285,7 @@ static void parseMeshPacket(Pb b) {
         else if (!pbSkip(b, w)) break;
     }
     if (portnum == 1 /* TEXT_MESSAGE_APP */ && payload && plen)
-        pushIncoming(fromNum, channel, payload, plen);
+        pushIncoming(fromNum, toNum, channel, payload, plen);
 }
 static void parseFromRadio(const uint8_t* d, size_t n) {
     Pb b{ d, n, 0, true };
@@ -353,15 +376,15 @@ void sendWantConfig() {
     if (s_toRadio) s_toRadio->writeValue(buf, w.i, true);
 }
 
-bool sendChannelTextNow(uint8_t channel, const char* text) {
+bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text) {
     if (!s_toRadio || !text || !text[0]) return false;
-    // ToRadio{ packet: MeshPacket{ to: broadcast, channel, decoded: Data{ portnum=1, payload }, id, want_ack } }
+    // ToRadio{ packet: MeshPacket{ to, channel, decoded: Data{ portnum=1, payload }, id, want_ack } }
     uint8_t data[8 + TEXT_MAX]; Pbw d{ data, sizeof data, 0 };
     wVarintField(d, 1, 1);                     // Data.portnum = TEXT_MESSAGE_APP
     wBytesField(d, 2, (const uint8_t*)text, strlen(text));  // Data.payload
 
     uint8_t pkt[16 + sizeof data]; Pbw p{ pkt, sizeof pkt, 0 };
-    wVarintField(p, 2, BROADCAST_TO);          // MeshPacket.to
+    wVarintField(p, 2, toNum);                 // MeshPacket.to (broadcast or a node)
     wVarintField(p, 3, channel);               // MeshPacket.channel
     wBytesField(p, 4, data, d.i);              // MeshPacket.decoded
     wVarintField(p, 6, esp_random());          // MeshPacket.id
@@ -373,7 +396,9 @@ bool sendChannelTextNow(uint8_t channel, const char* text) {
     bool ok = s_toRadio->writeValue(out, o.i, true);
     if (ok) {
         Message m; memset(&m, 0, sizeof m);
-        m.have = true; m.unread = false; m.outgoing = true; m.channel = channel;
+        m.have = true; m.unread = false; m.outgoing = true;
+        m.channel = channel; m.toNum = toNum; m.fromNum = s_ownNodeNum;
+        m.direct = (toNum != BROADCAST_TO && toNum != 0);
         m.at = millis();
         strncpy(m.from, "YOU", sizeof(m.from) - 1);
         strncpy(m.body, text, TEXT_MAX);
@@ -492,7 +517,7 @@ void taskLoop(void*) {
             switch (r.kind) {
                 case Req::CONNECT:    doConnect(r.channel); break;
                 case Req::DISCONNECT: doDisconnect(); break;
-                case Req::SEND:       sendChannelTextNow(r.channel, r.text); break;
+                case Req::SEND:       sendChannelTextNow(r.to, r.channel, r.text); break;
                 case Req::SCAN_ON:    s_scanning = true;  if (s_state == State::OFF) s_state = State::SCANNING; break;
                 case Req::SCAN_OFF:   s_scanning = false; if (s_state == State::SCANNING) s_state = State::OFF; break;
             }
@@ -509,9 +534,18 @@ void taskLoop(void*) {
                 s_state = State::READY;
                 s_stateAt = millis();
                 s_lastRead = s_fromNum;
-                Serial.printf("[meshlink] READY: own=%08X, %u channels\n", (unsigned)s_ownNodeNum, (unsigned)s_chanN);
+                Serial.printf("[meshlink] READY: own=%08X, %u channels, %u contacts\n",
+                              (unsigned)s_ownNodeNum, (unsigned)s_chanN, (unsigned)s_contactN);
+#if MESH_COMPANION_AUTOSTART
                 for (uint8_t ci = 0; ci < s_chanN; ci++)
-                    Serial.printf("[meshlink]   ch%u = %s\n", (unsigned)s_chans[ci].index, s_chans[ci].name);
+                    Serial.printf("[meshlink]   ch%u role=%u psk=%d name='%s'\n",
+                                  (unsigned)s_chans[ci].index, (unsigned)s_chans[ci].role,
+                                  (int)s_chans[ci].hasPsk, s_chans[ci].name);
+                for (uint8_t ci = 0; ci < s_contactN && ci < 8; ci++)
+                    Serial.printf("[meshlink]   %08X '%s'/'%s' key=%d\n",
+                                  (unsigned)s_contacts[ci].num, s_contacts[ci].shortName,
+                                  s_contacts[ci].longName, (int)s_contacts[ci].hasKey);
+#endif
             }
         } else if (s_state == State::READY) {
             if (s_fromNumNew) {
@@ -561,7 +595,7 @@ void begin() {
     s_inboxQ  = xQueueCreate(INBOX_N, sizeof(Message));
     s_reqQ    = xQueueCreate(8, sizeof(Req));
     memset(s_chans, 0, sizeof s_chans);
-    memset(s_names, 0, sizeof s_names);
+    memset(s_contacts, 0, sizeof s_contacts);
     const NimBLEAddress& a = NimBLEDevice::getAddress();
     memcpy((void*)s_ownMac, a.getBase()->val, 6);
     Serial.printf("[meshlink] own BLE addr %s type=%d\n", a.toString().c_str(), (int)a.getType());
@@ -638,10 +672,26 @@ uint8_t        sendChannel() { return s_sendChan; }
 bool sendChannelText(uint8_t channel, const char* text) {
     if (s_state != State::READY || !text || !text[0] || !s_reqQ) return false;
     Req r; memset(&r, 0, sizeof r);
-    r.kind = Req::SEND; r.channel = channel;
+    r.kind = Req::SEND; r.channel = channel; r.to = BROADCAST_TO;
     strncpy(r.text, text, TEXT_MAX);
     return xQueueSend(s_reqQ, &r, 0) == pdTRUE;
 }
+
+bool sendDirectText(uint32_t toNum, const char* text) {
+    if (s_state != State::READY || !text || !text[0] || !s_reqQ || !toNum) return false;
+    Req r; memset(&r, 0, sizeof r);
+    r.kind = Req::SEND; r.channel = 0; r.to = toNum;   // DMs go on the primary channel
+    strncpy(r.text, text, TEXT_MAX);
+    return xQueueSend(s_reqQ, &r, 0) == pdTRUE;
+}
+
+uint8_t        contactCount() { return s_contactN; }
+const Contact& contactAt(uint8_t i) {
+    static Contact empty;
+    return s_contacts[i < s_contactN ? i : 0];
+}
+void     setDmTarget(uint32_t num) { s_dmTarget = num; }
+uint32_t dmTarget() { return s_dmTarget; }
 
 bool popMessage(Message& out) {
     if (!s_inboxQ) return false;

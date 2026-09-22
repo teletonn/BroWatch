@@ -197,6 +197,9 @@ enum class AppState : uint8_t {
     MESH_LINK_NODES  = 37, // COMPANION: find and connect to an external LoRa
                             // node. See ui_meshlink.h.
     MESH_LINK_CHAT   = 38  // COMPANION: the message log and reply.
+    ,MESH_LINK_CHANNELS = 39, // COMPANION: pick the channel a message goes to
+    MESH_LINK_CONTACTS = 40,  // COMPANION: nodes heard; pick one for a DM
+    MESH_LINK_COMPOSE  = 41   // COMPANION: the payphone keyboard, for a message
 #endif
 };
 

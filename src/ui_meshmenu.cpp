@@ -29,7 +29,8 @@ uint8_t buildRows(MeshMenuRow* out) {
     if (Settings::companionMode()) {
         out[n++] = MeshMenuRow::TARGET;
         out[n++] = MeshMenuRow::NODE;
-        out[n++] = MeshMenuRow::CHANNEL;
+        out[n++] = MeshMenuRow::CHANNELS;
+        out[n++] = MeshMenuRow::CONTACTS;
         out[n++] = MeshMenuRow::CHAT;
         return n;
     }
@@ -152,9 +153,15 @@ void uiMeshMenuTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
                 row(t, w, y, rowH, Theme::tr("NODE", "НОДА"), b,
                     MeshLink::connected() ? Theme::GREEN : (MeshLink::nodeCount() ? Theme::CYAN : Theme::W95_SHADOW));
             } break;
-            case MeshMenuRow::CHANNEL: {
-                const char* cn = MeshLink::channelCount() ? MeshLink::channelAt(MeshLink::sendChannel()).name : "-";
-                row(t, w, y, rowH, Theme::tr("CHANNEL", "КАНАЛ"), cn, Theme::CYAN);
+            case MeshMenuRow::CHANNELS: {
+                char b[16];
+                snprintf(b, sizeof b, "%u >", (unsigned)MeshLink::channelCount());
+                row(t, w, y, rowH, Theme::tr("CHANNELS", "КАНАЛЫ"), b, MeshLink::channelCount() ? Theme::CYAN : Theme::W95_SHADOW);
+            } break;
+            case MeshMenuRow::CONTACTS: {
+                char b[16];
+                snprintf(b, sizeof b, "%u >", (unsigned)MeshLink::contactCount());
+                row(t, w, y, rowH, Theme::tr("CONTACTS", "КОНТАКТЫ"), b, MeshLink::contactCount() ? Theme::CYAN : Theme::W95_SHADOW);
             } break;
             case MeshMenuRow::CHAT: {
                 char b[16];

@@ -47,7 +47,6 @@ int rowsThatFit(TFT_eSPI& t, int barTop) {
     return n < 1 ? 1 : n;
 }
 
-// A status line under the title: what the link is doing right now.
 void statusLine(TFT_eSPI& t, uint32_t now) {
     t.setTextSize(1);
     t.setTextColor(MeshLink::connected() ? Theme::GREEN : Theme::CYAN, Theme::BG);
@@ -56,6 +55,29 @@ void statusLine(TFT_eSPI& t, uint32_t now) {
     snprintf(b, sizeof b, "%s  %s", Settings::companionTargetLabel(), MeshLink::stateLabel());
     t.print(b);
     (void)now;
+}
+
+// A conversation is either the active channel or one contact.
+const char* chatTitle(TFT_eSPI& t, char* buf, size_t cap) {
+    if (MeshLink::dmTarget()) {
+        const char* nm = nullptr;
+        for (uint8_t i = 0; i < MeshLink::contactCount(); i++)
+            if (MeshLink::contactAt(i).num == MeshLink::dmTarget()) {
+                const MeshLink::Contact& c = MeshLink::contactAt(i);
+                nm = c.shortName[0] ? c.shortName : c.longName;
+            }
+        snprintf(buf, cap, "DM %s", nm ? nm : "?");
+    } else {
+        snprintf(buf, cap, "%s", MeshLink::channelAt(MeshLink::sendChannel()).name);
+    }
+    (void)t;
+    return buf;
+}
+
+bool msgMatches(const MeshLink::Message& m) {
+    if (MeshLink::dmTarget())
+        return m.direct && (m.fromNum == MeshLink::dmTarget() || m.toNum == MeshLink::dmTarget());
+    return !m.direct && m.channel == MeshLink::sendChannel();
 }
 
 } // namespace
@@ -67,11 +89,13 @@ void uiMeshNodesInit(TFT_eSPI& t) {
     s_nodeSel = -1;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
+void uiMeshNodesSelect(int row)   { s_nodeSel = row; }
+int  uiMeshNodesSelected()        { return s_nodeSel; }
 
 void uiMeshNodesTick(TFT_eSPI& t, uint32_t now, bool advance) {
     (void)advance;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
-    Theme::drawTitleBar(t, ">> COMPANION <<");
+    Theme::drawTitleBar(t, ">> NODES <<");
     statusLine(t, now);
     t.setTextSize(1);
     t.setTextWrap(false);
@@ -133,7 +157,134 @@ MeshNodesHit uiMeshNodesHit(TFT_eSPI& t, int x, int y, int* row) {
 }
 
 // =====================================================================
-//  CHAT
+//  CHANNELS
+// =====================================================================
+void uiMeshChannelsInit(TFT_eSPI& t) {
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+}
+
+void uiMeshChannelsTick(TFT_eSPI& t, uint32_t now, bool advance) {
+    (void)advance;
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+    Theme::drawTitleBar(t, ">> CHANNELS <<");
+    statusLine(t, now);
+    t.setTextSize(1);
+    t.setTextWrap(false);
+    const int w = t.width();
+    const Bar b = bar(t, 1);
+    const uint8_t n = MeshLink::channelCount();
+    const int fit = rowsThatFit(t, b.y[0]);
+    for (int i = 0; i < n && i < fit; i++) {
+        const MeshLink::Channel& c = MeshLink::channelAt((uint8_t)i);
+        const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        const bool active = !MeshLink::dmTarget() && c.index == MeshLink::sendChannel();
+        const bool off = c.role == 0;
+        const char* roleTxt = c.role == 1 ? "PRIMARY" : c.role == 2 ? "SECOND" : "OFF";
+        t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
+        t.drawRect(8, y, w - 16, ROW_H, active ? Theme::GREEN : (off ? Theme::W95_SHADOW : Theme::VAPOR_PURPLE));
+        char head[32];
+        snprintf(head, sizeof head, "%u  %s", (unsigned)c.index, c.name);
+        t.setTextColor(off ? Theme::W95_SHADOW : Theme::WHITE, Theme::TASKBAR);
+        t.setCursor(14, y + 4);
+        t.print(head);
+        t.setTextColor(c.hasPsk ? Theme::CYAN : Theme::W95_LIGHT, Theme::TASKBAR);
+        t.setCursor(14, y + 15);
+        t.print(c.hasPsk ? Theme::tr("keyed", "с ключом") : Theme::tr("open", "без ключа"));
+        t.setTextColor(off ? Theme::W95_SHADOW : Theme::VAPOR_YELLOW, Theme::TASKBAR);
+        t.setCursor(w - 16 - t.textWidth(roleTxt), y + 4);
+        t.print(roleTxt);
+        if (active) {
+            t.setTextColor(Theme::GREEN, Theme::TASKBAR);
+            t.setCursor(w - 16 - t.textWidth("<-"), y + 15);
+            t.print("<-");
+        }
+    }
+    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, Theme::tr("BACK", "НАЗАД"), false);
+    Theme::drawToast(t, now);
+}
+
+MeshChannelsHit uiMeshChannelsHit(TFT_eSPI& t, int x, int y, int* row) {
+    const Bar b = bar(t, 1);
+    const int fit = rowsThatFit(t, b.y[0]);
+    const uint8_t n = MeshLink::channelCount();
+    for (int i = 0; i < n && i < fit; i++) {
+        const int ry = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        if (y >= ry && y < ry + ROW_H + ROW_GAP && x >= 8 && x <= t.width() - 8) {
+            if (row) *row = i;
+            return MeshChannelsHit::ROW;
+        }
+    }
+    if (in(x, y, b.x[0], b.y[0], b.w, BTN_H)) return MeshChannelsHit::BACK;
+    return MeshChannelsHit::NONE;
+}
+
+// =====================================================================
+//  CONTACTS
+// =====================================================================
+void uiMeshContactsInit(TFT_eSPI& t) {
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+}
+
+void uiMeshContactsTick(TFT_eSPI& t, uint32_t now, bool advance) {
+    (void)advance;
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+    Theme::drawTitleBar(t, ">> CONTACTS <<");
+    statusLine(t, now);
+    t.setTextSize(1);
+    t.setTextWrap(false);
+    const int w = t.width();
+    const Bar b = bar(t, 1);
+    const uint8_t n = MeshLink::contactCount();
+    const int fit = rowsThatFit(t, b.y[0]);
+    if (!n) {
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        t.setCursor(8, ROW_Y0 + 4);
+        Theme::printRU(t, Theme::tr("No contacts yet. They arrive once the node shares its list.",
+                                    "Контактов нет. Нода пришлёт свой список."));
+    }
+    for (int i = 0; i < n && i < fit; i++) {
+        const MeshLink::Contact& c = MeshLink::contactAt((uint8_t)i);
+        const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        const bool sel = MeshLink::dmTarget() == c.num;
+        t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
+        t.drawRect(8, y, w - 16, ROW_H, sel ? Theme::GREEN : Theme::VAPOR_PURPLE);
+        char head[40];
+        snprintf(head, sizeof head, "%s", c.shortName[0] ? c.shortName : (c.longName[0] ? c.longName : "?"));
+        t.setTextColor(Theme::WHITE, Theme::TASKBAR);
+        t.setCursor(14, y + 4);
+        t.print(head);
+        char sub[40];
+        snprintf(sub, sizeof sub, "%s %s", c.longName, c.hasKey ? Theme::tr("[key]", "[ключ]") : "");
+        t.setTextColor(c.hasKey ? Theme::CYAN : Theme::W95_LIGHT, Theme::TASKBAR);
+        t.setCursor(14, y + 15);
+        t.print(sub);
+        char num[12];
+        snprintf(num, sizeof num, "%08X", (unsigned)c.num);
+        t.setTextColor(Theme::VAPOR_YELLOW, Theme::TASKBAR);
+        t.setCursor(w - 16 - t.textWidth(num), y + 15);
+        t.print(num);
+    }
+    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, Theme::tr("BACK", "НАЗАД"), false);
+    Theme::drawToast(t, now);
+}
+
+MeshContactsHit uiMeshContactsHit(TFT_eSPI& t, int x, int y, int* row) {
+    const Bar b = bar(t, 1);
+    const int fit = rowsThatFit(t, b.y[0]);
+    const uint8_t n = MeshLink::contactCount();
+    for (int i = 0; i < n && i < fit; i++) {
+        const int ry = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        if (y >= ry && y < ry + ROW_H + ROW_GAP && x >= 8 && x <= t.width() - 8) {
+            if (row) *row = i;
+            return MeshContactsHit::ROW;
+        }
+    }
+    if (in(x, y, b.x[0], b.y[0], b.w, BTN_H)) return MeshContactsHit::BACK;
+    return MeshContactsHit::NONE;
+}
+
+// =====================================================================
+//  CHAT (one conversation)
 // =====================================================================
 void uiMeshChatInit(TFT_eSPI& t) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
@@ -142,7 +293,9 @@ void uiMeshChatInit(TFT_eSPI& t) {
 void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance) {
     (void)advance;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
-    Theme::drawTitleBar(t, ">> MESSAGES <<");
+    char tt[32];
+    chatTitle(t, tt, sizeof tt);
+    Theme::drawTitleBar(t, tt);
     statusLine(t, now);
     t.setTextSize(1);
     t.setTextWrap(false);
@@ -150,33 +303,31 @@ void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance) {
     const Bar b = bar(t, 3);
     const int fit = rowsThatFit(t, b.y[0]);
     const uint8_t n = MeshLink::inboxCount();
-    if (!n) {
-        t.setTextColor(Theme::WHITE, Theme::BG);
-        t.setCursor(8, ROW_Y0 + 4);
-        Theme::printRU(t, Theme::tr("Nothing yet.", "Пока пусто."));
-    }
-    for (int i = 0; i < n && i < fit; i++) {
+    int shown = 0;
+    for (int i = 0; i < n && shown < fit; i++) {
         const MeshLink::Message& m = MeshLink::inboxAt((uint8_t)i);
-        const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        if (!msgMatches(m)) continue;
+        const int y = ROW_Y0 + shown * (ROW_H + ROW_GAP);
         t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
         t.drawRect(8, y, w - 16, ROW_H, m.outgoing ? Theme::VAPOR_PURPLE : Theme::VAPOR_PINK);
-        char head[40];
-        snprintf(head, sizeof head, "%s  ch%u", m.from, (unsigned)m.channel);
         t.setTextColor(m.outgoing ? Theme::CYAN : Theme::VAPOR_YELLOW, Theme::TASKBAR);
         t.setCursor(14, y + 4);
-        t.print(head);
+        t.print(m.from);
         char body[48];
         snprintf(body, sizeof body, "%.44s", m.body);
         t.setTextColor(Theme::WHITE, Theme::TASKBAR);
         t.setCursor(14, y + 15);
         t.print(body);
+        shown++;
     }
-    // Which channel a reply goes to.
+    if (!shown) {
+        t.setTextColor(Theme::W95_SHADOW, Theme::BG);
+        t.setCursor(8, ROW_Y0 + 4);
+        Theme::printRU(t, Theme::tr("Nothing here yet.", "Пока пусто."));
+    }
     static char chl[24];
-    if (MeshLink::channelCount())
-        snprintf(chl, sizeof chl, "%s", MeshLink::channelAt(MeshLink::sendChannel()).name);
-    else
-        snprintf(chl, sizeof chl, "CH %u", (unsigned)MeshLink::sendChannel());
+    if (MeshLink::dmTarget()) snprintf(chl, sizeof chl, "%s", Theme::tr("CHANNELS", "КАНАЛЫ"));
+    else                     snprintf(chl, sizeof chl, "%s", MeshLink::channelAt(MeshLink::sendChannel()).name);
     Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, chl, false);
     Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, BTN_H, Theme::tr("WRITE", "ПИСАТЬ"), !MeshLink::connected());
     Theme::drawWin95Button(t, b.x[2], b.y[2], b.w, BTN_H, Theme::tr("BACK", "НАЗАД"), false);
