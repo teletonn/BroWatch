@@ -237,6 +237,7 @@ static void pushIncoming(uint32_t fromNum, uint8_t channel, const uint8_t* text,
     s_last = m;
     inboxPush(m);
     if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);   // newest first
+    Serial.printf("[meshlink] RX ch%u from %s: %s\n", (unsigned)channel, m.from, m.body);
 }
 static void parseMeshPacket(Pb b) {
     uint32_t fromNum = 0; uint8_t channel = 0;
@@ -299,6 +300,45 @@ void fromNumNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool)
     }
 }
 
+// Meshtastic's Bluetooth pairing mode is FIXED_PIN (or RANDOM_PIN) by default:
+// the node requires a bonded, encrypted link before it will hand over the mesh
+// service. This is the PIN to enter -- the fixed one set on the node. It will
+// move to a setting; for now it is the bench node's.
+constexpr uint32_t kPairPin = 902100;
+
+volatile int s_connStatus = 0;   // 0 pending, 1 connected, -1 failed
+volatile int s_connReason = 0;
+volatile int s_authStatus = 0;   // 0 pending, 1 encrypted, -1 failed
+
+class ClientCb : public NimBLEClientCallbacks {
+    void onConnect(NimBLEClient*) override {
+        s_connStatus = 1;
+    }
+    void onConnectFail(NimBLEClient*, int reason) override {
+        Serial.printf("[meshlink] onConnectFail reason=%d\n", reason);
+        s_connReason = reason;
+        s_connStatus = -1;
+    }
+    void onDisconnect(NimBLEClient*, int reason) override {
+        Serial.printf("[meshlink] onDisconnect reason=%d\n", reason);
+        if (s_connStatus == 0) { s_connReason = reason; s_connStatus = -1; }
+    }
+    // The node displays its PIN; we are the keyboard and enter it.
+    void onPassKeyEntry(NimBLEConnInfo& connInfo) override {
+        Serial.printf("[meshlink] passkey requested, entering %u\n", (unsigned)kPairPin);
+        NimBLEDevice::injectPassKey(connInfo, kPairPin);
+    }
+    void onConfirmPasskey(NimBLEConnInfo& connInfo, uint32_t pin) override {
+        Serial.printf("[meshlink] numeric compare %06u, accepting\n", (unsigned)pin);
+        NimBLEDevice::injectConfirmPasskey(connInfo, true);
+    }
+    void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
+        s_authStatus = connInfo.isEncrypted() ? 1 : -1;
+        Serial.printf("[meshlink] auth complete: encrypted=%d bonded=%d\n",
+                      (int)connInfo.isEncrypted(), (int)connInfo.isBonded());
+    }
+};
+ClientCb s_clientCb;
 bool readOneFromRadio() {
     if (!s_fromRadio) return false;
     NimBLEAttValue v = s_fromRadio->readValue();
@@ -350,17 +390,78 @@ void doConnect(uint8_t index) {
     s_stateAt = millis();
     s_reason[0] = '\0';
 
-    NimBLEAddress addr(s_nodes[index].mac, 0);
-    if (!s_client->connect(addr, true, false, true)) {
+    NimBLEAddress addr(s_nodes[index].mac, s_nodes[index].addrType);
+    Serial.printf("[meshlink] connecting to %02X:%02X:%02X:%02X:%02X:%02X ...\n",
+                  s_nodes[index].mac[0], s_nodes[index].mac[1], s_nodes[index].mac[2],
+                  s_nodes[index].mac[3], s_nodes[index].mac[4], s_nodes[index].mac[5]);
+    // The continuous observer scan owns the radio, and with it running the
+    // initiating connect is not scheduled and times out (BLE_HS_ETIMEOUT).
+    // Pause it for the attempt and bring it back either way -- the scan
+    // callbacks live on the singleton, so a stop/start keeps detection whole.
+    NimBLEScan* sc = NimBLEDevice::getScan();
+    const bool wasScanning = sc && sc->isScanning();
+    if (wasScanning) sc->stop();
+
+    s_connStatus = 0;
+    s_connReason = 0;
+    bool ok = s_client->connect(addr, true, true, true);
+    if (ok) {
+        const uint32_t t0 = millis();
+        while (s_connStatus == 0 && millis() - t0 < 12000) vTaskDelay(pdMS_TO_TICKS(50));
+        ok = (s_connStatus == 1);
+    }
+    // The advertised address type is not always trustworthy, and a connect to
+    // the wrong type times out. Try the other type once; remember what worked.
+    if (!ok) {
+        const uint8_t alt = s_nodes[index].addrType ^ 1;
+        s_client->disconnect();
+        vTaskDelay(pdMS_TO_TICKS(200));
+        NimBLEAddress addr2(s_nodes[index].mac, alt);
+        s_connStatus = 0; s_connReason = 0;
+        bool ok2 = s_client->connect(addr2, true, true, true);
+        if (ok2) {
+            const uint32_t t0 = millis();
+            while (s_connStatus == 0 && millis() - t0 < 12000) vTaskDelay(pdMS_TO_TICKS(50));
+            ok2 = (s_connStatus == 1);
+            if (ok2) s_nodes[index].addrType = alt;
+        }
+        ok = ok2;
+    }
+    if (!ok) {
+        if (wasScanning) sc->start(0, false, false);
         s_state = State::ERROR;
         snprintf(s_reason, sizeof s_reason, "connect failed");
+        Serial.printf("[meshlink] connect FAILED (reason=%d)\n", s_connReason);
         return;
     }
+
+    // Meshtastic will not open its service until the link is encrypted, and
+    // with a PIN that means bonding. secureConnection() starts it; the passkey
+    // itself arrives in onPassKeyEntry above.
+    Serial.println("[meshlink] connected; securing link");
+    s_authStatus = 0;
+    s_client->secureConnection();
+    {
+        const uint32_t t0 = millis();
+        while (s_authStatus == 0 && millis() - t0 < 12000) vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    Serial.printf("[meshlink] auth status=%d\n", (int)s_authStatus);
+    if (s_authStatus < 0) {
+        if (wasScanning) sc->start(0, false, false);
+        s_client->disconnect();
+        s_state = State::ERROR;
+        snprintf(s_reason, sizeof s_reason, "pair failed");
+        return;
+    }
+
+    if (wasScanning) sc->start(0, false, false);
+    Serial.println("[meshlink] discovering GATT");
     NimBLERemoteService* svc = s_client->getService(NimBLEUUID(kMeshSvc));
     if (!svc) { snprintf(s_reason, sizeof s_reason, "no mesh service"); s_client->disconnect(); s_state = State::ERROR; return; }
     s_toRadio   = svc->getCharacteristic(NimBLEUUID(kToRadio));
     s_fromRadio = svc->getCharacteristic(NimBLEUUID(kFromRadio));
     NimBLERemoteCharacteristic* fromNum = svc->getCharacteristic(NimBLEUUID(kFromNum));
+    Serial.printf("[meshlink] chars: to=%p from=%p num=%p\n", (void*)s_toRadio, (void*)s_fromRadio, (void*)fromNum);
     if (!s_toRadio || !s_fromRadio) { snprintf(s_reason, sizeof s_reason, "no chars"); s_client->disconnect(); s_state = State::ERROR; return; }
 
     // Baseline the doorbell so the READY drain knows what is new.
@@ -375,6 +476,7 @@ void doConnect(uint8_t index) {
     s_state = State::HANDSHAKE;
     s_stateAt = millis();
     sendWantConfig();
+    Serial.println("[meshlink] want_config sent, syncing");
 }
 
 void doDisconnect() {
@@ -407,6 +509,9 @@ void taskLoop(void*) {
                 s_state = State::READY;
                 s_stateAt = millis();
                 s_lastRead = s_fromNum;
+                Serial.printf("[meshlink] READY: own=%08X, %u channels\n", (unsigned)s_ownNodeNum, (unsigned)s_chanN);
+                for (uint8_t ci = 0; ci < s_chanN; ci++)
+                    Serial.printf("[meshlink]   ch%u = %s\n", (unsigned)s_chans[ci].index, s_chans[ci].name);
             }
         } else if (s_state == State::READY) {
             if (s_fromNumNew) {
@@ -424,6 +529,19 @@ void taskLoop(void*) {
                 s_state = State::ERROR;
             }
         }
+#if MESH_COMPANION_AUTOSTART
+        if (s_state == State::SCANNING && s_nodeN > 0) {
+            Serial.printf("[meshlink] AUTOSTART: node %02X:%02X:%02X:%02X:%02X:%02X found, connecting\n",
+                          s_nodes[0].mac[0], s_nodes[0].mac[1], s_nodes[0].mac[2],
+                          s_nodes[0].mac[3], s_nodes[0].mac[4], s_nodes[0].mac[5]);
+            doConnect(0);
+        } else if (s_state == State::ERROR && millis() - s_stateAt > 3000) {
+            // Bench build: keep trying, so a fix can be observed without a
+            // reflash between attempts.
+            Serial.println("[meshlink] AUTOSTART: retrying");
+            startScan();
+        }
+#endif
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
@@ -446,9 +564,20 @@ void begin() {
     memset(s_names, 0, sizeof s_names);
     const NimBLEAddress& a = NimBLEDevice::getAddress();
     memcpy((void*)s_ownMac, a.getBase()->val, 6);
+    Serial.printf("[meshlink] own BLE addr %s type=%d\n", a.toString().c_str(), (int)a.getType());
     s_client = NimBLEDevice::createClient();
     s_client->setConnectTimeout(8000);
-    xTaskCreatePinnedToCore(taskLoop, "meshlink", 6144, nullptr, 1, &s_task, 0);
+    s_client->setClientCallbacks(&s_clientCb, false);
+    // We are the keyboard: the node displays a PIN and we type it. Bonding,
+    // MITM and secure connections, matching what Meshtastic's node asks for.
+    NimBLEDevice::setSecurityIOCap(4 /* BLE_HS_IO_KEYBOARD_DISPLAY */);
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityPasskey(kPairPin);
+    xTaskCreatePinnedToCore(taskLoop, "meshlink", 8192, nullptr, 1, &s_task, 0);
+#if MESH_COMPANION_AUTOSTART
+    Serial.println("[meshlink] AUTOSTART: scanning + auto-connect");
+    startScan();
+#endif
 }
 
 void tick(uint32_t now) {
@@ -531,13 +660,14 @@ const Message& inboxAt(uint8_t i) {
     return s_inbox[idx % INBOX_N];
 }
 
-void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t target) {
+void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t target, uint8_t addrType) {
     if (!s_scanning || !s_nodeMux) return;
     if (s_state != State::SCANNING) return;
     if (xSemaphoreTake(s_nodeMux, 0) != pdTRUE) return;
     for (uint8_t i = 0; i < s_nodeN; i++) {
         if (memcmp(s_nodes[i].mac, mac, 6) == 0) {
             s_nodes[i].rssi = rssi;
+            s_nodes[i].addrType = addrType;
             if (name && name[0]) { strncpy(s_nodes[i].name, name, sizeof(s_nodes[i].name) - 1); }
             xSemaphoreGive(s_nodeMux);
             return;
@@ -548,7 +678,7 @@ void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t t
         memset(&n, 0, sizeof n);
         memcpy(n.mac, mac, 6);
         if (name && name[0]) strncpy(n.name, name, sizeof(n.name) - 1);
-        n.rssi = rssi; n.target = target;
+        n.rssi = rssi; n.target = target; n.addrType = addrType;
     }
     xSemaphoreGive(s_nodeMux);
 }

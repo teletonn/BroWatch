@@ -22,6 +22,14 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// A bench-only build flag: with COMPANION_AUTOSTART the link starts scanning
+// and connects itself to the first node it sees, with no screen taps. Used to
+// exercise the BLE central + Meshtastic handshake on real hardware; undefined
+// (0) everywhere else.
+#if !defined(MESH_COMPANION_AUTOSTART)
+#define MESH_COMPANION_AUTOSTART 0
+#endif
+
 namespace MeshLink {
 
 // Which external protocol the node is expected to speak. Only Meshtastic is
@@ -57,6 +65,9 @@ struct Node {
     char    name[24];
     int8_t  rssi;
     uint8_t target;   // which protocol it looked like (Target)
+    uint8_t addrType; // BLE address type (public/random) -- a node advertises
+                      // a random-static address and connecting to it as public
+                      // is refused, so this has to travel with the address.
 };
 const Node& nodeAt(uint8_t i);
 
@@ -103,7 +114,7 @@ bool sendChannelText(uint8_t channel, const char* text);
 
 // Called from the shared BLE scan callback (host task). detection.cpp only
 // calls this while COMPANION mode is on and the advert looks like a node.
-void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t target);
+void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t target, uint8_t addrType);
 
 // This device's own address, as the node sees it. All zeros until begin().
 const uint8_t* ownMac();

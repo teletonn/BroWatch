@@ -145,13 +145,21 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         // has to carry the node's own service UUID, so a random peripheral
         // cannot be offered as one. The scan is not restarted or duplicated;
         // this is a tap on the stream detection already has.
-        if (Settings::companionMode()) {
+        if (Settings::companionMode() || MESH_COMPANION_AUTOSTART) {
             static const NimBLEUUID kMeshtasticSvc("6ba1b218-15a8-461f-9fa8-5dcae273eafd");
             const uint8_t svcN = adv->getServiceUUIDCount();
             for (uint8_t i = 0; i < svcN; i++) {
                 const NimBLEUUID u = adv->getServiceUUID(i);
                 if (u.bitSize() == 128 && u.equals(kMeshtasticSvc)) {
-                    MeshLink::onAdvertised(mac, adv->getName().c_str(), (int8_t)adv->getRSSI(), 0);
+                    // NimBLE stores the address LSB-first (ble_addr_t.val), but
+                    // NimBLEAddress's array constructor expects MSB-first
+                    // (Bluedroid layout) and reverses internally -- so hand it
+                    // the reversed bytes, or the connect goes to a different
+                    // address and times out.
+                    uint8_t macMsb[6];
+                    for (int k = 0; k < 6; k++) macMsb[k] = mac[5 - k];
+                    MeshLink::onAdvertised(macMsb, adv->getName().c_str(), (int8_t)adv->getRSSI(), 0,
+                                           adv->getAddress().getType());
                     break;
                 }
             }
