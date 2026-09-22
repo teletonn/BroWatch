@@ -21,7 +21,68 @@ void put(Key* out, uint8_t& n, int x, int y, int w, int h, char ch) {
 }
 } // namespace
 
-uint8_t layout(int w, int bandTop, int bandBottom, Key out[KEY_N], bool message) {
+// The Russian board: ЙЦУКЕН in row order, Ъ moved from the first row's end
+// to the third (eleven-wide rows cannot hold the standard twelve), Ё folded
+// into Е the way Russian digital orthography permits. Transliteration is the
+// readable kind (SHCH, not SHH): what flies is Latin, what you see is yours.
+static const char* const RU_GLYPH[RU_N] = {
+    "Й","Ц","У","К","Е","Н","Г","Ш","Щ","З","Х",
+    "Ф","Ы","В","А","П","Р","О","Л","Д","Ж","Э",
+    "Я","Ч","С","М","И","Т","Ь","Б","Ю","Ъ",
+};
+static const char* const RU_TR[RU_N] = {
+    "J","TS","U","K","E","N","G","SH","SHCH","Z","H",
+    "F","Y","V","A","P","R","O","L","D","ZH","E",
+    "YA","CH","S","M","I","T","'","B","YU","'",
+};
+
+// Public faces of the tables above: ui_phone.cpp draws labels from one and
+// types transliteration from the other.
+const char* ruGlyph(uint8_t i) { return i < RU_N ? RU_GLYPH[i] : "?"; }
+const char* ruTr(uint8_t i)    { return i < RU_N ? RU_TR[i] : ""; }
+
+// Unicode order А..Я into the tables' row order: the keyboard's rows are
+// ЙЦУКЕН, the alphabet's are not.
+static const uint8_t RU_FROM_UNI[32] = {
+    14,29,13, 6,19, 4,20, 9,26, 0, 3,18,25, 5,17,15,
+    16,24,27, 2,11,10, 1,23, 7, 8,31,12,28,21,30,22,
+};
+
+size_t transliterateRu(const char* src, char* dst, size_t cap) {
+    if (!cap) return 0;
+    size_t n = 0;
+    const uint8_t* p = (const uint8_t*)(src ? src : "");
+    while (*p) {
+        if (*p < 0x80) {
+            // The air is upper-case only; the marks it accepts pass through.
+            char c = (char)*p++;
+            if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+            const bool ok = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                            c == ' ' || c == '.' || c == ',' || c == '?' ||
+                            c == '!' || c == '\'' || c == '-';
+            if (ok && n + 1 < cap) dst[n++] = c;
+        } else if ((p[0] & 0xE0) == 0xC0 && p[1]) {
+            const unsigned cp = ((p[0] & 0x1FU) << 6) | (p[1] & 0x3FU);
+            int idx = -1;
+            if (cp >= 0x410U && cp <= 0x42FU)      idx = RU_FROM_UNI[cp - 0x410U];
+            else if (cp >= 0x430U && cp <= 0x44FU) idx = RU_FROM_UNI[cp - 0x430U];
+            else if (cp == 0x401U || cp == 0x451U) idx = 4;   // Ё/ё ride on Е
+            if (idx >= 0)
+                for (const char* s = RU_TR[idx]; *s && n + 1 < cap; s++) dst[n++] = *s;
+            p += 2;
+        } else if ((p[0] & 0xF0) == 0xE0 && p[1] && p[2]) {
+            p += 3;   // no three-byte letter flies: skip it whole
+        } else if ((p[0] & 0xF8) == 0xF0 && p[1] && p[2] && p[3]) {
+            p += 4;
+        } else {
+            p++;      // a broken byte: skip, never stall
+        }
+    }
+    dst[n] = '\0';
+    return n;
+}
+
+uint8_t layout(int w, int bandTop, int bandBottom, Key out[KEY_N], bool message, Board board) {
     const int avail = w - 2 * MARGIN;
 
     // A message needs digits and punctuation that a name does not, so its
@@ -48,6 +109,55 @@ uint8_t layout(int w, int bandTop, int bandBottom, Key out[KEY_N], bool message)
         for (int i = 0; i < 10; i++)
             put(out, n, x1 + i * (w1 + GAP), y, w1, rh, R0[i]);
         y += rh + ROW_GAP;
+    }
+    if (board == Board::RU) {
+        // Eleven-wide letter rows on their own centred grid -- 32 letters
+        // need the phone-keyboard standard the EN board's ten cannot hold.
+        // Same rows, same band, same controls around them.
+        const int w11 = (avail - 10 * GAP) / 11;
+        const int x11 = MARGIN + (avail - (11 * w11 + 10 * GAP)) / 2;
+        for (int i = 0; i < 11; i++)
+            put(out, n, x11 + i * (w11 + GAP), y, w11, rh, (char)(RU_BASE + i));
+        y += rh + ROW_GAP;
+        for (int i = 0; i < 11; i++)
+            put(out, n, x11 + i * (w11 + GAP), y, w11, rh, (char)(RU_BASE + 11 + i));
+        // Third row: the last ten, and on the message board an apostrophe
+        // after them -- then the bottom row, which is also where DEL lives on
+        // this board: beside the third row there is no room left for it.
+        const int y3 = y + rh + ROW_GAP;
+        if (message) {
+            for (int i = 0; i < 10; i++)
+                put(out, n, x11 + i * (w11 + GAP), y3, w11, rh, (char)(RU_BASE + 22 + i));
+            put(out, n, x11 + 10 * (w11 + GAP), y3, w11, rh, '\'');
+        } else {
+            for (int i = 0; i < 10; i++)
+                put(out, n, x1 + i * (w1 + GAP), y3, w1, rh, (char)(RU_BASE + 22 + i));
+        }
+        const int w2r    = (avail - 8 * GAP) / 9;
+        const int span2r = 9 * w2r + 8 * GAP;
+        const int x2r    = MARGIN + (avail - span2r) / 2;
+        const int owr    = w2r * 3 / 2;
+        const int y4 = y3 + rh + ROW_GAP;
+        int x = x2r;
+        if (!message) {
+            const int cw = w2r * 2;
+            const int sw = span2r - 3 * cw - 3 * GAP;
+            put(out, n, x, y4, cw, rh, SHUF); x += cw + GAP;
+            put(out, n, x, y4, cw, rh, BKSP); x += cw + GAP;
+            put(out, n, x, y4, sw, rh, ' ');  x += sw + GAP;
+            put(out, n, x, y4, cw, rh, OK);
+        } else {
+            const int sw = span2r - 6 * w2r - owr - 7 * GAP;
+            put(out, n, x, y4, w2r, rh, CLR);  x += w2r + GAP;
+            put(out, n, x, y4, w2r, rh, BKSP); x += w2r + GAP;
+            put(out, n, x, y4, w2r, rh, ',');  x += w2r + GAP;
+            put(out, n, x, y4, w2r, rh, '.');  x += w2r + GAP;
+            put(out, n, x, y4, sw,  rh, ' ');  x += sw + GAP;
+            put(out, n, x, y4, w2r, rh, '?');  x += w2r + GAP;
+            put(out, n, x, y4, w2r, rh, '!');  x += w2r + GAP;
+            put(out, n, x, y4, owr, rh, OK);
+        }
+        return n;
     }
     static const char R1[] = "QWERTYUIOP";
     for (int i = 0; i < 10; i++)

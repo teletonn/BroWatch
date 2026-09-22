@@ -21,6 +21,7 @@ static bool        s_meshDetect   = false;
 static bool        s_meshTransmit = false;
 static bool        s_meshConsent  = false;
 static bool        s_phoneQwerty  = false;
+static bool        s_phoneQwertyRu = false;
 static bool        s_messagesOn   = false;
 static bool        s_msgTutor     = false;
 #endif
@@ -311,6 +312,11 @@ void load() {
     s_updateCheck  = s_prefs.getBool("updChk", true);
     s_lang         = s_prefs.getUChar("lang", 1);
     if (s_lang > 1) s_lang = 1;
+    // The QWERTY board's alphabet. Defaults to the interface language, so a
+    // Russian board opens Russian; remembered after the first tap either way.
+#if SQUACH_MESH
+    s_phoneQwertyRu = s_prefs.getBool("qwertyru", s_lang == 1);
+#endif
     s_timeZone     = s_prefs.getUChar("tz", 10);
     s_tzChosen     = s_prefs.getBool("tzSet", false);
     if (s_timeZone >= Clock::zoneCount()) s_timeZone = 10;
@@ -719,6 +725,14 @@ bool phoneQwerty() { return s_phoneQwerty; }
 void togglePhoneQwerty() {
     s_phoneQwerty = !s_phoneQwerty;
     s_prefs.putBool("qwerty", s_phoneQwerty);
+}
+// The QWERTY board's alphabet: ЙЦУКЕН or QWERTY. The toggle sits beside BACK
+// in the payphone's bottom row and names the OTHER alphabet, like the
+// keypad/QWERTY switch beside it.
+bool phoneQwertyRu() { return s_phoneQwertyRu; }
+void togglePhoneQwertyRu() {
+    s_phoneQwertyRu = !s_phoneQwertyRu;
+    s_prefs.putBool("qwertyru", s_phoneQwertyRu);
 }
 bool messagesOn() { return s_messagesOn; }
 void toggleMessages() {

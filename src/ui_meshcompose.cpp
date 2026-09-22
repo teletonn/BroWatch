@@ -6,6 +6,7 @@
 #include "meshtalk.h"
 #include "meshmsg.h"
 #include "meshtutor.h"
+#include "qwerty.h"
 #include "settings.h"
 #include "detection.h"
 #include "ui_clear.h"
@@ -64,9 +65,10 @@ const char* const FILL_LINES[8] = {
     "MEET AT ", "I'M AT ", "BACK IN ", "CALL ME AT ",
     "HEADING TO ", "LOOK FOR THE ", "BRING THE ", "SAW A ",
 };
-// BroWatch RU: same eight openings, display only (the keyboard stays Latin,
-// and the air alphabet is Latin -- a RU opening travels only as far as the
-// web bridge, which is UTF-8 end to end).
+// BroWatch RU: same eight openings, display only (the air alphabet is Latin --
+// a RU opening travels only as far as the web bridge, which is UTF-8 end to
+// end; the QWERTY board's ЙЦУКЕН types Latin transliteration for the same
+// reason, so whatever it types always fits the air).
 const char* const FILL_LINES_RU[8] = {
     "ВСТРЕЧА В ", "Я НА ", "ВЕРНУСЬ ЧЕРЕЗ ", "ЗВОНИ В ",
     "ЕДУ В ", "ИЩИ ", "ПРИХВАТИ ", "ВИДЕЛ ",
@@ -769,8 +771,16 @@ ComposeHit uiMeshComposeTouch(int x, int y, uint32_t now) {
             // Straight into the buffer, not through uiMeshComposeSetTyped():
             // that trims trailing spaces, and the space after "MEET AT" is
             // the whole point of an opening.
-            snprintf(s_typed, sizeof s_typed, "%s",
-                     isRU() ? FILL_LINES_RU[s_lineIdx[i]] : FILL_LINES[s_lineIdx[i]]);
+            //
+            // A RU opening is Cyrillic on screen but the air is Latin, so it
+            // is transliterated HERE, before the keyboard opens: OK hands the
+            // text back through uiMeshComposeSetTyped(), which reads anything
+            // the air cannot carry as zero parts -- and a zero-part message
+            // vanishes instead of coming back ready to SEND. The keyboard
+            // opens with what will actually fly, and the ending is typed
+            // straight after it.
+            if (isRU()) Qwerty::transliterateRu(FILL_LINES_RU[s_lineIdx[i]], s_typed, sizeof s_typed);
+            else        snprintf(s_typed, sizeof s_typed, "%s", FILL_LINES[s_lineIdx[i]]);
             s_typedOn = false;
             s_fillOn  = false;
             return ComposeHit::TYPE;

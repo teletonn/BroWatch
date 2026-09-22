@@ -13,6 +13,7 @@
 #include "qwerty.h"
 #include "test_util.h"
 #include <cstdio>
+#include <cstring>
 
 using namespace Qwerty;
 
@@ -31,36 +32,72 @@ int main() {
     Key k[KEY_N];
     char msg[96];
 
+    for (int bd = 0; bd < 2; bd++)
     for (int ext = 0; ext < 2; ext++)
     for (const Screen& s : SCREENS) {
+        const Board board = bd ? Board::RU : Board::EN;
+        const char* bname = bd ? "RU" : "EN";
         // The band the device actually gives the keyboard -- for a name, and
         // for a message, which adds a digit row and punctuation.
         const int top = BAND_TOP, bot = s.h - BAND_BOTTOM_INSET;
-        const uint8_t n = layout(s.w, top, bot, k, ext != 0);
+        const uint8_t n = layout(s.w, top, bot, k, ext != 0, board);
         // The key backspace follows: M on the name board, the apostrophe
-        // after M on the message board.
+        // after M on the message board. On the Russian board DEL sits on the
+        // bottom row instead, so `mi` there is just a letter on the third.
         const char* kind = ext ? "message" : "name";
-        const int mi = find(k, n, ext ? '\'' : 'M'), bi = find(k, n, BKSP);
+        const int mi = find(k, n, bd ? (char)(RU_BASE + RU_N - 1) : (ext ? '\'' : 'M'));
+        const int bi = find(k, n, BKSP);
 
-        snprintf(msg, sizeof msg, "The board is complete (%s, %s)", s.name, kind); suite(msg);
+        snprintf(msg, sizeof msg, "The board is complete (%s, %s, %s)", s.name, kind, bname); suite(msg);
         {
-            ck(ext ? "forty-six keys" : "thirty keys", n == (ext ? 46 : 30));
+            ck(bd ? (ext ? "fifty-one keys" : "thirty-six keys")
+                  : (ext ? "forty-six keys" : "thirty keys"),
+               n == (ext ? (bd ? 51 : 46) : (bd ? 36 : 30)));
             if (ext) {
                 bool extra = true;
-                for (const char* c = "0123456789.,?!'-"; *c; c++) {
+                // The Russian message board drops '-' for DEL on the bottom row.
+                for (const char* c = bd ? "0123456789.,?!'" : "0123456789.,?!'-"; *c; c++) {
                     int count = 0;
                     for (uint8_t i = 0; i < n; i++) if (k[i].ch == *c) count++;
                     if (count != 1) extra = false;
                 }
                 ck("every digit and mark exactly once", extra);
             }
-            bool letters = true;
-            for (char c = 'A'; c <= 'Z'; c++) {
-                int count = 0;
-                for (uint8_t i = 0; i < n; i++) if (k[i].ch == c) count++;
-                if (count != 1) letters = false;
+            if (!bd) {
+                bool letters = true;
+                for (char c = 'A'; c <= 'Z'; c++) {
+                    int count = 0;
+                    for (uint8_t i = 0; i < n; i++) if (k[i].ch == c) count++;
+                    if (count != 1) letters = false;
+                }
+                ck("every letter exactly once", letters);
+                bool noRu = true;
+                for (uint8_t i = 0; i < n; i++) if (isRuKey(k[i].ch)) noRu = false;
+                ck("no Russian id leaks onto the English board", noRu);
+            } else {
+                bool letters = true, noEn = true;
+                for (uint8_t r = 0; r < RU_N; r++) {
+                    int count = 0;
+                    for (uint8_t i = 0; i < n; i++) if (k[i].ch == (char)(RU_BASE + r)) count++;
+                    if (count != 1) letters = false;
+                }
+                for (char c = 'A'; c <= 'Z'; c++)
+                    for (uint8_t i = 0; i < n; i++) if (k[i].ch == c) noEn = false;
+                ck("every Russian letter exactly once", letters);
+                ck("no Latin letter on the Russian board", noEn);
+                ck("'-' gave its slot to DEL", find(k, n, '-') < 0);
+                // The Russian board types transliteration, and the air
+                // alphabet is Latin: every tail must fit it, apostrophe
+                // included (both signs land on it).
+                bool trOk = true;
+                for (uint8_t r = 0; r < RU_N; r++) {
+                    const char* tr = ruTr(r);
+                    if (!tr[0]) trOk = false;
+                    for (const char* p = tr; *p; p++)
+                        if (!((*p >= 'A' && *p <= 'Z') || *p == '\'')) trOk = false;
+                }
+                ck("transliteration is air-charset only", trOk);
             }
-            ck("every letter exactly once", letters);
             ck("space",     find(k, n, ' ') >= 0);
             ck("backspace", bi >= 0);
             // The message board clears; the name board shuffles the curated
@@ -70,7 +107,7 @@ int main() {
             ck("OK",        find(k, n, OK)  >= 0);
         }
 
-        snprintf(msg, sizeof msg, "Every key is on screen, in its band (%s, %s)", s.name, kind); suite(msg);
+        snprintf(msg, sizeof msg, "Every key is on screen, in its band (%s, %s, %s)", s.name, kind, bname); suite(msg);
         {
             bool inside = true, sane = true;
             for (uint8_t i = 0; i < n; i++) {
@@ -82,7 +119,7 @@ int main() {
             ck("no key under 18px in either direction", sane);
         }
 
-        snprintf(msg, sizeof msg, "No two keys overlap (%s, %s)", s.name, kind); suite(msg);
+        snprintf(msg, sizeof msg, "No two keys overlap (%s, %s, %s)", s.name, kind, bname); suite(msg);
         {
             bool clean = true;
             for (uint8_t i = 0; i < n; i++)
@@ -91,18 +128,32 @@ int main() {
             ck("every pair of keys is disjoint", clean);
         }
 
-        snprintf(msg, sizeof msg, "Backspace does not cover the key before it (%s, %s)", s.name, kind); suite(msg);
-        if (mi >= 0 && bi >= 0) {
-            const Key& m = k[mi];
-            const Key& b = k[bi];
-            ck("they share a row",               m.y == b.y && m.h == b.h);
-            ck("backspace starts after M ends",  b.x >= m.x + m.w);
-            ck("with the full gap between them", b.x - (m.x + m.w) == BKSP_GAP);
+        if (!bd) {
+            snprintf(msg, sizeof msg, "Backspace does not cover the key before it (%s, %s)", s.name, kind); suite(msg);
+            if (mi >= 0 && bi >= 0) {
+                const Key& m = k[mi];
+                const Key& b = k[bi];
+                ck("they share a row",               m.y == b.y && m.h == b.h);
+                ck("backspace starts after M ends",  b.x >= m.x + m.w);
+                ck("with the full gap between them", b.x - (m.x + m.w) == BKSP_GAP);
+            } else {
+                ck("M and backspace both exist", false);
+            }
         } else {
-            ck("M and backspace both exist", false);
+            snprintf(msg, sizeof msg, "DEL lives on the bottom row (%s, %s)", s.name, kind); suite(msg);
+            const int oi = find(k, n, OK);
+            if (mi >= 0 && bi >= 0 && oi >= 0) {
+                const Key& m = k[mi];
+                const Key& b = k[bi];
+                const Key& o = k[oi];
+                ck("below the letter rows",          b.y > m.y + m.h);
+                ck("sharing the bottom row with OK", b.y == o.y && b.h == o.h);
+            } else {
+                ck("last letter, DEL and OK all exist", false);
+            }
         }
 
-        snprintf(msg, sizeof msg, "What you see is what you press (%s, %s)", s.name, kind); suite(msg);
+        snprintf(msg, sizeof msg, "What you see is what you press (%s, %s, %s)", s.name, kind, bname); suite(msg);
         {
             // Every pixel of every key. Not a sample -- the bug this replaces
             // was a few columns wide, at one edge, of one key.
@@ -113,7 +164,10 @@ int main() {
                         if (keyAt(k, n, x, y, 0) != i) wrong++;
             ck("every pixel inside a key resolves to that key", wrong == 0);
 
-            if (mi >= 0 && bi >= 0) {
+            // The English board's gutter geometry, pinned pixel by pixel. The
+            // Russian board's DEL sits on another row, so its gutters answer
+            // to the suite below instead.
+            if (!bd && mi >= 0 && bi >= 0) {
                 const Key& m = k[mi];
                 const int midY = m.y + m.h / 2;
                 ck("M's last column is M",
@@ -125,7 +179,7 @@ int main() {
             }
         }
 
-        snprintf(msg, sizeof msg, "The gutters are live (%s, %s)", s.name, kind); suite(msg);
+        snprintf(msg, sizeof msg, "The gutters are live (%s, %s, %s)", s.name, kind, bname); suite(msg);
         {
             // Nearest-rectangle means a press between two keys is not a press
             // on nothing. Anywhere inside the keyboard's outline resolves.
@@ -156,16 +210,27 @@ int main() {
             for (int top = 30; top <= 70; top += 4)
                 for (int bot = s.h - 60; bot <= s.h - 20; bot += 4) {
                   for (int ext = 0; ext < 2; ext++) {
-                    const uint8_t n = layout(s.w, top, bot, k, ext != 0);
+                  for (int bd = 0; bd < 2; bd++) {
+                    const Board board = bd ? Board::RU : Board::EN;
+                    const uint8_t n = layout(s.w, top, bot, k, ext != 0, board);
+                    if (n != (ext ? (bd ? 51 : 46) : (bd ? 36 : 30))) ok = false;
                     for (uint8_t i = 0; i < n; i++) {
                         if (k[i].x < 0 || k[i].x + k[i].w > s.w || k[i].y < 0) ok = false;
                         for (uint8_t j = i + 1; j < n; j++) if (overlap(k[i], k[j])) ok = false;
                     }
-                    const int mi = find(k, n, ext ? '\'' : 'M'), bi = find(k, n, BKSP);
-                    if (mi < 0 || bi < 0 || k[bi].x - (k[mi].x + k[mi].w) != BKSP_GAP) ok = false;
+                    const int bi = find(k, n, BKSP);
+                    if (bi < 0) ok = false;
+                    if (!bd) {
+                        const int mi = find(k, n, ext ? '\'' : 'M');
+                        if (mi < 0 || k[bi].x - (k[mi].x + k[mi].w) != BKSP_GAP) ok = false;
+                    } else {
+                        const int mi = find(k, n, (char)(RU_BASE + RU_N - 1));
+                        if (mi < 0 || k[bi].y <= k[mi].y + k[mi].h) ok = false;
+                    }
+                  }
                   }
                 }
-        ck("on screen, disjoint, and M clear of backspace throughout", ok);
+        ck("on screen, disjoint, and backspace placed throughout", ok);
     }
 
     suite("A single wild sample on release is ignored");
@@ -201,6 +266,39 @@ int main() {
         f.move(300, 200);
         f.move(20, 20);
         ck("scattered garbage leaves the anchor alone", f.x == 100 && f.y == 100);
+    }
+
+    suite("Transliteration: UTF-8 in, air-charset out");
+    {
+        // What a RU FILL opening becomes on its way to the keyboard: the
+        // blank at the end survives, so the ending lands straight after it.
+        char out[64];
+        ck("opening keeps its tail space",
+           transliterateRu("ВСТРЕЧА В ", out, sizeof out) == 11 &&
+           strcmp(out, "VSTRECHA V ") == 0);
+        ck("lower case lands on upper tails, Ё rides on Е",
+           transliterateRu("Щука ёж", out, sizeof out) == 11 &&
+           strcmp(out, "SHCHUKA EZH") == 0);
+        ck("soft and hard signs land on the apostrophe",
+           transliterateRu("съешь", out, sizeof out) == 6 &&
+           strcmp(out, "S'ESH'") == 0);
+        ck("latin lower-cases up, marks pass",
+           transliterateRu("Meet at 5-a'b,c?!.-", out, sizeof out) == 19 &&
+           strcmp(out, "MEET AT 5-A'B,C?!.-") == 0);
+        ck("three-byte letters and emoji are dropped whole",
+           transliterateRu("А€Б😀В", out, sizeof out) == 3 &&
+           strcmp(out, "ABV") == 0);
+        ck("broken bytes never stall",
+           transliterateRu("А\xFF" "Б\xD0", out, sizeof out) == 2 &&
+           strcmp(out, "AB") == 0);
+        char tiny[4];
+        ck("a mid-tail cutoff still NUL-terminates",
+           transliterateRu("ЩУКА", tiny, sizeof tiny) == 3 &&
+           strcmp(tiny, "SHC") == 0);
+        ck("empty in, empty out",
+           transliterateRu("", out, sizeof out) == 0 && out[0] == '\0');
+        ck("zero cap writes nothing",
+           transliterateRu("АБ", out, 0) == 0);
     }
 
     return report();

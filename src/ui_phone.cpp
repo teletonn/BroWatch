@@ -16,7 +16,11 @@
 // only -- it rides in the advert, and letters are what every decoder accepts.
 //
 // And for anybody who hates multi-tap regardless, a QWERTY board: one button
-// away, and remembered once chosen. It is drawn by this same screen rather
+// away, and remembered once chosen. It speaks two alphabets -- QWERTY and
+// ЙЦУКЕН, switched by a button beside BACK that names the other one, just
+// like the keypad/QWERTY switch itself. The Russian board types Latin
+// transliteration (the air alphabet is Latin and the readout face is too),
+// its keys labelled in Cyrillic. It is drawn by this same screen rather
 // than a screen of its own because the text being typed lives here, and
 // switching layouts mid-word keeps what you have typed -- which is the entire
 // point of a bailout. Its geometry, hit test and touch filter are pure
@@ -166,6 +170,14 @@ void appendChar(char c) {
     commitPending();
     if (s_len < s_max) { s_buf[s_len++] = c; s_buf[s_len] = '\0'; }
 }
+// A Russian key appends its whole transliteration ("SHCH" is four letters).
+// The buffer counts bytes, so a long tail can fill it mid-key: the rest is
+// dropped, the same way a full buffer drops one more letter.
+void appendTr(const char* tr) {
+    commitPending();
+    while (*tr && s_len < s_max) { s_buf[s_len++] = *tr++; }
+    s_buf[s_len] = '\0';
+}
 
 // Both of these moved into Theme so the WiFi password board can have the
 // same chassis -- it could not before, because they lived in here and this
@@ -226,6 +238,16 @@ static void toggleRect(int w, int h, bool qwerty) {
     if (qwerty) { s_toggleX = w - BX - BW_(); s_toggleY = backY(h); }
     else        { s_toggleX = BX;          s_toggleY = backY(h) - BH - 6; }
 }
+// The alphabet switch. Only on the QWERTY board -- the keypad is Latin-only
+// multi-tap by design -- centred in BACK's row between BACK and the layout
+// switch, where the thumb already is. Names the OTHER alphabet, like its
+// neighbour: РУ on the English board, EN on the Russian one.
+static int s_langX = 0, s_langY = 0;
+static void langRect(int w, int h) {
+    const int freeL = BX + BW_() + 6, freeR = w - BX - BW_() - 6;
+    s_langX = freeL + (freeR - freeL - BW_()) / 2;
+    s_langY = backY(h);
+}
 
 // How far outside the board a press can land and still count: the gutters
 // and a hair past the outer keys, so a press on the readout or the chrome is
@@ -237,9 +259,12 @@ static const int PRESS_REACH = 6;
 static const int SLIDE_REACH = 12;
 
 // What a key says. Letters are themselves; the controls borrow the keypad's
-// own words, DEL rather than an arrow the 5x7 font does not have.
+// own words, DEL rather than an arrow the 5x7 font does not have. Russian
+// keys answer with their Cyrillic glyph -- printRU draws them, one[] below
+// could never hold their two bytes.
 static const char* keyLabel(char c) {
     static char one[2];
+    if (Qwerty::isRuKey(c)) return Qwerty::ruGlyph((uint8_t)(c - Qwerty::RU_BASE));
     switch (c) {
         case Qwerty::BKSP: return "DEL";
         case Qwerty::CLR:  return "CLR";
@@ -306,6 +331,7 @@ static void qwertyRelease() {
     else if (c == Qwerty::CLR)  { commitPending(); s_len = 0; s_buf[0] = '\0'; }
     else if (c == Qwerty::SHUF) shuffleName();
     else if (c == Qwerty::OK)   saveAndClose();
+    else if (Qwerty::isRuKey(c)) appendTr(Qwerty::ruTr((uint8_t)(c - Qwerty::RU_BASE)));
     else                        appendChar(c);
 }
 
@@ -480,6 +506,17 @@ void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {
         Settings::togglePhoneQwerty();
         return;
     }
+    // The alphabet switch. Same deal: commit, disarm, flip. The typed text
+    // stays -- transliteration is already Latin, so nothing in it changes
+    // meaning when the labels do.
+    if (Settings::phoneQwerty() &&
+        x >= s_langX && x <= s_langX + BW_() && y >= s_langY && y <= s_langY + BH) {
+        commitPending();
+        s_sliding = false;
+        s_armed = -1;
+        Settings::togglePhoneQwertyRu();
+        return;
+    }
 
     if (Settings::phoneQwerty()) { qwertyPress(x, y, now); return; }
 
@@ -631,7 +668,8 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
 
         // ---- keys ---------------------------------------------------------
         // Laid out here, every frame, and read by the hit test -- see s_keys.
-        s_keyN = Qwerty::layout(w, Qwerty::BAND_TOP, h - Qwerty::BAND_BOTTOM_INSET, s_keys, msg());
+        s_keyN = Qwerty::layout(w, Qwerty::BAND_TOP, h - Qwerty::BAND_BOTTOM_INSET, s_keys, msg(),
+                                Settings::phoneQwertyRu() ? Qwerty::Board::RU : Qwerty::Board::EN);
         for (uint8_t i = 0; i < s_keyN; i++) {
             const Qwerty::Key& k = s_keys[i];
             const bool lit = (s_armed == (int8_t)i);
@@ -685,6 +723,13 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     // ---- layout switch ----------------------------------------------------
     toggleRect(w, h, qw);
     Theme::drawButton(t, s_toggleX, s_toggleY, BW_(), BH, qw ? "[ KEYPAD ]" : "[ QWERTY ]", false);
+    // ---- alphabet switch --------------------------------------------------
+    // QWERTY only: beside the layout switch, in the same row, the same size.
+    if (qw) {
+        langRect(w, h);
+        Theme::drawButton(t, s_langX, s_langY, BW_(), BH,
+                          Settings::phoneQwertyRu() ? "[ EN ]" : "[ РУ ]", false);
+    }
 
 }
 

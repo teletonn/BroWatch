@@ -380,6 +380,10 @@ namespace Settings {
     // is remembered because somebody who hates it hates it every time.
     bool        phoneQwerty();
     void        togglePhoneQwerty();
+    // The QWERTY board's alphabet: true is ЙЦУКЕН, false is QWERTY. Remembered
+    // like the board itself, and fresh boards default to the interface tongue.
+    bool        phoneQwertyRu();
+    void        togglePhoneQwertyRu();
     // Encrypted messages between SquachWatches that share a phrase. Off until
     // asked for. Reading one needs DETECT; sending one needs TRANSMIT, and so
     // sits behind the same consent gate.
