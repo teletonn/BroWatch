@@ -1017,6 +1017,11 @@ bool takeRead(char* who, size_t cap) {
     snprintf(who, cap, "%s", s_readBy);
     return true;
 }
+bool peekRead(char* who, size_t cap) {
+    if (!s_readHave) return false;
+    snprintf(who, cap, "%s", s_readBy);
+    return true;
+}
 
 const char* lineText(const Message& m) {
     if (m.text) return m.body;

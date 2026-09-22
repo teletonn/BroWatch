@@ -41,7 +41,7 @@ const char* shortName(DetectionType t) {
         case DetectionType::AXON:        return "AXON";
         case DetectionType::META:        return "GLASS";
         case DetectionType::SKIMMER:     return "SKIM";
-        case DetectionType::RAVEN:       return "RAV";
+        case DetectionType::MESH:        return "MESH";
         case DetectionType::AIRTAG:      return "TRACKER";
         case DetectionType::DRONE:       return "DRONE";
         case DetectionType::ALPR:        return "ALPR";

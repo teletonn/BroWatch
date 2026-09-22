@@ -126,7 +126,7 @@ enum class DetectionType : uint8_t {
     AXON      = 2,   // Axon body camera / LE equipment
     META      = 3,   // Ray-Ban Meta smart glasses
     SKIMMER   = 4,   // HC-05/06/03 Bluetooth skimmer
-    RAVEN     = 5,   // Raven gunshot detector
+    MESH      = 5,   // (was RAVEN, a gunshot detector: replaced, value kept)
     AIRTAG    = 6,   // Apple AirTag
     DRONE     = 7,   // OpenDroneID drone
     ALPR      = 8,   // Motorola / Vigilant ALPR
@@ -140,7 +140,7 @@ inline const char* detectionTypeName(DetectionType t) {
         case DetectionType::AXON:    return "AXON";
         case DetectionType::META:    return "META";
         case DetectionType::SKIMMER: return "SKIMMER";
-        case DetectionType::RAVEN:   return "RAVEN";
+        case DetectionType::MESH:    return "MESH";
         case DetectionType::AIRTAG:  return "AIRTAG";
         case DetectionType::DRONE:   return "DRONE";
         case DetectionType::ALPR:    return "ALPR";
@@ -294,9 +294,11 @@ BLE 16-bit service UUID: 0x1101   (Standard Serial Port Profile — classic
 
 #### 6.1.4 Meta Ray-Ban Smart Glasses — 16-bit UUID `0xFD5F`
 
-#### 6.1.5 Raven gunshot detector — 5 custom service UUIDs
-`0x3100`, `0x3200`, `0x3300`, `0x3400`, `0x3500`
-(also a manufacturer ID `0x09C8` for XUNTONG, the BLE-radio supplier)
+#### 6.1.5 Mesh nodes — 128-bit service UUIDs (replaces Raven)
+Meshtastic `6ba1b218-…`, MeshCore/RNode via advertised name (shared
+Nordic-UART UUID is not matched). The old Raven entry (`0x3100`–
+`0x3500`, plus XUNTONG manufacturer ID `0x09C8`) is retired: unverified
+IDs, no RU presence. Current spec: docs/DETECTIONS.md.
 
 #### 6.1.6 AirTag / Apple FindMy — manufacturer ID `0x004C`
 Match when first 4 bytes of manufacturer data are `1E FF 4C 00` or

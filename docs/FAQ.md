@@ -35,7 +35,7 @@ If you *do* want to build from source — maybe you're modifying something, mayb
 
 Every detection type has its own fingerprint — a WiFi OUI prefix, a BLE service UUID, a manufacturer ID, sometimes an SSID pattern. The board passively listens (it never transmits anything to provoke a response — this is 100% receive-only, no active probing) and checks every WiFi/BLE packet it overhears against that list. Match found? You get a full-screen ALERT: what it thinks it saw, how confident it is, the MAC, RSSI, channel, and a little radar widget because I have a flair for the dramatic.
 
-Confidence matters — some signatures are rock-solid (Flock, Axon, Meta glasses), some are best-effort (AirTag, Raven). The ALERT screen tells you which is which so you're not treating a maybe like a certainty. Full technical breakdown, per-type, with sources: [docs/DETECTIONS.md](docs/DETECTIONS.md).
+Confidence matters — some signatures are rock-solid (Flock, Axon, Meta glasses, Meshtastic's service UUID), some are best-effort (AirTag, mesh names). The ALERT screen tells you which is which so you're not treating a maybe like a certainty. Full technical breakdown, per-type, with sources: [docs/DETECTIONS.md](docs/DETECTIONS.md).
 
 ## Is this legal? Am I going to get in trouble for owning one?
 

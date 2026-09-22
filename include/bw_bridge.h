@@ -8,10 +8,15 @@
 //   this persona and never invents its own. It also carries "outfit"/"shade"
 //   (advert indices, shared tables both sides) and "desk" (the DESK MODE
 //   page's settings: squad/crowd/visit/clk/clkfont/clkbg/bg), so the web den
-//   mirrors the desk; squad snapshots carry "outfit"/"shade" per member.)
+//   mirrors the desk; squad snapshots carry "outfit"/"shade" per member.
+//   "usb":1 marks the USB-attached board itself (snapshots of mesh neighbours
+//   never carry it), so the web knows which peer is the radio it sends through
+//   and whose persona it speaks with.)
 //   [BW {"t":"msg","from":"Squachy","text":"..."}]
 //   [BW {"t":"emote","from":"AA:BB:...","emote":"WAVE"}]
 //   [BW {"t":"detection","type":"FLOCK","mac":"...","rssi":-70,"vendor":"..."}]
+//   [BW {"t":"readby","who":"Squachy"}]  someone opened our last message
+//   (mirrored for the web toast; the board still toasts it itself).
 //
 // gateway.py forwards these to server.py's /api/ingest, so the web app shows
 // the same chat, squad and detections as the board. Only the four frame kinds
@@ -22,6 +27,10 @@
 //   [BW {"t":"send","text":"..."}]     typed message, via MeshTalk::sendText
 //   [BW {"t":"send","canned":12}]      canned line 12, via MeshTalk::send
 //   [BW {"t":"emote","emote":2}]       emote 2 (MeshMsg::Emote), setup rolled here
+//   [BW {"t":"read"}]   web tapped the den letter: MeshTalk::markRead(),
+//                       the KIND_READ receipt goes out like a board tap
+//   [BW {"t":"react","kind":"like"}]   web thumb on the den letter: canned
+//                       48/49 + markRead(), like uiMessageSendReaction()
 //   [BW {"t":"hello"}]  a listener came up: re-announce + FULL snapshot
 //                        (squad, inbox backlog, current detection)
 //   [BW {"t":"ping"}]   keepalive: re-announce + squad snapshot ONLY, never

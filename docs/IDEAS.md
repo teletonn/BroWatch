@@ -29,7 +29,7 @@ Lines and a full card hand out rewards.
 
 **Why it fits:** it makes the thing the board already does into a game, it
 needs no new art, and it rewards going places. It also gives the rarer types
-(RAVEN, ALPR, DEAUTH) a point, which today are just numbers that never move.
+(MESH, ALPR, DEAUTH) a point, which today are just numbers that never move.
 
 **Shape:**
 - A 4x4 card, sixteen squares from the eighteen types.

@@ -74,6 +74,7 @@ const char* resultWords(OtaWifi::SavedResult r) {
         case OtaWifi::SavedResult::JOINED:       return Theme::tr("joined at the last boot", "была при старте");
         case OtaWifi::SavedResult::BAD_PASSWORD: return Theme::tr("wrong password", "плохой пароль");
         case OtaWifi::SavedResult::NOT_FOUND:    return Theme::tr("not found at the last boot", "не найдена при старте");
+        case OtaWifi::SavedResult::TIMEOUT:      return Theme::tr("no answer at the last boot", "молчала при старте");
         default:                                 return Theme::tr("not tried yet", "ещё не пробовали");
     }
 }
@@ -83,6 +84,7 @@ uint16_t resultColour(OtaWifi::SavedResult r) {
         case OtaWifi::SavedResult::JOINED:       return Theme::GREEN;
         case OtaWifi::SavedResult::BAD_PASSWORD: return Theme::AMBER;
         case OtaWifi::SavedResult::NOT_FOUND:    return Theme::W95_SHADOW;
+        case OtaWifi::SavedResult::TIMEOUT:      return Theme::AMBER;
         default:                                 return Theme::CYAN;
     }
 }

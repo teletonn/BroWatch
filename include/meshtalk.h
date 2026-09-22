@@ -82,6 +82,10 @@ void           markRead();
 // A read receipt came back for the last message this board sent: who
 // opened it. Consumes.
 bool           takeRead(char* who, size_t cap);
+// Same slot without consuming: the USB bridge (bw_bridge.cpp) mirrors the
+// receipt to the web UI while the main loop still owns takeRead() and
+// toasts it on the board. Bridge tick runs before it, so no race.
+bool           peekRead(char* who, size_t cap);
 const char*    lineText(const Message& m);
 
 // The last emote to arrive, handed over once. Not in the inbox: it is not

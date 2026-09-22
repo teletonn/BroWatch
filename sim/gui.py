@@ -68,7 +68,7 @@ THEMES = ["VAPRW4VE", "CYB3RGR33N", "AMB3RTERM", "BUBBL3GUM", "GH0ST", "BL00D"]
 # hardcoded copy here would go stale, so it's read from the firmware's
 # own enum below and this is just what to show if that ever fails.
 FALLBACK_TYPES = [
-    (1, "FLOCK"), (2, "AXON"), (3, "META"), (4, "SKIMMER"), (5, "RAVEN"),
+    (1, "FLOCK"), (2, "AXON"), (3, "META"), (4, "SKIMMER"), (5, "MESH"),
     (6, "AIRTAG"), (7, "DRONE"), (8, "ALPR"), (9, "CAMERA"),
     (10, "SAMSUNG_TAG"), (11, "GOOGLE_TAG"), (12, "TILE"), (13, "RING"),
     (14, "DEAUTH"),

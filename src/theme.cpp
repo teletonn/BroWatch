@@ -119,7 +119,7 @@ uint16_t colorFor(DetectionType t) {
             return PINK;
         case DetectionType::SKIMMER:
             return VAPOR_YELLOW;
-        case DetectionType::RAVEN:
+        case DetectionType::MESH:
         case DetectionType::ALPR:
             return AMBER;
         case DetectionType::AIRTAG:
@@ -680,25 +680,19 @@ void drawTypeIcon(TFT_eSPI& t, DetectionType type, int cx, int cy, int s) {
         housing(t, cx-s, cy-s/2, s*2, s);
         t.fillRect(cx-s+4, cy-s/4, s*2-8, s/4, ICO_INK);                  // the slot
         break;
-    case DetectionType::RAVEN: {
-        // Heavier head, shorter bill, hunched. The wading bird pass 6 drew
-        // came from a long neck and a small head -- a raven is mostly head
-        // and shoulders with the bill buried in the profile, not held out.
-        t.fillTriangle(cx+s/2, cy+s/4, cx+s*7/5, cy+s, cx+s/3, cy+s*4/5, SHELL_LO);
-        t.fillEllipse(cx+s/6, cy+s/4, s*7/10, s*3/5, SHELL);          // body
-        t.fillEllipse(cx+s/6, cy+s/8, s*7/10, s*2/5, SHELL_HI);       // lit back
-        t.fillEllipse(cx+s/4, cy+s/3, s*2/5, s*2/5, SHELL_LO);        // wing
-        t.fillCircle(cx-s/2, cy-s/3, s/2, SHELL);                     // big head
-        t.fillCircle(cx-s/2, cy-s/2, s/3, SHELL_HI);                  // lit crown
-        t.fillTriangle(cx-s*9/10, cy-s*2/5, cx-s*8/5, cy-s/5,
-                       cx-s*9/10, cy,       SHELL_LO);                // short bill
-        t.fillTriangle(cx-s*9/10, cy-s*2/5, cx-s*8/5, cy-s/5,
-                       cx-s*9/10, cy-s/5,   SHELL);                   // lit edge
-        t.fillTriangle(cx-s/2, cy, cx+s/8, cy+s/3, cx-s*3/5, cy+s/3, SHELL_LO); // hackle
-        t.fillCircle(cx-s*3/5, cy-s*2/5, s/8, ICO_SHEEN);
-        t.fillCircle(cx-s*3/5, cy-s*2/5, s/16, ICO_INK);
-        t.fillRect(cx,      cy+s*3/4, 3, s/3, SHELL_LO);
-        t.fillRect(cx+s/3,  cy+s*3/4, 3, s/3, SHELL_LO);
+    case DetectionType::MESH: {
+        // Three nodes joined by links: the off-grid mesh. Nodes sit on
+        // a triangle so the glyph reads at icon size; links cross
+        // behind them, each node ringed lit with a dark core.
+        t.drawLine(cx-s, cy+s/2, cx+s, cy+s/2, SHELL_LO);
+        t.drawLine(cx-s, cy+s/2, cx, cy-s, SHELL_LO);
+        t.drawLine(cx+s, cy+s/2, cx, cy-s, SHELL_LO);
+        t.fillCircle(cx-s, cy+s/2, s/2, SHELL);
+        t.fillCircle(cx+s, cy+s/2, s/2, SHELL);
+        t.fillCircle(cx, cy-s, s/2, SHELL_HI);
+        t.fillCircle(cx-s, cy+s/2, s/4, ICO_LED);
+        t.fillCircle(cx+s, cy+s/2, s/4, ICO_LED);
+        t.fillCircle(cx, cy-s, s/4, ICO_LED);
         break;
     }
     case DetectionType::AIRTAG:
@@ -9344,12 +9338,21 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
     t.setTextWrap(false);
     t.setTextColor(WHITE, BG);
     char lines[INFO_MAX_LINES][48];
-    uint8_t n = wrapText(t, text, textMaxW, lines, INFO_MAX_LINES);
+    // The body in the heading's language: Cyrillic goes through the RU
+    // face (wrapTextRU measures it, printRU draws it), the way the
+    // heading above already does. Byte-measuring Cyrillic with the GLCD
+    // width broke every other line, and the GLCD has no glyphs for it.
+    bool bodyCyr = false;
+    for (const char* p = text; *p; ) {
+        if (RuText::isCyrillic(RuText::next(&p))) { bodyCyr = true; break; }
+    }
+    uint8_t n = bodyCyr ? wrapTextRU(t, text, textMaxW, lines, INFO_MAX_LINES)
+                        : wrapText(t, text, textMaxW, lines, INFO_MAX_LINES);
     int ly = textTop;
     for (uint8_t i = 0; i < n; i++) {
-        int lw = t.textWidth(lines[i]);
+        int lw = bodyCyr ? textWidthRU(t, lines[i]) : t.textWidth(lines[i]);
         t.setCursor(px + (pw - lw) / 2, ly);
-        t.print(lines[i]);
+        if (bodyCyr) printRU(t, lines[i]); else t.print(lines[i]);
         ly += 12;
     }
 

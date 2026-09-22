@@ -159,7 +159,7 @@ static SimSaved s_list[SAVED_MAX] = {
 };
 static uint8_t s_n = 3, s_use = 0;
 bool        hasSaved()  { return s_saved && s_n > 0; }
-bool        bootCheck(uint32_t) { return false; }
+bool        bootCheck(uint32_t, bool) { return false; }
 bool        savedPassAt(uint8_t i, char* out, size_t cap) { if (i >= savedCount() || !cap) return false; snprintf(out, cap, "hunter2"); return true; }
 void        forget()    { s_saved = false; s_n = 0; }
 uint8_t     savedCount()           { return s_saved ? s_n : 0; }

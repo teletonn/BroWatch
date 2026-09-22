@@ -76,7 +76,11 @@ void        forget();
 // there and then -- that would stop detection mid-screen -- so its password is
 // tried at the next boot check, and savedResult() says how that went.
 static const uint8_t SAVED_MAX = 6;
-enum class SavedResult : uint8_t { UNTRIED = 0, JOINED, BAD_PASSWORD, NOT_FOUND };
+// How the last boot-time try went. TIMEOUT is new: a join that ran out of
+// time used to leave UNTRIED, so a network the board tried and failed to
+// reach read as "not tried yet" boot after boot. Values 0-3 keep their
+// meaning for boards upgrading with results already in NVS.
+enum class SavedResult : uint8_t { UNTRIED = 0, JOINED, BAD_PASSWORD, NOT_FOUND, TIMEOUT };
 uint8_t     savedCount();
 const char* savedSsidAt(uint8_t i);
 uint8_t     savedUse();
@@ -98,13 +102,15 @@ void        printSaved();
 // if the network joins.
 void connect(const char* ssid, const char* pass, bool save);
 void connectSaved();
-// The boot check. Joins the saved network, reads the site's manifest for
-// this build, hands anything newer to OtaCore::noteAvailable, and shuts
-// WiFi down again. Blocking, time-boxed by `budgetMs`, and meant for boot,
-// before there is a screen to hold up: on a running board the same job is a
-// whole mode, so detection is paused properly rather than stalled.
+// The boot check. Joins the saved network, syncs the clock over NTP, and
+// -- only when `checkUpdate` -- reads the site's manifest for this build
+// and hands anything newer to OtaCore::noteAvailable. Then shuts WiFi down
+// again: one join per boot, never again until the next reset. Blocking,
+// time-boxed by `budgetMs`, and meant for boot, before there is a screen
+// to hold up: on a running board the same job is a whole mode, so
+// detection is paused properly rather than stalled.
 // False when there is no saved network, or nothing came back in time.
-bool bootCheck(uint32_t budgetMs);
+bool bootCheck(uint32_t budgetMs, bool checkUpdate);
 
 const char* network();          // the one being joined or used
 const char* latestVersion();    // meaningful from READY on

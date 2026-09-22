@@ -9,7 +9,12 @@ enum class DetectionType : uint8_t {
     AXON    = 2,   // Axon body camera / LE equipment
     META    = 3,   // Ray-Ban Meta smart glasses
     SKIMMER = 4,   // HC-05/06/03 Bluetooth skimmer
-    RAVEN   = 5,   // Raven gunshot detector
+    // Was RAVEN (a US gunshot detector, unverified and absent in RU):
+    // value 5 now means off-grid MESH nodes -- Meshtastic, MeshCore
+    // companion radios, RNode/Reticulum Bluetooth -- matched on their
+    // BLE service UUIDs and advertised names. The value is kept so old
+    // black-box logs stay readable (their "5" rows were Raven hits).
+    MESH    = 5,   // Meshtastic / MeshCore / RNode mesh node
     AIRTAG  = 6,   // Apple AirTag / FindMy
     DRONE   = 7,   // OpenDroneID drone
     ALPR    = 8,   // Motorola / Vigilant ALPR
@@ -42,7 +47,7 @@ inline const char* detectionTypeName(DetectionType t) {
         case DetectionType::AXON:        return "AXON";
         case DetectionType::META:        return "META";
         case DetectionType::SKIMMER:     return "SKIMMER";
-        case DetectionType::RAVEN:       return "RAVEN";
+        case DetectionType::MESH:         return "MESH";
         case DetectionType::AIRTAG:      return "AIRTAG";
         case DetectionType::DRONE:       return "DRONE";
         case DetectionType::ALPR:        return "ALPR";

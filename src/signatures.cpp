@@ -130,6 +130,112 @@ const OuiEntry kOuiTable[] = {
     {{0x70, 0x1A, 0xD5}, "Avigilon",     DetectionType::CAMERA,     Confidence::HIGH_CONF},  // Avigilon Alta, registered 2021-04-27
     {{0x00, 0x40, 0x8C}, "Axis",         DetectionType::CAMERA,     Confidence::HIGH_CONF},  // Axis Communications, registered 1998
     {{0xB8, 0xA4, 0x4F}, "Axis",         DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xAC, 0xCC, 0x8E}, "Axis",         DetectionType::CAMERA,     Confidence::HIGH_CONF},  // Axis Communications AB
+    {{0xE8, 0x27, 0x25}, "Axis",         DetectionType::CAMERA,     Confidence::HIGH_CONF},  // Axis Communications AB
+    // Hanwha Vision (ex-Samsung Techwin): 00:09:18 is the old Samsung
+    // Techwin block, E4:30:22 Hanwha Techwin Security Vietnam. Pro
+    // cameras, wired -- the OUI is what a WiFi scan can see of them.
+    // Source: IEEE MA-L registry via maclookup.app.
+    {{0x00, 0x09, 0x18}, "Hanwha",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xE4, 0x30, 0x22}, "Hanwha",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+
+    // ---- RU/EU consumer cameras --------------------------------------
+    // The brands actually on Russian shelves 2020-2026. Every prefix
+    // below was read out of the IEEE registry (via maclookup.app,
+    // cross-checked with netify.ai/hwaddress.com), same standard as
+    // the rows above -- no invented constants (see hacker_test.cpp
+    // for why that rule exists). Details per brand in
+    // docs/browatch/07-rossiya-detekt.md.
+    //
+    // EZVIZ (Hangzhou EZVIZ Software, Hikvision's consumer brand):
+    // own MA-L blocks, 15 of them. The C6N/C3W/H8c cameras all over
+    // RU flats pair over an EZVIZ_XXXXXX setup AP (see SSID table).
+    {{0x0C, 0xA6, 0x4C}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x20, 0xBB, 0xBC}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x34, 0xC6, 0xDD}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x38, 0xF2, 0x5D}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x54, 0xD6, 0x0D}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x58, 0x8F, 0xCF}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x64, 0x24, 0x4D}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x64, 0xF2, 0xFB}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x78, 0xA6, 0xA0}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x78, 0xC1, 0xAE}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x94, 0xEC, 0x13}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xAC, 0x1C, 0x26}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xEC, 0x97, 0xE0}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xF4, 0x70, 0x18}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xFC, 0x24, 0x22}, "EZVIZ",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    // Hikvision proper: the three rows above stay, ten more of their
+    // 84 MA-L blocks join them. Half the shops and stairwells in RU
+    // run these (incl. Safe City contractor installs and RVi/Novicam
+    // OEM rebadges -- see the wiki).
+    {{0x4C, 0xBD, 0x8F}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xC4, 0x2F, 0x90}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x54, 0xC4, 0x15}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x18, 0x68, 0xCB}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x64, 0xDB, 0x8B}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xBC, 0xAD, 0x28}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xD4, 0x88, 0x90}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x94, 0xE1, 0xAC}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xA4, 0x14, 0x37}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xB4, 0xA3, 0x82}, "Hikvision",    DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    // Dahua (27 MA-L blocks): Imou Ranger/Bullet/Cruiser, DH-IPC-*
+    // pros, and half of ActiveCam's RU lineup (Dahua OEM). Setup AP
+    // is DAP-XXXXXXXXX (see SSID table).
+    {{0x08, 0xED, 0xED}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x14, 0xA7, 0x8B}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x24, 0x52, 0x6A}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x38, 0xAF, 0x29}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x3C, 0xE3, 0x6B}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x3C, 0xEF, 0x8C}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x4C, 0x11, 0xBF}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x5C, 0xF5, 0x1A}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x64, 0xFD, 0x29}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x6C, 0x1C, 0x71}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x74, 0xC9, 0x29}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x8C, 0xE9, 0xB4}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x90, 0x02, 0xA9}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x98, 0xF9, 0xCC}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x9C, 0x14, 0x63}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xA0, 0xBD, 0x1D}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xB4, 0x4C, 0x3B}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xBC, 0x32, 0x5F}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xC0, 0x39, 0x5A}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xC4, 0xAA, 0xC4}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xD4, 0x43, 0x0E}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xE0, 0x2E, 0xFE}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xE0, 0x50, 0x8B}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xE4, 0x24, 0x6C}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xF4, 0xB1, 0xC2}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xFC, 0x5F, 0x49}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xFC, 0xB6, 0x9D}, "Dahua",        DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    // Imou (Hangzhou Huacheng, Dahua's consumer brand): some units
+    // carry Dahua blocks instead, so both pools are matched.
+    {{0x90, 0x6A, 0x94}, "Imou",         DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xA8, 0x31, 0x62}, "Imou",         DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x30, 0x24, 0x50}, "Imou",         DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    // Imilab (Shanghai Imilab/Chuangmi): the company that actually
+    // builds Xiaomi/Mi Home cameras. QR-code pairing, no setup AP --
+    // so the OUI is the whole signature. Xiaomi's own corporate
+    // blocks are deliberately NOT here: they sit on phones too, and
+    // a phone logged as a camera is the Sonos mistake again.
+    {{0x60, 0x7E, 0xA4}, "Imilab",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x78, 0xDF, 0x72}, "Imilab",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0x94, 0xF8, 0x27}, "Imilab",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xB8, 0x88, 0x80}, "Imilab",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    {{0xB4, 0x10, 0x1C}, "Imilab",       DetectionType::CAMERA,     Confidence::HIGH_CONF},
+    // D-Link DCS cameras: B0:C5:54 seen on a live DCS-5020L (Shodan
+    // cert). Broad D-Link blocks stay out -- they sit on routers.
+    {{0xB0, 0xC5, 0x54}, "D-Link",       DetectionType::CAMERA,     Confidence::MED_CONF},
+
+    // DELIBERATELY NOT MATCHED (see docs/browatch/07-rossiya-detekt.md):
+    // - Xiaomi corporate OUIs (phones, not cameras -- Sonos rule)
+    // - TP-Link's 260+ blocks (routers; Tapo is caught by SSID instead)
+    // - RVi / Beward / Novicam / Falcon Eye / ActiveCam (no own IEEE
+    //   blocks; RVi/Novicam are Hikvision OEM, ActiveCam Dahua OEM --
+    //   caught by those pools, documented on the HIKVISION/DAHUA pages)
+    // - Xiongmai "MV+ID" hotspots (UNVERIFIED, "MV" collides with
+    //   anything; a two-letter prefix is not a signature)
 
     // ---- Pentest hardware ------------------------------------------
     // Flipper Devices' own MA-L block, verified in the IEEE registry
@@ -168,11 +274,11 @@ const UuidEntry kUuidTable[] = {
     // Ray-Ban Meta, and the company-ID rows below say Meta too -- which is
     // any Meta radio, Quest headsets included. Two different pages.
     {0xFD5F, "RayBanMeta", DetectionType::META},      // Ray-Ban Meta glasses
-    {0x3100, "Raven",      DetectionType::RAVEN},     // Raven gunshot detector
-    {0x3200, "Raven",      DetectionType::RAVEN},
-    {0x3300, "Raven",      DetectionType::RAVEN},
-    {0x3400, "Raven",      DetectionType::RAVEN},
-    {0x3500, "Raven",      DetectionType::RAVEN},
+    // 0x3100-0x3500 used to be Raven, a US gunshot detector whose IDs
+    // were never verified on hardware and which has no RU presence.
+    // The block is now free: MESH matches on 128-bit service UUIDs
+    // (see DetectionEngine) and on advertised names below, because no
+    // 16-bit SIG value identifies any of the three mesh networks.
     {0xFFFA, "DroneID",    DetectionType::DRONE},     // OpenDroneID
     {0xFD5A, "SmartTag",   DetectionType::SAMSUNG_TAG}, // Samsung's own SIG-assigned UUID for SmartTag discovery
     {0xFEAA, "FindMyDev",  DetectionType::GOOGLE_TAG},  // Google "Eddystone" service UUID, also used by the Find My Device network
@@ -197,6 +303,8 @@ const NameEntry kBtClassicNames[] = {
     {"BT04-A",      DetectionType::SKIMMER},
     {"Flock_Setup", DetectionType::FLOCK},
     {"FS Ext Battery", DetectionType::FLOCK},
+    // Mesh names are matched by substring below (they carry a per-unit
+    // suffix), so they need no exact rows here.
 };
 const uint16_t kBtClassicCount = sizeof(kBtClassicNames) / sizeof(kBtClassicNames[0]);
 
@@ -221,6 +329,25 @@ const SsidEntry kSsidPrefixes[] = {
     // suffix; MED at best, since somebody can also just name their home
     // network this as a joke.
     {"pwned",   "Deauther",     DetectionType::HACKER},
+
+    // ---- RU/EU consumer-camera setup APs --------------------------------
+    // All three live only for the minutes of pairing (a reset held 5 s
+    // brings them back), then the camera joins the home network as a
+    // client and is caught by the OUI pool above instead. Documented
+    // defaults from the vendors' own manuals -- see the wiki.
+    {"EZVIZ_",  "EZVIZ",        DetectionType::CAMERA},  // EZVIZ_XXXXXX (+ezviz_xxxxxx), pw EZVIZ_<code>
+    {"HAP_",    "Hikvision",    DetectionType::CAMERA},  // Hikvision WiFi cams, pw = last 8 of serial
+    {"DAP-",    "Dahua",        DetectionType::CAMERA},  // DAP-XXXXXXXXX (Imou/Dahua/ActiveCam)
+    {"DAP_",    "Dahua",        DetectionType::CAMERA},  // same hotspot, underscore spelling
+    {"Tapo_Cam_", "Tapo",       DetectionType::CAMERA},  // Tapo_Cam_XXXX = last 4 of MAC
+
+    // ---- Mesh ------------------------------------------------------------
+    // None of the three mesh networks keeps a beacon SSID in normal
+    // operation (Meshtastic/Reticulum never AP at all). The one
+    // exception is an ESP32 MeshCore repeater doing OTA with no WiFi
+    // configured, which briefly serves "MeshCore-OTA" (EastMesh docs).
+    // Rare and brief, but specific enough to log.
+    {"MeshCore-OTA", "MeshCore", DetectionType::MESH},
 };
 const uint16_t kSsidCount = sizeof(kSsidPrefixes) / sizeof(kSsidPrefixes[0]);
 
@@ -320,6 +447,28 @@ DetectionType lookupBtName(const char* name) {
     // because the default is what most of them are still called, and it
     // costs nothing next to three exact signatures that cannot be typed.
     if (strcasestr(name, "Flipper"))  return DetectionType::HACKER;
+    // ---- Mesh (MESH): advertised names ----------------------------------
+    // All three carry a per-node suffix, so these are substring/prefix
+    // rules, graded the type's base grade at the match site (a string
+    // anybody can set). The exact signatures -- Meshtastic's own
+    // 128-bit service UUID -- grade HIGH in DetectionEngine.
+    //
+    // Meshtastic: "Meshtastic_ab13" by default (last 2 MAC bytes), or
+    // "<ShortName>_ab13" once the owner names it. A renamed node is
+    // still caught by the service UUID; this rule is the belt to those
+    // braces. NUS stayed out of the name on purpose.
+    if (strcasestr(name, "Meshtastic")) return DetectionType::MESH;
+    // MeshCore companion radio: "MeshCore-" + node hash. Whisper-,
+    // WisCore-, HT- and LowMesh_MC_ are third-party companion builds
+    // on the same protocol -- same bucket, vendor label tells which.
+    if (strcasestr(name, "MeshCore-"))  return DetectionType::MESH;
+    if (strcasestr(name, "Whisper-"))   return DetectionType::MESH;
+    if (strcasestr(name, "WisCore-"))   return DetectionType::MESH;
+    if (strcasestr(name, "LowMesh_MC_")) return DetectionType::MESH;
+    // RNode (Reticulum): "RNode XXXX", space then 4 uppercase hex from
+    // the BT-MAC hash. Prefix-anchored: "rnode" inside another word is
+    // not a node. Classic-BT RNodes arrive here too.
+    if (strncasecmp(name, "RNode ", 6) == 0) return DetectionType::MESH;
     return DetectionType::UNKNOWN;
 }
 
@@ -410,7 +559,7 @@ Confidence confidenceFor(DetectionType t) {
     // High there for the signature path actually active in v1.0 (the
     // wildcard-probe and ESP32-generic-fallback ideas mentioned in that
     // doc as lower-confidence alternates aren't implemented — see the
-    // note at the top of kOuiTable). RAVEN/AIRTAG/DRONE/ALPR are graded
+    // note at the top of kOuiTable). MESH/AIRTAG/DRONE/ALPR are graded
     // Medium — unverified against real hardware, address rotation, or
     // thin OUI coverage, respectively. SAMSUNG_TAG is High: 0xFD5A is
     // Samsung's own dedicated SIG-assigned UUID, not shared with
@@ -446,7 +595,10 @@ Confidence confidenceFor(DetectionType t) {
         // precision: Meta puts the same IDs on Quest headsets. Medium is the
         // conservative grade the rule at the top of this function asks for.
         case DetectionType::META:
-        case DetectionType::RAVEN:
+        // A mesh name is a string anybody can set; the exact radio
+        // signature (Meshtastic's service UUID) grades HIGH at its own
+        // match site in DetectionEngine. Same split as HACKER's.
+        case DetectionType::MESH:
         case DetectionType::AIRTAG:
         case DetectionType::DRONE:
         case DetectionType::ALPR:

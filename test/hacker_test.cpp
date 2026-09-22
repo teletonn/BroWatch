@@ -48,10 +48,13 @@ int main() {
     ck("0x3080 is not", lookupUuid(0x3080) == DetectionType::UNKNOWN);
     ck("0x3084 is not", lookupUuid(0x3084) == DetectionType::UNKNOWN);
 
-    // Raven sits at 0x3100..0x3500. The two blocks are close enough that a
-    // careless range check would collide, and a gunshot detector reported
-    // as pentest hardware is not a small mistake.
-    ck("Raven's 0x3100 is still RAVEN", lookupUuid(0x3100) == DetectionType::RAVEN);
+    // 0x3100..0x3500 used to be Raven, a US gunshot detector whose IDs
+    // were never verified on hardware. The block is deliberately free
+    // now: MESH matches on 128-bit service UUIDs (device-side, see
+    // DetectionEngine) and on advertised names (see mesh_test.cpp), so
+    // nothing here may claim these 16-bit values again.
+    ck("Raven's old 0x3100 matches nothing now", lookupUuid(0x3100) == DetectionType::UNKNOWN);
+    ck("...nor does 0x3500", lookupUuid(0x3500) == DetectionType::UNKNOWN);
 
     ck("an advertised name beginning Flipper matches",
        lookupBtName("Flipper Ozzyx") == DetectionType::HACKER);

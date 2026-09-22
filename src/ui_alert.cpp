@@ -17,7 +17,7 @@ static const char* targetLabel(DetectionType t) {
         case DetectionType::AXON:    return "AXON BODY";
         case DetectionType::META:    return "META GLASSES";
         case DetectionType::SKIMMER: return "CARD SKIMMER";
-        case DetectionType::RAVEN:   return "RAVEN";
+        case DetectionType::MESH:    return "MESH";
         case DetectionType::AIRTAG:  return "AIRTAG";
         case DetectionType::DRONE:   return "DRONE";
         case DetectionType::ALPR:    return "ALPR";

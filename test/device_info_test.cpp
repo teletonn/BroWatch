@@ -7,11 +7,28 @@
 // has to agree with three others is only kept in step by a test.
 #include "test_util.h"
 #include "device_info.h"
+#include "detection.h"
+#include "detection_info.h"
+#include "type_names.h"
+#include "settings.h"
+#include "ru_text.h"
+#include "gfxff/gfxfont.h"
+#define PROGMEM
+#include "ru_font.h"
 #include "signatures.h"
 #include "sim_detections.h"
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+// settings.cpp reaches for these; same stubs as lang_test.cpp.
+namespace Theme { void applyPalette(uint8_t) {} const char* tr(const char* en, const char*) { return en; } }
+namespace Clock {
+uint8_t     zoneCount()        { return 1; }
+const char* zoneName(uint8_t)  { return "UTC"; }
+void        applyZone(uint8_t) {}
+}
 
 using DeviceInfo::Device;
 
@@ -67,7 +84,74 @@ static bool bangersOk(const char* s) {
     return true;
 }
 
+// Greedy word wrap mirroring Theme::wrapTextRU() at size 1: words split on
+// spaces, a line breaks past maxW pixels or 47 bytes, seven lines max with
+// the tail dropped -- which the test reports instead of hiding.
+static int ruPix(const char* s);
+static void ruWrapLines(const char* text, int maxW, int& lines, int& dropped) {
+    lines = 0; dropped = 0;
+    char buf[320];
+    strncpy(buf, text, sizeof(buf) - 1); buf[sizeof(buf) - 1] = 0;
+    char lineBuf[48] = "";
+    char* word = strtok(buf, " ");
+    while (word) {
+        char trial[48];
+        if (lineBuf[0]) snprintf(trial, sizeof(trial), "%s %s", lineBuf, word);
+        else            snprintf(trial, sizeof(trial), "%s", word);
+        bool tooWide = lineBuf[0] && (ruPix(trial) > maxW || strlen(trial) >= sizeof(lineBuf) - 1);
+        if (tooWide) {
+            if (lines >= 7 - 1) { dropped = 1; break; }
+            lines++;
+            strncpy(lineBuf, word, sizeof(lineBuf) - 1); lineBuf[sizeof(lineBuf) - 1] = 0;
+        } else {
+            strncpy(lineBuf, trial, sizeof(lineBuf) - 1); lineBuf[sizeof(lineBuf) - 1] = 0;
+        }
+        word = strtok(nullptr, " ");
+    }
+    if (lineBuf[0] && lines < 7) lines++;
+}
+
+// Ink width mirroring Theme::ruInk() at size 1.
+static int ruPix(const char* s) {
+    int pen = 0, right = 0;
+    const uint8_t* p = (const uint8_t*)s;
+    while (*p) {
+        uint16_t cp;
+        int adv = 6;
+        if (*p < 0x80) { cp = *p++; }
+        else if ((*p & 0xE0) == 0xC0 && p[1]) {
+            cp = ((p[0] & 0x1FU) << 6) | (p[1] & 0x3FU); p += 2;
+        } else { cp = '?'; p++; }
+        if (cp >= RuCyr8.first && cp <= RuCyr8.last) {
+            const GFXglyph& g = RuCyr8Glyphs[cp - RuCyr8.first];
+            const int ink = (int)g.xOffset + (int)g.width;
+            adv = g.xAdvance > ink ? g.xAdvance : ink;
+        }
+        const int edge = pen + adv;
+        if (edge > right) right = edge;
+        pen += adv;
+    }
+    return right;
+}
+
+static bool hasCyrillic(const char* s) {
+    const uint8_t* p = (const uint8_t*)s;
+    while (*p) {
+        if (*p < 0x80) { p++; continue; }
+        if ((*p & 0xE0) == 0xC0 && p[1]) {
+            unsigned cp = ((p[0] & 0x1FU) << 6) | (p[1] & 0x3FU);
+            if (cp >= 0x400 && cp <= 0x45F) return true;
+            p += 2;
+        } else p++;
+    }
+    return false;
+}
+
 int main() {
+    setenv("SQUACHSIM_NVS", "out", 1);
+    remove("out/settings.nvs");
+    Settings::load();
+
     suite("Every signature a multi-device type can log has its own page");
     {
         bool ok = true;
@@ -143,6 +227,82 @@ int main() {
         }
         ck("seven lines of 34 or fewer", text);
         ck("titles of 13 characters Bangers can draw", title);
+    }
+
+    suite("Every RU page fits the MORE INFO panel");
+    {
+        // Pixel-exact mirror of Theme::ruInk() at size 1: ASCII costs the
+        // 6px GLCD cell, Cyrillic its ink extent from RuCyr8, anything else
+        // the 6px '?' fallback. Portrait text column is 208 px, seven lines.
+        bool fit = true, charset = true, bytes = true, nonempty = true;
+        for (uint8_t i = 0; i < DeviceInfo::kDeviceCount; i++) {
+            const Device& dv = DeviceInfo::kDevices[i];
+            const char* s = dv.textRU;
+            if (!s || !s[0]) { printf("    %s has no RU text\n", dv.title); nonempty = false; continue; }
+            if (strlen(s) >= 320) { printf("    %s RU overflows the 320-byte wrap buffer\n", dv.title); bytes = false; }
+            const uint8_t* p = (const uint8_t*)s;
+            while (*p) {
+                uint16_t cp;
+                if (*p < 0x80) { cp = *p++; }
+                else if ((*p & 0xE0) == 0xC0 && p[1]) { cp = ((p[0] & 0x1FU) << 6) | (p[1] & 0x3FU); p += 2; }
+                else { cp = 0xFFFF; p++; }
+                if (cp >= 0x80 && !(cp >= RuCyr8.first && cp <= RuCyr8.last)) {
+                    printf("    %s RU has a glyph the RU face cannot draw (U+%04X)\n", dv.title, cp);
+                    charset = false;
+                    break;
+                }
+            }
+            int lines = 0, dropped = 0;
+            ruWrapLines(s, 208, lines, dropped);
+            if (lines > 7 || dropped) {
+                printf("    %s RU runs to %d lines%s\n", dv.title, lines, dropped ? " (tail dropped)" : "");
+                fit = false;
+            }
+        }
+        ck("RU text present everywhere", nonempty);
+        ck("RU text under 320 bytes", bytes);
+        ck("RU text is ASCII + RuCyr8 only", charset);
+        ck("RU pages wrap to seven 208px lines", fit);
+    }
+
+    suite("RU type paragraphs route and fit");
+    {
+        Settings::setLang(1);
+        bool fit = true, present = true;
+        for (uint8_t t = 0; t < (uint8_t)DetectionType::COUNT; t++) {
+            const char* s = DetectionInfo::explain((DetectionType)t);
+            if (!s || !s[0] || !hasCyrillic(s)) {
+                printf("    %s has no RU paragraph\n", detectionTypeName((DetectionType)t));
+                present = false;
+                continue;
+            }
+            if (strlen(s) >= 320) { printf("    %s RU overflows 320 bytes\n", detectionTypeName((DetectionType)t)); fit = false; }
+            int lines = 0, dropped = 0;
+            ruWrapLines(s, 208, lines, dropped);
+            if (lines > 7 || dropped) {
+                printf("    %s RU runs to %d lines%s\n", detectionTypeName((DetectionType)t), lines, dropped ? " (tail dropped)" : "");
+                fit = false;
+            }
+        }
+        const char* primer = DetectionInfo::rssiConfidencePrimer();
+        bool primerOk = primer && primer[0] && hasCyrillic(primer) && strlen(primer) < 320;
+        int pl = 0, pd = 0;
+        if (primerOk) { ruWrapLines(primer, 208, pl, pd); primerOk = pl <= 7 && !pd; }
+        ck("every type has a RU paragraph", present);
+        ck("RU paragraphs fit the panel", fit);
+        ck("RU primer fits too", primerOk);
+        Settings::setLang(0);
+        bool en = true;
+        for (uint8_t t = 0; t < (uint8_t)DetectionType::COUNT; t++)
+            if (hasCyrillic(DetectionInfo::explain((DetectionType)t))) { en = false; break; }
+        if (hasCyrillic(DetectionInfo::rssiConfidencePrimer())) en = false;
+        ck("EN mode shows no Cyrillic", en);
+        const Device* f = DeviceInfo::find(DetectionType::HACKER, "Flipper", "Flipper Ozzyx");
+        Settings::setLang(1);
+        DetectionEngine eng{};
+        ck("RU device page answers in Russian",
+           f && DetectionInfo::explainFor(DetectionType::HACKER, "Flipper", "Flipper Ozzyx", eng) == f->textRU);
+        Settings::setLang(1);
     }
 
     return report();

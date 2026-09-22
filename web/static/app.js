@@ -42,14 +42,14 @@ const ago = ts => {
 };
 
 /* ---------- RU имена и цвета типов (TypeNames::ru, Theme::colorFor) ---------- */
-const TYPE_RU = {FLOCK:'ФЛОК',AXON:'АКСОН',META:'МЕТА',SKIMMER:'СКИММЕР',RAVEN:'РЕЙВЕН',
+const TYPE_RU = {FLOCK:'ФЛОК',AXON:'АКСОН',META:'МЕТА',SKIMMER:'СКИММЕР',MESH:'МЕШ',
   AIRTAG:'ЭЙРТАГ',DRONE:'ДРОН',ALPR:'АЛПР',CAMERA:'КАМЕРА',SAMSUNG_TAG:'СМАРТТАГ',
   GOOGLE_TAG:'ГУГЛ-ТАГ',TILE:'ТАЙЛ',RING:'РИНГ',DEAUTH:'ДЕАУТ',EVILTWIN:'ДВОЙНИК',
   IBEACON:'МАЯК',HACKER:'ХАКЕР'};
 const TYPE_COLOR = {};
 ['FLOCK','AXON','META'].forEach(t => TYPE_COLOR[t] = '#ff2d78');
 TYPE_COLOR.SKIMMER = '#fffb96';
-['RAVEN','ALPR'].forEach(t => TYPE_COLOR[t] = '#ffa600');
+['MESH','ALPR'].forEach(t => TYPE_COLOR[t] = '#ffa600');
 ['AIRTAG','DRONE','SAMSUNG_TAG','GOOGLE_TAG','TILE','IBEACON'].forEach(t => TYPE_COLOR[t] = '#b967ff');
 ['CAMERA','RING'].forEach(t => TYPE_COLOR[t] = '#00fff5');
 ['DEAUTH','EVILTWIN','HACKER'].forEach(t => TYPE_COLOR[t] = '#ff0000');
@@ -291,6 +291,11 @@ function gotoTab(t){
   if(t === 'chat') seenChat();
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => gotoTab(b.dataset.tab));
+/* Диплинк: #den/#squad/#radar открывают таб сразу (и скриншотам удобно). */
+try{
+  const h0 = (location.hash || '').replace('#', '');
+  if(['chat', 'den', 'squad', 'radar'].includes(h0)) gotoTab(h0);
+}catch(_){}
 
 /* ================= данные ================= */
 let lastMsgId = 0, lastEmoTs = 0, lastDetTs = 0;
@@ -429,10 +434,14 @@ function onSquad(list, live){
   const wasBoard = boardOnline;
   peersCache = {};
   boardOnline = false; boardInfo = null;
+  let usb = null, any = null;
   for(const p of list){
     peersCache[p.id] = p;
-    if(isBoardPeer(p) && p.in_range){ boardOnline = true; boardInfo = p; }
+    if(isBoardPeer(p) && p.in_range){ any = any || p; if(p.usb) usb = usb || p; }
   }
+  // Своя USB-плата (мост) важнее соседа по эфиру с тем же клиентом.
+  const pick = usb || any;
+  if(pick){ boardOnline = true; boardInfo = pick; }
   if(live && boardOnline !== wasBoard){
     if(boardOnline){ toast('⚡ Плата в эфире: ' + (boardInfo.name || '')); notifySys('BroWatch', 'Плата подключена: ' + (boardInfo.name || ''), 'board'); }
     else { toast('Плата пропала из эфира'); notifySys('BroWatch', 'Плата отключена', 'board'); }
@@ -450,7 +459,245 @@ function onLeave(id){
    как XP-коробка платы, карточка детекции, местный таймер ФОКУС/ПЕРЕРЫВ.
    Настройки (сквад вкл/выкл, сколько тел, часы, фон) — с платы, зеркалятся
    в полоске над сценой; меняются на плате (DESK MODE), здесь только чтение.
-   Без платы — часы идут, сквада и настроек нет: молчание честнее выдумки. */
+   Без платы — часы идут, сквада и настроек нет: молчание честнее выдумки.
+   Тап по письму = прочитано (мост шлёт KIND_READ, как тап на устройстве);
+   большие пальцы под письмом — LIKE/DISLIKE (canned 48/49 в эфир).
+   Плат по USB может быть несколько: селектор выбирает плату-мост. */
+/* Платы-мост: список и выбор (сервер держит выбор, вкладки делят его). */
+let usbBoardsCache = [], selectedBoardCache = null, denBoardKey = '';
+function applyHealth(h){
+  if(!h) return;
+  usbBoardsCache = h.usb_boards || [];
+  selectedBoardCache = h.selected_board || null;
+  if(h.board_online && h.board){
+    const keep = (boardInfo && boardInfo.id === h.board.id) ? boardInfo.last_msg : null;
+    boardOnline = true;
+    boardInfo = keep ? {...h.board, last_msg: keep} : h.board;
+  }
+  if(h.version) $('ver').textContent = 'v' + h.version;
+  renderDenSettings();
+}
+/* ================= ВЕКТОРНЫЙ СКВАЧИ (паритет src/squachy.cpp) =================
+   Логово рисует толпу вектором, как плата (drawBody): голова 30x24, торс
+   22x18, ноги/ступни, уши, щёки, чёлка, очки-шейды с бликом, улыбка.
+   Единицы — u платы, S(v)=v*sc. Цвета меха/аксессуаров — буквально из
+   drawBody/drawOutfit (recolor-блок и торс-блок). Тайминги — оттуда же:
+   моргание — хэшированный слот 2600 мс (обычное 140/дабл/медленное 440),
+   блик стёкол — 2400 мс, болтовня рта — 160 мс. Ходьбы в Логове нет:
+   на плате толпа стоит с лёгким дрейфом (ноги статичны, как в покое).
+   Аксессуары аутфитов (рог, шлем, крылья...) — упрощённые силуэты там, где
+   геометрия платы не переносилась один в один; цвета — точные. */
+const SQ_FUR = '#5a2808', SQ_FUR_LT = '#965a32', SQ_FACE = '#f4c07a', SQ_FACE_DK = '#c87040';
+function sqMix(a, b, x){
+  const pa = [1,3,5].map(i => parseInt(a.slice(i, i+2), 16));
+  const pb = [1,3,5].map(i => parseInt(b.slice(i, i+2), 16));
+  const k = x/256;
+  return '#' + pa.map((v, i) => Math.round(v + (pb[i]-v)*k).toString(16).padStart(2, '0')).join('');
+}
+/* [furMain, furLight, особые флаги] по индексу аутфита (OutfitId платы). */
+function sqFur(o){
+  switch(o|0){
+    case 2: return [sqMix('#ffffff','#01cdfe',130), sqMix('#ffffff','#ff71ce',110), ''];
+    case 8: return [sqMix('#01cdfe','#000000',20), sqMix('#01cdfe','#ffffff',70), ''];
+    case 13: return ['#ff8a1a', '#ff8a1a', 'parka'];
+    case 12: return ['#302c60', '#6058b4', 'void'];
+    case 4: return [sqMix('#000000','#ffffff',12), sqMix('#000000','#ffffff',32), ''];
+    default: return [SQ_FUR, SQ_FUR_LT, ''];
+  }
+}
+const SQ_SHADES = ['#00fff5', '#ff71ce', '#00ff88', '#b967ff'];
+function sqBlink(now){
+  const SLOT = 2600, slot = Math.floor(now/SLOT);
+  let h = Math.imul(slot, 2654435761) >>> 0;
+  h = (h ^ (h >>> 15)) >>> 0;
+  h = Math.imul(h, 2246822519) >>> 0;
+  h = (h ^ (h >>> 13)) >>> 0;
+  const t0 = slot*SLOT + 300 + (h % (SLOT-900)), kind = (h >>> 20) & 7;
+  if(kind === 0) return now >= t0 && now < t0 + 440;
+  if(kind === 1) return (now >= t0 && now < t0 + 140) || (now >= t0 + 230 && now < t0 + 370);
+  return now >= t0 && now < t0 + 140;
+}
+function sqRR(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill();
+}
+/* cx — центр, feetY — подошвы, hPx — рост с чёлкой (~64u). */
+function drawSquachy(ctx, cx, feetY, hPx, now, o){
+  o = o || {};
+  const outfit = o.outfit|0, tall = outfit === 6;
+  const sc = hPx/64*(tall ? 1.12 : 1);
+  const S = v => v*sc;
+  const fur = sqFur(outfit);
+  let furMain = fur[0], furLight = fur[1];
+  const flag = fur[2];
+  const hy = feetY - S(55), hh = hy;
+  const phase = o.phase || 0;
+  const dx = Math.sin(now/1900 + phase)*S(1.2), dy = Math.sin(now/2600 + phase)*S(1);
+  const X = v => cx + dx + S(v), Y = v => hy + dy + S(v);
+  const blink = sqBlink(now);
+  const talking = !!o.talking && (Math.floor(now/160) % 2 === 0);
+  const tint = SQ_SHADES[o.shade|0] || SQ_SHADES[0];
+  const openLens = sqMix('#0a000f', tint, 60);
+
+  /* --- крылья хромовинга: за спиной, до торса --- */
+  if(outfit === 11){
+    ctx.fillStyle = '#d6d6e4';
+    for(const sgn of [-1, 1]){
+      ctx.beginPath();
+      ctx.moveTo(X(sgn*8), Y(26)); ctx.lineTo(X(sgn*24), Y(18)); ctx.lineTo(X(sgn*20), Y(34)); ctx.lineTo(X(sgn*8), Y(36));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#9696ac'; ctx.lineWidth = Math.max(1, S(1));
+      ctx.beginPath(); ctx.moveTo(X(sgn*10), Y(30)); ctx.lineTo(X(sgn*20), Y(24)); ctx.stroke();
+    }
+  }
+  /* --- ноги и ступни: стоят (покой платы), бёдра на hy+40 --- */
+  ctx.fillStyle = furMain;
+  ctx.fillRect(X(-10), Y(40), S(8), S(10));
+  ctx.fillRect(X(2), Y(40), S(8), S(10));
+  ctx.fillStyle = furLight;
+  sqRR(ctx, X(-13), Y(49), S(12), S(6), S(2));
+  sqRR(ctx, X(1), Y(49), S(12), S(6), S(2));
+  /* --- руки вдоль тела --- */
+  ctx.fillStyle = furMain;
+  sqRR(ctx, X(-15), Y(24), S(7), S(15), S(3));
+  sqRR(ctx, X(8), Y(24), S(7), S(15), S(3));
+  ctx.fillStyle = SQ_FACE;
+  ctx.beginPath(); ctx.arc(X(-11.5), Y(39), S(3), 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(X(11.5), Y(39), S(3), 0, 7); ctx.fill();
+  /* --- торс 22x18 --- */
+  ctx.fillStyle = furMain;
+  sqRR(ctx, X(-11), Y(23), S(22), S(18), S(5));
+  if(outfit === 7){  /* SPACE: нагрудная панель, буквально из drawBody */
+    ctx.fillStyle = '#e0e0e8';
+    sqRR(ctx, X(-11), Y(23), S(22), S(18), S(5));
+    ctx.fillStyle = '#6e7484'; ctx.fillRect(X(-11), Y(30), S(22), S(2));
+    ctx.fillStyle = '#282c3c';
+    sqRR(ctx, X(-5), Y(33), S(10), S(6), S(2));
+    ctx.fillStyle = '#00ff88'; ctx.fillRect(X(-3), Y(35), S(2), S(2));
+    ctx.fillStyle = '#ff3c3c'; ctx.fillRect(X(1), Y(35), S(2), S(2));
+  }else if(outfit === 1){  /* TANOOKI: кремовое брюхо */
+    ctx.fillStyle = '#eedebe';
+    ctx.beginPath(); ctx.ellipse(X(0), Y(34), S(11), S(8), 0, 0, 7); ctx.fill();
+  }else if(outfit === 13){  /* PARKA: шуба поверх меха */
+    ctx.fillStyle = '#120a04';
+    sqRR(ctx, X(-13), Y(21), S(26), S(24), S(7));
+    ctx.fillStyle = '#ff8a1a';
+    sqRR(ctx, X(-12), Y(22), S(24), S(22), S(6));
+    ctx.fillStyle = '#8a4408';
+    ctx.fillRect(X(-10), Y(40), S(20), Math.max(1, S(1)));
+    ctx.fillRect(X(-1), Y(24), S(2), S(16));
+  }else if(outfit === 14){  /* SHARK: спинной плавник */
+    ctx.fillStyle = '#5a7a8c';
+    ctx.beginPath(); ctx.moveTo(X(-4), Y(24)); ctx.lineTo(X(2), Y(12)); ctx.lineTo(X(6), Y(24)); ctx.closePath(); ctx.fill();
+  }
+  /* --- голова --- */
+  if(flag === 'parka'){ furMain = SQ_FUR; furLight = SQ_FUR_LT; }
+  if(outfit === 13){  /* капюшон вокруг морды */
+    ctx.fillStyle = '#ff8a1a';
+    sqRR(ctx, X(-17), Y(-2), S(34), S(30), S(9));
+    ctx.fillStyle = '#6b4028';
+    sqRR(ctx, X(-15), Y(0), S(30), S(26), S(7));
+  }
+  if(flag !== 'void'){
+    /* уши */
+    ctx.fillStyle = furMain;
+    ctx.beginPath(); ctx.arc(X(-15), Y(13), S(3), 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(X(15), Y(13), S(3), 0, 7); ctx.fill();
+    ctx.fillStyle = SQ_FACE_DK;
+    ctx.beginPath(); ctx.arc(X(-15), Y(13), S(1), 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(X(15), Y(13), S(1), 0, 7); ctx.fill();
+    /* череп и морда */
+    ctx.fillStyle = furLight;
+    sqRR(ctx, X(-15), Y(0), S(30), S(24), S(7));
+    ctx.fillStyle = furMain;
+    sqRR(ctx, X(-12), Y(2), S(24), S(19), S(5));
+    ctx.fillStyle = SQ_FACE;
+    sqRR(ctx, X(-9), Y(7), S(18), S(11), S(4));
+    /* щёки */
+    ctx.fillStyle = '#ff2d78';
+    ctx.beginPath(); ctx.arc(X(-8), Y(15), S(2), 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(X(8), Y(15), S(2), 0, 7); ctx.fill();
+    /* чёлка (нет у BLUEBLUR/PARKA) */
+    if(outfit !== 8 && outfit !== 13){
+      ctx.fillStyle = furLight;
+      ctx.beginPath(); ctx.moveTo(X(-7), Y(2)); ctx.lineTo(X(-4), Y(-5)); ctx.lineTo(X(-1), Y(2)); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(X(-2), Y(2)); ctx.lineTo(X(6), Y(-7)); ctx.lineTo(X(6), Y(2)); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(X(-13), Y(3)); ctx.lineTo(X(-9), Y(-4)); ctx.lineTo(X(-5), Y(3)); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(X(5), Y(3)); ctx.lineTo(X(9), Y(-4)); ctx.lineTo(X(13), Y(3)); ctx.closePath(); ctx.fill();
+    }
+    if(outfit === 1){  /* TANOOKI: морда-подушка */
+      ctx.fillStyle = '#eedebe';
+      ctx.beginPath(); ctx.ellipse(X(0), Y(19), S(9), S(6), 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#342a22';
+      ctx.beginPath(); ctx.ellipse(X(0), Y(14), S(2), S(2), 0, 0, 7); ctx.fill();
+      ctx.fillRect(X(0), Y(15), Math.max(1, S(1)), S(2));
+    }
+    /* очки: чёрные оправы 10x7, линзы в тинт, блик 2400 мс */
+    ctx.fillStyle = '#000';
+    sqRR(ctx, X(-12), Y(6), S(10), S(7), S(2));
+    sqRR(ctx, X(2), Y(6), S(10), S(7), S(2));
+    ctx.fillRect(X(-2)-1, Y(8), S(4)+1, S(2));
+    ctx.fillStyle = blink ? '#000' : openLens;
+    sqRR(ctx, X(-11), Y(7), S(8), S(5), S(1));
+    sqRR(ctx, X(3), Y(7), S(8), S(5), S(1));
+    if(!blink){
+      const gx = (now % 2400)/2400*6;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(X(-10)+S(1+gx), Y(7), Math.max(1, S(1)), S(4));
+      ctx.fillRect(X(4)+S(1+gx), Y(7), Math.max(1, S(1)), S(4));
+    }
+    /* рот: улыбка с зубами, болтовня — открытый @160 мс */
+    if(outfit !== 13){
+      ctx.fillStyle = '#000';
+      if(talking){ sqRR(ctx, X(-8), Y(15), S(16), S(9), S(3)); }
+      else{ sqRR(ctx, X(-8), Y(16), S(16), S(7), S(3)); }
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(X(-6), Y(17), S(12), S(2));
+      ctx.fillStyle = '#ff71ce';
+      if(talking){ ctx.beginPath(); ctx.ellipse(X(0), Y(21), S(5), S(3), 0, 0, 7); ctx.fill(); }
+      else{ ctx.fillRect(X(-6), Y(19), S(12), S(3)); }
+    }
+  }else{
+    /* VOIDEYE: сфера вместо головы */
+    ctx.fillStyle = '#141430';
+    ctx.beginPath(); ctx.arc(X(0), Y(12), S(11), 0, 7); ctx.fill();
+    ctx.strokeStyle = '#8264be'; ctx.lineWidth = Math.max(1, S(1));
+    ctx.beginPath(); ctx.arc(X(0), Y(12), S(11), 0, 7); ctx.stroke();
+    ctx.fillStyle = '#380a60';
+    ctx.beginPath(); ctx.arc(X(0), Y(12), S(4), 0, 7); ctx.fill();
+    ctx.fillStyle = '#968cdc';
+    ctx.beginPath(); ctx.arc(X(-1), Y(11), S(1.5), 0, 7); ctx.fill();
+  }
+  /* --- головные уборы (упрощённые силуэты; цвета — с платы) --- */
+  if(outfit === 2){  /* UNICORN: рог */
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(X(-2), Y(0)); ctx.lineTo(X(1), Y(-11)); ctx.lineTo(X(4), Y(0)); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff71ce';
+    ctx.fillRect(X(0), Y(-5), S(2), S(2));
+  }else if(outfit === 3){  /* TINFOIL: колпак */
+    ctx.fillStyle = '#c0c0c8';
+    ctx.beginPath(); ctx.moveTo(X(-12), Y(1)); ctx.lineTo(X(0), Y(-13)); ctx.lineTo(X(12), Y(1)); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffffff88';
+    ctx.beginPath(); ctx.moveTo(X(-4), Y(1)); ctx.lineTo(X(0), Y(-13)); ctx.lineTo(X(2), Y(1)); ctx.closePath(); ctx.fill();
+  }else if(outfit === 5){  /* PLUMBER: красная кепка */
+    ctx.fillStyle = '#e03030';
+    sqRR(ctx, X(-12), Y(-6), S(24), S(7), S(3));
+    ctx.fillRect(X(-14), Y(-1), S(28), S(3));
+  }else if(outfit === 9){  /* CAPTAIN: фуражка с козырьком */
+    ctx.fillStyle = '#2040c0';
+    sqRR(ctx, X(-12), Y(-6), S(24), S(7), S(3));
+    ctx.fillStyle = '#101018';
+    ctx.fillRect(X(-14), Y(-1), S(28), S(3));
+    ctx.fillStyle = '#f4c20d'; ctx.fillRect(X(-2), Y(-4), S(4), S(2));
+  }else if(outfit === 7){  /* SPACE: шлем-купол */
+    ctx.strokeStyle = '#e0e0e8'; ctx.lineWidth = Math.max(1.5, S(2));
+    ctx.beginPath(); ctx.arc(X(0), Y(8), S(15), Math.PI*1.15, Math.PI*1.85); ctx.stroke();
+    ctx.fillStyle = '#ff3c3c';
+    ctx.beginPath(); ctx.arc(X(10), Y(-6), S(1.5), 0, 7); ctx.fill();
+  }else if(outfit === 10){  /* WOLFPELT: шкура на плечах */
+    ctx.fillStyle = '#5a5a62';
+    ctx.beginPath(); ctx.ellipse(X(0), Y(24), S(14), S(5), 0, Math.PI, 0); ctx.fill();
+  }
+}
 const SEG = [0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F];
 /* Скины: [акцент, морда, тело] по индексу аутфита прошивки
    (NONE..SHARK, общие таблицы — 4 бита в рекламе). Морда одна на всех:
@@ -475,6 +722,7 @@ const DEN_BG_RU = ['ЦИФРОВОЙ ДОЖДЬ','ЗВЁЗДЫ','ТОСТЕРЫ'
 const DEN_CLK_K = [0.78, 1.0, 1.3];  /* CLOCK_K платы */
 const denCanvas = $('den'), dctx = denCanvas.getContext('2d');
 let denSeenMsg = 0, denLastDraw = 0, denParts = [], denBgKey = '';
+let denLetterBorn = {};
 const denDesk = () => (boardOnline && boardInfo && boardInfo.desk) || null;
 
 function denOutfitPal(o){
@@ -574,7 +822,48 @@ function denLetter(){
   }
   return best;
 }
-denCanvas.onclick = () => { const l = denLetter(); if(l) denSeenMsg = l.id; };
+denCanvas.onclick = ev => {
+  const g = denLetterGeom;
+  if(!g) return;
+  const r = denCanvas.getBoundingClientRect();
+  const x = ev.clientX - r.left, y = ev.clientY - r.top;
+  const inR = R => R && x >= R.x && x <= R.x + R.w && y >= R.y && y <= R.y + R.h;
+  // Как на плате: кнопки реакции — поверх письма, тап по ним шлёт реакцию
+  // (и гасит письмо); тап по письму — прочитано (мост шлёт KIND_READ).
+  if(inR(g.like)){ denReact('like'); return; }
+  if(inR(g.dislike)){ denReact('dislike'); return; }
+  if(inR(g.box)){ denRead(); }
+};
+async function denRead(){
+  const l = denLetter();
+  if(l) denSeenMsg = l.id;
+  if(!boardOnline) return;
+  try{ await jpost('/api/bridge/read', {}); }catch(e){}
+}
+async function denReact(kind){
+  const l = denLetter();
+  if(l) denSeenMsg = l.id;
+  if(!boardOnline){ toast('Плата не в эфире — реакция не уйдёт'); return; }
+  try{
+    await jpost('/api/bridge/react', {kind});
+    toast(kind === 'like' ? '👍 ЛАЙК ОТПРАВЛЕН · увидят все с той же фразой'
+                          : '👎 ДИЗЛАЙК ОТПРАВЛЕН · увидят все с той же фразой');
+  }catch(e){ toast('Не ушло: ' + (e && e.error || 'ошибка')); }
+}
+/* Геометрия письма под хит-тест (кладёт denFrame каждый кадр). */
+let denLetterGeom = null;
+/* Палец вверх/вниз, как Theme::drawThumbButton платы: белая скруглённая
+   кнопка 26x17, синий кулак+палец (вниз — отзеркалено), синяя рамка. */
+function denThumb(ctx, x, y, up){
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.roundRect(x, y, 26, 17, 3); ctx.fill();
+  ctx.strokeStyle = '#0A5FE6'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(x, y, 26, 17, 3); ctx.stroke();
+  const gx = x + 6, gy = y + 1.5;
+  ctx.fillStyle = '#0A5FE6';
+  if(up){ ctx.fillRect(gx+3, gy+1, 4, 8); ctx.fillRect(gx+1, gy+7, 10, 6); ctx.fillRect(gx+1, gy+10, 7, 1.5); }
+  else{ ctx.fillRect(gx+3, gy+5, 4, 8); ctx.fillRect(gx+1, gy+1, 10, 6); ctx.fillRect(gx+1, gy+4, 7, 1.5); }
+}
 function denFrame(){
   requestAnimationFrame(denFrame);
   if(document.hidden) return;
@@ -632,15 +921,48 @@ function denFrame(){
   dctx.fillText(hh < 12 ? 'AM' : 'PM', Math.min(cx + 4, W - 30), cy + dh - 2);
   const plateBottom = py + ph;
 
-  /* --- письмо: XP-коробка под плашкой --- */
+  /* --- письмо: XP-коробка под плашкой, с кнопками LIKE/DISLIKE ---
+     Выезд из-за плашки 340 мс ease-out + полароид отправителя слева,
+     как drawMessageBox/drawPolaroid платы (наклон -4°, фото 40, имя). */
   const letter = denLetter();
+  denLetterGeom = null;
   if(letter){
+    if(!denLetterBorn[letter.id]) denLetterBorn[letter.id] = nowMs;
+    const q = Math.min(1, (nowMs - denLetterBorn[letter.id])/340);
+    const lp = 1 - (1-q)*(1-q);
     const bw = Math.min(W - 16, 300);
     const bx = (W - bw)/2;
     dctx.font = '12px system-ui,sans-serif';
     const rows = denWrap(dctx, letter.text, bw - 16);
-    const bh = 15 + 6 + rows.length*15 + 16;
-    const by = plateBottom + 4;
+    const bh = 15 + 6 + rows.length*15 + 16 + 21;
+    const by = plateBottom + 4 - (1-lp)*(bh + 8);
+    /* Выезд — из-за плашки: пока едет, верх обрезан её низом. */
+    dctx.save();
+    dctx.beginPath(); dctx.rect(0, plateBottom, W, H - plateBottom); dctx.clip();
+    /* полароид: отправитель в своём скине (ищем по нику в скваде) */
+    let polX = -100;
+    if(bx - 54 > 0){
+      let look = null;
+      for(const p of Object.values(peersCache)){
+        if((p.nick || p.name) === letter.from){ look = p; break; }
+      }
+      polX = bx - 52;
+      const polY = by + Math.max(0, (bh - 56)/2);
+      dctx.save();
+      dctx.translate(polX + 23, polY + 26); dctx.rotate(-4*Math.PI/180);
+      dctx.fillStyle = '#000'; dctx.fillRect(-23+2, -26+2, 46, 52);
+      dctx.fillStyle = '#fff'; dctx.fillRect(-23, -26, 46, 52);
+      dctx.fillStyle = '#0d001a'; dctx.fillRect(-17, -19, 34, 30);
+      dctx.restore();
+      dctx.save();
+      dctx.beginPath(); dctx.rect(polX+6, polY+7, 34, 30); dctx.clip();
+      drawSquachy(dctx, polX + 23, polY + 37, 46, nowMs,
+        {outfit: look ? look.outfit : 0, shade: look ? look.shade : 0, phase: 2.2});
+      dctx.restore();
+      dctx.fillStyle = '#000'; dctx.font = 'bold 8px system-ui,sans-serif'; dctx.textAlign = 'center';
+      dctx.fillText(String(letter.from).slice(0, 8), polX + 23, polY + 50);
+      dctx.textAlign = 'left';
+    }
     dctx.fillStyle = '#0A5FE6';
     dctx.beginPath(); dctx.roundRect(bx, by, bw, bh, 4); dctx.fill();
     dctx.fillStyle = '#3D95FF'; dctx.fillRect(bx+1, by+2, bw-2, 3);
@@ -655,11 +977,16 @@ function denFrame(){
     dctx.fillStyle = '#D65434'; dctx.font = '10px system-ui,sans-serif'; dctx.textAlign = 'right';
     dctx.fillText(tHHMM(letter.ts), bx+bw-6, by+bh-5);
     dctx.textAlign = 'left';
+    const ry = by + bh - 17;
+    denThumb(dctx, bx+8, ry, true);
+    denThumb(dctx, bx+38, ry, false);
+    denLetterGeom = {box:{x:Math.min(bx, polX < 0 ? bx : polX), y:Math.max(by, plateBottom), w:bw + (polX < 0 ? 0 : bx - polX), h:bh},
+      like:{x:bx+8, y:ry, w:26, h:17}, dislike:{x:bx+38, y:ry, w:26, h:17}};
+    dctx.restore();
   }
 
   /* --- сквад: плата по центру, гости рядом, каждый в своём скине --- */
   const floorY = H - 34;
-  const frame = Math.floor(t/80) % 8;
   const label = (x, y, text, dotCol, bold) => {
     dctx.font = (bold ? 'bold ' : '') + '11px system-ui,sans-serif';
     const tw = Math.min(dctx.measureText(text).width, 110);
@@ -686,8 +1013,10 @@ function denFrame(){
     dctx.moveTo(x - 4, by2 + bh2); dctx.lineTo(x + 4, by2 + bh2); dctx.lineTo(x, by2 + bh2 + 6);
     dctx.fill();
   };
-  const drawMember = (x, y, s, o, fr, flip) => {
-    drawLilGuy(dctx, fr, x - 5*s, y - 10*s, s, flip, denOutfitPal(o));
+  /* Векторный Сквачи вместо битмапа: как толпа платы (drawBody). У гостя
+     рот болтает, пока свежо его последнее (плата открывает рот под баббл). */
+  const drawMember = (x, y, hPx, o, shade, phase, talking) => {
+    drawSquachy(dctx, x, y, hPx, t, {outfit:o, shade:shade, phase:phase, talking:talking});
   };
   const members = Object.values(peersCache)
     .filter(p => p.in_range && !isBoardPeer(p))
@@ -701,22 +1030,22 @@ function denFrame(){
     dctx.textAlign = 'left';
   }else{
     const b = boardInfo || {};
-    const bs = 6, bx = W/2, by = floorY;
-    const bob = motionOn ? Math.sin(t/320)*2 : 0;
-    drawMember(bx, by + bob, bs, b.outfit, frame, false);
+    const bx = W/2, by = floorY;
+    drawMember(bx, by, 62, b.outfit, b.shade, 0.4, false);
     const bname = b.nick || b.name || b.id || 'плата';
     label(bx, by + 6, bname, SHADE_COLS[b.shade|0] || SHADE_COLS[0], true);
-    const n = shown.length, ms = n > 4 ? 4 : 5;
+    const blm = b.last_msg;
+    if(blm && blm.text && String(blm.text).trim() && (Date.now()/1000 - blm.ts) < 600)
+      bubble(bx, by - 66, blm.text);
+    const n = shown.length, ms = n > 4 ? 42 : 52;
     shown.forEach((p, i) => {
       const gx = n === 0 ? bx : 30 + (W - 60) * (n === 1 ? (p.id < b.id ? 0.12 : 0.88) : i/(n - 1 || 1));
-      const bob2 = motionOn ? Math.sin(t/300 + i*1.7)*2.5 : 0;
-      const fr2 = (frame + i*2) % 8;
-      drawMember(gx, floorY + bob2, ms, p.outfit, fr2, gx > bx);
+      const lm = p.last_msg;
+      const fresh = lm && lm.text && String(lm.text).trim() && (Date.now()/1000 - lm.ts) < 600;
+      drawMember(gx, floorY, ms, p.outfit, p.shade, 1.1 + i*1.7, !!fresh);
       const nm = p.nick || p.name || p.id;
       label(gx, floorY + 6, String(nm).slice(0, 12), SHADE_COLS[p.shade|0] || null, false);
-      const lm = p.last_msg;
-      if(lm && lm.text && String(lm.text).trim() && (Date.now()/1000 - lm.ts) < 600)
-        bubble(gx, floorY - 10*ms + bob2, lm.text);
+      if(fresh) bubble(gx, floorY - ms - 4, lm.text);
     });
     if(desk && !desk.squad){
       dctx.fillStyle = '#a89bb5'; dctx.font = '12px system-ui,sans-serif'; dctx.textAlign = 'center';
@@ -730,9 +1059,12 @@ function denFrame(){
   const last = detsCache.length ? detsCache[detsCache.length-1] : null;
   if(last && dt - last.ts < 20){
     const cw = 150, chh = 40, dx = 6, dy = H - chh - 6;
+    /* Рамка мигает первые 2 секунды, потом держится (как плата). */
+    const age = nowMs - last.ts*1000;
+    const lit = age > 2000 || (Math.floor(nowMs/250) % 2 === 0);
     dctx.fillStyle = 'rgba(10,0,15,.85)';
     dctx.beginPath(); dctx.roundRect(dx, dy, cw, chh, 6); dctx.fill();
-    dctx.strokeStyle = typeColor(last.type || ''); dctx.lineWidth = 2;
+    dctx.strokeStyle = lit ? typeColor(last.type || '') : '#5a5a6a'; dctx.lineWidth = 2;
     dctx.beginPath(); dctx.roundRect(dx, dy, cw, chh, 6); dctx.stroke();
     dctx.fillStyle = typeColor(last.type || ''); dctx.font = 'bold 11px system-ui,sans-serif'; dctx.textAlign = 'left';
     dctx.fillText('📡 ' + (TYPE_RU[last.type] || last.type || '?'), dx + 8, dy + 15);
@@ -743,16 +1075,46 @@ function denFrame(){
 /* Отступ первой чернильной цифры, как на плате: «1» светит только правыми
    сегментами, и центровка по ячейкам увела бы время вправо. */
 function inkLead(ch, dw, th){ return ch === '1' ? dw - th : 0; }
-function renderDenSettings(){
-  const el = $('den-settings');
-  const d = denDesk();
-  if(!boardOnline || !d){ el.innerHTML = 'Логово зеркалит часы платы. <b>Плата не в эфире</b> — подключите её по USB.'; return; }
+function denDescHTML(d){
   const crowd = (d.crowd|0) <= 1 ? 'ОДИН' : 'ДО ' + (d.crowd|0);
   const clkN = ['мелкие', 'средние', 'крупные'][(d.clk|0)] || 'средние';
   const bgN = DEN_BG_RU[d.bg] || ('фон ' + d.bg);
-  el.innerHTML = `⚙ платы: сквад <b>${d.squad ? 'вкл' : 'выкл'}</b> · тел <b>${crowd}</b>` +
+  return `⚙ платы: сквад <b>${d.squad ? 'вкл' : 'выкл'}</b> · тел <b>${crowd}</b>` +
     ` · визит <b>${d.visit ? 'полный' : 'рядом'}</b> · часы <b>${clkN}${d.clkfont ? ', Bangers' : ', сегменты'}</b>` +
     ` · фон <b>${esc(bgN)}</b> — меняются на плате (DESK MODE)`;
+}
+function renderDenSettings(){
+  const el = $('den-settings');
+  const d = denDesk();
+  if(!boardOnline || !d){ el.innerHTML = 'Логово зеркалит часы платы. <b>Плата не в эфире</b> — подключите её по USB.'; denBoardKey = ''; return; }
+  /* Плат-мостов несколько — выбираем, чьими устами говорим и чьи часы
+     зеркалим. Одна — селектора нет, она и мост по умолчанию. Селектор
+     перерисовываем только когда сменился набор/выбор, чтобы не рвать
+     открытый список; описание обновляем всегда. */
+  const multi = usbBoardsCache.length > 1;
+  const key = multi ? usbBoardsCache.map(b => b.id).join(',') + '|' + (selectedBoardCache || '') : '';
+  const desc = denDescHTML(d);
+  if(key !== denBoardKey || !el.querySelector('#den-desc')){
+    denBoardKey = key;
+    let sel = '';
+    if(multi){
+      const eff = (boardInfo && boardInfo.id) || selectedBoardCache || usbBoardsCache[0].id;
+      sel = `<label class="den-pick">мост: <select id="den-board">${
+        usbBoardsCache.map(b => {
+          const nm = (b.nick || b.name || b.id) + ' · ' + String(b.client || '').replace(/^bw /, '');
+          return `<option value="${esc(b.id)}"${b.id === eff ? ' selected' : ''}>${esc(nm)}</option>`;
+        }).join('')}</select></label> `;
+    }
+    el.innerHTML = sel + `<span id="den-desc">${desc}</span>`;
+    const sb = $('den-board');
+    if(sb) sb.onchange = async ev => {
+      try{ await jpost('/api/bridge/select', {id: ev.target.value}); }
+      catch(e){ toast('Не выбралось: ' + (e && e.error || 'ошибка')); }
+      tick();
+    };
+  } else {
+    el.querySelector('#den-desc').innerHTML = desc;
+  }
 }
 requestAnimationFrame(denFrame);
 
@@ -817,7 +1179,7 @@ async function fullSync(){
   detsCache = dets.slice(-100);
   for(const d of detsCache) if(d.ts > lastDetTs) lastDetTs = d.ts;
   onSquad(squad, false);
-  if(health && health.version) $('ver').textContent = 'v' + health.version;
+  applyHealth(health);
   renderChat(); renderSquad(); renderDets();
   fullSyncDone = true;
 }
@@ -826,16 +1188,18 @@ async function tick(){
   try{
     if(!fullSyncDone){ await fullSync(); }
     else if(!sseLive){
-      const [msgs, emos, squad, dets] = await Promise.all([
+      const [msgs, emos, squad, dets, health] = await Promise.all([
         jget('/api/messages?since=' + lastMsgId).catch(() => []),
         jget('/api/emotions?since=' + lastEmoTs).catch(() => []),
         jget('/api/squad').catch(() => []),
         jget('/api/detections?since=' + lastDetTs).catch(() => []),
+        jget('/api/health').catch(() => null),
       ]);
       for(const m of msgs) onMessage(m, true);
       for(const e of emos) onEmotion(e, true);
       if(dets.length){ detsCache.push(...dets); detsCache = detsCache.slice(-100); for(const d of dets) onDetection(d, true); }
       onSquad(squad, true);
+      applyHealth(health);
     }
     statusEl.textContent = (boardOnline ? '⚡ плата · ' : '') + 'онлайн · ' + new Date().toLocaleTimeString('ru-RU');
     statusEl.className = 'ok';
@@ -866,8 +1230,13 @@ function connectSSE(){
     }catch(_){}
   });
   es.addEventListener('leave', ev => { try{ onLeave(JSON.parse(ev.data).id); }catch(_){} });
-  es.addEventListener('board', ev => {
+  es.addEventListener('readby', ev => {
     try{
+      const r = JSON.parse(ev.data);
+      toast('👁 ПРОЧИТАНО · ' + (r.who || '?') + ' открыл ваше сообщение');
+    }catch(_){}
+  });
+  es.addEventListener('board', ev => {    try{
       const b = JSON.parse(ev.data);
       const was = boardOnline;
       boardOnline = !!b.online; boardInfo = b.board || null;

@@ -389,7 +389,13 @@ void pollSerial() {
     // A line buffer rather than a parser. Anything that is not the one
     // command is answered and dropped -- this is a debug port, and silence
     // in response to a typo is worse than a line of help.
-    static char line[48];
+    //
+    // 160, not 48: the [BW {...}] lane carries a full typed message, and 48
+    // Cyrillic letters are 96 bytes of UTF-8 before the JSON around them. At
+    // 48 every longer custom message arrived with its tail cut off, while
+    // short templates always fit -- which is exactly how "customs don't
+    // deliver" looked from the outside.
+    static char line[160];
     static uint8_t len = 0;
 
     while (Serial.available() > 0) {

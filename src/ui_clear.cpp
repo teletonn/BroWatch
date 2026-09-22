@@ -2474,6 +2474,7 @@ static uint32_t rawGuestId(uint32_t now) {
 #include "squachy.h"
 #include "pet.h"
 #include "settings.h"
+#include "type_names.h"
 #include "idle_events.h"
 #include <Arduino.h>
 
@@ -2485,6 +2486,11 @@ void uiClearInit(TFT_eSPI& t) {
 }
 
 static const char* counterLabel(DetectionType t) {
+    // RU takes the adapted cell codes (TypeNames::cellRu: short forms
+    // that fit the packed row -- КАМ, ХАК, СТАГ...). Same folds as EN:
+    // AIRTAG's ТРЕКЕР covers all four tracker types, HACKER's ХАК
+    // covers the evil-twin count folded into it, CAMERA's КАМ the Ring.
+    if (Settings::lang() == 1) return TypeNames::cellRu(t);
     switch (t) {
         case DetectionType::FLOCK:       return "FLOCK";
         case DetectionType::AXON:        return "AXON";
@@ -2499,7 +2505,7 @@ static const char* counterLabel(DetectionType t) {
         // folds into CAM the same way.
         case DetectionType::AIRTAG:      return "TRACKER";
         case DetectionType::DRONE:       return "DRONE";
-        case DetectionType::RAVEN:       return "RAV";
+        case DetectionType::MESH:        return "MSH";
         case DetectionType::ALPR:        return "ALPR";
         case DetectionType::CAMERA:      return "CAM";
         case DetectionType::SAMSUNG_TAG: return "STAG";
@@ -2572,7 +2578,7 @@ static uint16_t counterCount(const DetectionEngine& eng, DetectionType t) {
 // twelve.
 static const DetectionType FIXED_COUNTER_TYPES[] = {
     DetectionType::FLOCK,   DetectionType::AXON,     DetectionType::META,   DetectionType::SKIMMER,
-    DetectionType::RAVEN,   DetectionType::AIRTAG,   DetectionType::DRONE,  DetectionType::ALPR,
+    DetectionType::MESH,    DetectionType::AIRTAG,   DetectionType::DRONE,  DetectionType::ALPR,
     DetectionType::CAMERA,  DetectionType::HACKER,   DetectionType::DEAUTH,
 };
 static const uint8_t FIXED_COUNTER_TYPES_N =
@@ -2605,12 +2611,11 @@ static const uint8_t COUNTER_ROWS_PORTRAIT  =
 
 static void drawCounterLine(TFT_eSPI& t, int w, int y, const DetectionEngine& eng,
                             const DetectionType* types, uint8_t n) {
-    // 80, not 56: worst case is 7 entries x up to "XXXXX:999  " (11
-    // chars) = 77 -- the old 56-byte buffer was already marginal for
-    // 6 entries at high counts and would silently truncate (snprintf
-    // is bounds-safe, just visually cuts off) once TILE/RING pushed a
-    // line to 7.
-    char buf[80] = "";
+    // 144, not 80: RU labels cost 2 bytes a glyph, worst case 7 entries
+    // x up to "ТРЕКЕР:999  " (6 glyphs = 12 bytes + 6) = ~126. snprintf
+    // stays bounds-safe either way; this just keeps RU from truncating
+    // where EN fits.
+    char buf[144] = "";
     int off = 0;
     for (uint8_t i = 0; i < n; i++) {
         off += snprintf(buf + off, sizeof(buf) - off, "%s:%u  ",
@@ -2618,7 +2623,10 @@ static void drawCounterLine(TFT_eSPI& t, int w, int y, const DetectionEngine& en
     }
     // The trailing gap is spacing between entries, not part of the last one.
     while (off > 0 && buf[off - 1] == ' ') buf[--off] = '\0';
-    int tw = t.textWidth(buf);
+    // RU labels draw through the Cyrillic face (the GLCD font has no
+    // Cyrillic); EN keeps the old pixel-identical path.
+    const bool ru = Settings::lang() == 1;
+    int tw = ru ? Theme::textWidthRU(t, buf) : t.textWidth(buf);
     const int x = (w - tw) / 2;
     // A dark plate a few pixels past the text, not just the character cells:
     // tight to the glyphs, the numbers read as cut out of whatever the
@@ -2626,7 +2634,7 @@ static void drawCounterLine(TFT_eSPI& t, int w, int y, const DetectionEngine& en
     const int PAD_X = 4, PAD_Y = 2;
     t.fillRect(x - PAD_X, y - PAD_Y, tw + 2 * PAD_X, t.fontHeight() + 2 * PAD_Y, Theme::BG);
     t.setCursor(x, y);
-    t.print(buf);
+    if (ru) Theme::printRU(t, buf); else t.print(buf);
 }
 
 #if SQUACH_MESH

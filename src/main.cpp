@@ -2189,12 +2189,21 @@ void setup() {
     // (UPDATE OVER WIFI). And before the frame buffer, too: the TLS
     // handshake wants about 40 KB in one piece, and with the buffer in place
     // the largest block is 35 KB -- measured, the first try returned -1.
-    // Tells, never installs. Skipped with no saved network, with the board
-    // locked, or with UPDATE CHECK off.
+    // Tells, never installs. Runs whenever a network is saved and the board
+    // is unlocked -- the clock rides every boot whether or not the owner
+    // wants update checks; the manifest fetch is the part UPDATE CHECK gates.
+    // Skipped with no saved network or with the board locked.
     bool bootCheckRan = false;
+    // One line saying which gate kept the check from running, when any did:
+    // "saved but never tried" used to be silent, which is how a switched-off
+    // UPDATE CHECK looked exactly like a broken join.
+    if (OtaWifi::hasSaved())
+        Serial.printf("[ota] boot check gate: locked=%d ota=%d saved=%d updChk=%d\n",
+                      (int)Security::locked(), (int)OtaCore::available(),
+                      (int)OtaWifi::hasSaved(), (int)Settings::updateCheck());
     if (takeBootCheckSkip()) {
         Serial.println("[ota] boot check skipped: the frame buffer failed after the last one");
-    } else if (Settings::updateCheck() && !Security::locked() && OtaCore::available() && OtaWifi::hasSaved()) {
+    } else if (!Security::locked() && OtaCore::available() && OtaWifi::hasSaved()) {
         bootCheckRan = true;
         // The backlight down first, for the same reason it goes down at the
         // radio start below: WiFi's RF calibration plus a full backlight is
@@ -2210,7 +2219,7 @@ void setup() {
         const char* m = "CHECKING FOR UPDATES...";
         tft.setCursor((tft.width() - tft.textWidth(m)) / 2, tft.height() / 2 - 4);
         tft.print(m);
-        OtaWifi::bootCheck(9000);
+        OtaWifi::bootCheck(9000, Settings::updateCheck());
         tft.fillScreen(Theme::BG);
     }
 

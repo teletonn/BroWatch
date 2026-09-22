@@ -49,11 +49,11 @@
 | `AXON` | Axon боди-камеры, TASER | 3 OUI + SSID `AB2-/AB3-/AB4-/AXON-` |
 | `META` | Ray-Ban Meta, Snap очки | BLE `0xFD5F` + company Meta/Luxottica/Snap |
 | `SKIMMER` | BT-скиммеры | имена HC-03/05/06, RN42, BT04-A + SPP `0x1101` + 3 OUI |
-| `RAVEN` | детектор выстрелов Raven | service UUID `0x3100–0x3500` |
+| `MESH` | Meshtastic / MeshCore / RNode | BLE UUID `6ba1b218-…` + имена узлов |
 | `AIRTAG` | Apple AirTag / FindMy | company `0x004C` + проверка payload |
 | `DRONE` | дроны Remote ID | `0xFFFA` + декод ASTM F3411 |
 | `ALPR` | Motorola / Genetec | 6 Wi-Fi OUI |
-| `CAMERA` | IP-камеры | 17 OUI (Wyze, Amazon, Tuya, Verkada, Axis…) |
+| `CAMERA` | IP-камеры, вкл. RU-хиты | 70+ OUI + SSID `EZVIZ_`/`HAP_`/`DAP-`/`Tapo_Cam_` |
 | `SAMSUNG_TAG` | Galaxy SmartTag | `0xFD5A` |
 | `GOOGLE_TAG` | Chipolo / Pebblebee / Moto Tag | `0xFEAA` |
 | `TILE` | Tile | `0xFEED/0xFEEC` |

@@ -28,6 +28,7 @@
 #include <esp_gap_bt_api.h>
 #include <esp_heap_caps.h>
 #include <string.h>
+#include <strings.h>   // strcasestr for the MESH name->vendor mapping
 #include <SD.h>
 
 // -------- global engine instance (referenced by callbacks) --------
@@ -270,7 +271,6 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
                         0xFEED,  // Tile tracker
                         0xFEEC,  // Tile tracker (second SIG-assigned UUID)
                         0xFD5F,  // Ray-Ban Meta glasses
-                        0x3100, 0x3200, 0x3300, 0x3400, 0x3500,  // Raven
                         0xFFFA,  // OpenDroneID
                         0xFD5A,  // Samsung SmartTag
                         0xFEAA,  // Google Find My Device Network (Eddystone)
@@ -284,6 +284,31 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
                         }
                     }
                     if (det.type != DetectionType::UNKNOWN) break;
+                }
+                // 128-bit service UUIDs: the mesh networks. No 16-bit
+                // SIG value identifies any of them, so this is the
+                // primary signature, not a fallback.
+                //
+                // Meshtastic's own service UUID, from their firmware
+                // (BluetoothCommon.h: MESH_SERVICE_UUID
+                // "6ba1b218-15a8-461f-9fa8-5dcae273eafd"). It is in
+                // the primary advert packet, so even a node its owner
+                // renamed still matches. Unique to Meshtastic: HIGH.
+                //
+                // Nordic UART (6E400001-...) is deliberately NOT
+                // matched here. It is the shared transport of
+                // MeshCore companion radios AND RNode/Reticulum AND
+                // every DIY ble_uart example -- a UUID-only hit cannot
+                // tell them apart. Those two arrive via the advertised
+                // name (lookupBtName: "MeshCore-…", "RNode XXXX"), and
+                // a bare NUS advert with neither name stays UNKNOWN
+                // rather than becoming a wrong verdict.
+                static const NimBLEUUID kMeshtasticSvc("6ba1b218-15a8-461f-9fa8-5dcae273eafd");
+                if (u.bitSize() == 128 && u.equals(kMeshtasticSvc)) {
+                    det.type = DetectionType::MESH;
+                    label    = "Meshtastic";
+                    det.conf = Confidence::HIGH_CONF;
+                    break;
                 }
             }
         }
@@ -308,6 +333,12 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         if (det.type == DetectionType::HACKER) {
             det.conf = matchedByName ? Confidence::MED_CONF : Confidence::HIGH_CONF;
         }
+        // ...and MESH, same split: Meshtastic's own service UUID exists
+        // on no other product (label still set -- name matches clear
+        // it above), while "MeshCore-…" / "RNode XXXX" are strings.
+        if (det.type == DetectionType::MESH && label != nullptr) {
+            det.conf = Confidence::HIGH_CONF;
+        }
         // A Remote ID advert carries far more than the fact that it exists.
         // Decode it before the entry is posted so the log row can be named
         // after the actual aircraft rather than after a service UUID.
@@ -329,8 +360,20 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
             // Which row matched, because META is four devices: Ray-Ban
             // Meta's own UUID, any Meta radio, Luxottica, Snap Spectacles.
             det.vendor = label ? label : "Meta";
-        } else if (det.type == DetectionType::RAVEN) {
-            det.vendor = "Raven";
+        } else if (det.type == DetectionType::MESH) {
+            // Which mesh it is: the 128-bit UUID match sets its label
+            // above; a name match names itself -- re-derive which rule
+            // fired so the log says MeshCore/RNode, not just "Mesh".
+            if (label) {
+                det.vendor = label;   // "Meshtastic", from the UUID match
+            } else if (strcasestr(det.name, "meshtastic")) {
+                det.vendor = "Meshtastic";
+            } else if (strcasestr(det.name, "meshcore-") || strcasestr(det.name, "whisper-") ||
+                       strcasestr(det.name, "wiscore-") || strcasestr(det.name, "lowmesh_mc_")) {
+                det.vendor = "MeshCore";
+            } else {
+                det.vendor = "RNode";  // the only other name rule is "RNode "
+            }
         } else if (det.type == DetectionType::FLOCK) {
             det.vendor = "Flock-BLE";
         } else if (det.type == DetectionType::SAMSUNG_TAG) {

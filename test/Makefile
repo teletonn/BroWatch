@@ -23,7 +23,7 @@ CXX      ?= g++
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
             -I$(SIM) -I$(INC)
 
-TESTS := remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test lang_test ru_text_test canned_ru_test
+TESTS := remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test mesh_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test lang_test ru_text_test canned_ru_test
 
 # Only the units under test get linked in. Pulling the whole firmware
 # would drag in TFT_eSPI, NimBLE and the UI, and a test that needs a
@@ -34,6 +34,7 @@ signatures_test_SRCS         := $(SRC)/signatures.cpp
 emitter_roundtrip_test_SRCS  := $(SRC)/remote_id.cpp
 ignore_list_test_SRCS        := $(SRC)/ignore_list.cpp
 hacker_test_SRCS             := $(SRC)/signatures.cpp
+mesh_test_SRCS               := $(SRC)/signatures.cpp
 pwnagotchi_test_SRCS         := $(SRC)/signatures.cpp
 squachmesh_test_SRCS         := $(SRC)/squachmesh.cpp
 # The codec is #if SQUACH_MESH so it stays out of every shipping board.
@@ -47,8 +48,10 @@ meshmsg_test_FLAGS           := -DSQUACH_MESH=1
 # The emote scripts' tables and the setup byte's arithmetic.
 emote_script_test_SRCS       := $(SRC)/emote_script.cpp
 emote_script_test_FLAGS      := -DSQUACH_MESH=1
-# The pages against the signature tables and the emulator's profiles.
-device_info_test_SRCS        := $(SRC)/device_info.cpp $(SRC)/signatures.cpp
+# The pages against the signature tables and the emulator's profiles, plus
+# the RU paragraphs against the panel (needs settings + type names + drone
+# type names; Theme/Clock stay stubbed in the test like lang_test.cpp).
+device_info_test_SRCS        := $(SRC)/device_info.cpp $(SRC)/detection_info.cpp $(SRC)/type_names.cpp $(SRC)/settings.cpp $(SRC)/remote_id.cpp $(SRC)/signatures.cpp
 # The lock's arithmetic, through the sim's Preferences shim.
 security_test_SRCS           := $(SRC)/security.cpp $(SRC)/ignore_list.cpp
 # The rings, on the emulator's RAM flash. The two clock calls it makes are

@@ -58,11 +58,11 @@ BroWatch — не про то, чтобы следить за людьми. Он
 | `AXON` | боди-камеры Axon, TASER, полицейское железо | 3 OUI + префиксы SSID `AB2-`/`AB3-`/`AB4-`/`AXON-` |
 | `META` | очки с камерой: Ray-Ban Meta, Snap Spectacles | BLE-сервис `0xFD5F` + Meta / Luxottica / Snap |
 | `SKIMMER` | Bluetooth-скиммеры на картах | имя HC-03/05/06, RN42, BT04-A + SPP `0x1101` |
-| `RAVEN` | детектор выстрелов Raven | service UUID `0x3100`–`0x3500` |
+| `MESH` | меш-узлы off-grid: Meshtastic, MeshCore, RNode | BLE UUID `6ba1b218-…` + имена `Meshtastic_*` / `MeshCore-*` / `RNode XXXX` |
 | `AIRTAG` | Apple AirTag и Find My | company ID `0x004C` + проверка payload |
 | `DRONE` | дроны с Remote ID | `0xFFFA`, дальше **декод ASTM F3411**: позиция, высота, серийник и точка оператора |
 | `ALPR` | камеры Motorola / Genetec | 6 OUI |
-| `CAMERA` | обычные и скрытые IP-камеры | 17 OUI (Wyze, Amazon, Tuya, Verkada, Axis…) |
+| `CAMERA` | обычные и скрытые IP-камеры, вкл. RU-хиты | 70+ OUI (EZVIZ, Hikvision, Dahua, Imou, Tapo…) + SSID `EZVIZ_`/`HAP_`/`DAP-`/`Tapo_Cam_` |
 | `SAMSUNG_TAG` | Galaxy SmartTag / SmartTag+ | `0xFD5A` |
 | `GOOGLE_TAG` | трекеры Find My Device (Chipolo, Pebblebee, Moto Tag) | `0xFEAA` |
 | `TILE` | трекеры Tile | `0xFEED` / `0xFEEC` |

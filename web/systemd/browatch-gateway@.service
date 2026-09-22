@@ -1,7 +1,12 @@
 [Unit]
 Description=BroWatch USB bridge gateway (%i)
-BindsTo=dev-%i.device
-After=dev-%i.device browatch-web.service
+# NB: NO BindsTo=dev-%i.device here on purpose. BindsTo stops the gateway
+# the moment the board is unplugged, and with no udev rule installed
+# nothing ever starts it again -- the classic "replug and silence".
+# serial_loop() already survives a dead port by itself (open fails ->
+# backoff -> reopen + hello resync), so the gateway simply stays up
+# across unplug/replug cycles and picks the board back up alone.
+After=browatch-web.service
 
 [Service]
 Type=simple

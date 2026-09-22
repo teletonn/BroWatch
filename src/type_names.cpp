@@ -10,7 +10,7 @@ const char* ru(DetectionType t) {
         case DetectionType::AXON:        return "АКСОН";
         case DetectionType::META:        return "МЕТА";
         case DetectionType::SKIMMER:     return "СКИММЕР";
-        case DetectionType::RAVEN:       return "РЕЙВЕН";
+        case DetectionType::MESH:        return "МЕШ";
         case DetectionType::AIRTAG:      return "ЭЙРТАГ";
         case DetectionType::DRONE:       return "ДРОН";
         case DetectionType::ALPR:        return "АЛПР";
@@ -33,7 +33,7 @@ const char* cellRu(DetectionType t) {
         case DetectionType::AXON:        return "АКСОН";
         case DetectionType::META:        return "ОЧКИ";
         case DetectionType::SKIMMER:     return "СКИМ";
-        case DetectionType::RAVEN:       return "РЕЙВЕН";
+        case DetectionType::MESH:        return "МЕШ";
         case DetectionType::AIRTAG:      return "ТРЕКЕР";
         case DetectionType::DRONE:       return "ДРОН";
         case DetectionType::ALPR:        return "АЛПР";
@@ -56,7 +56,7 @@ const char* headlineRu(DetectionType t) {
         case DetectionType::AXON:        return "АКСОН";
         case DetectionType::META:        return "МЕТА-ОЧКИ";
         case DetectionType::SKIMMER:     return "СКИММЕР";
-        case DetectionType::RAVEN:       return "РЕЙВЕН";
+        case DetectionType::MESH:        return "МЕШ";
         case DetectionType::AIRTAG:      return "ЭЙРТАГ";
         case DetectionType::DRONE:       return "ДРОН";
         case DetectionType::ALPR:        return "АЛПР";

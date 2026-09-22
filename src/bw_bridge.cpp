@@ -11,6 +11,7 @@
 #include "detection.h"
 #include "meshtalk.h"
 #include "meshmsg.h"
+#include "qwerty.h"      // transliterateRu: the web types anything, the air is Latin
 #include "squachy.h"
 #include "emote_script.h"
 #include "settings.h"
@@ -40,6 +41,13 @@ struct EmoteSig {
     uint32_t at = 0;
     uint8_t  emote = 0;
 };
+// Latest read receipt already forwarded (peeked, never consumed: the main
+// loop still owns takeRead() and toasts it on the board — and tick runs
+// before it, so the peek always lands first).
+struct ReadSig {
+    bool have = false;
+    char who[32] = {0};
+};
 
 static uint32_t s_lastMsgAt   = 0;   // newest inbox millis() already sent
 static uint32_t s_lastPeerMs  = 0;   // last squad snapshot
@@ -47,6 +55,7 @@ static uint32_t s_lastOwnMs   = 0;   // last own peer re-announce
 static bool     s_announced   = false;
 static DetSig   s_det;
 static EmoteSig s_emote;
+static ReadSig  s_read;
 
 static const uint32_t PEER_EVERY_MS = 5000;
 static const uint32_t OWN_EVERY_MS  = 30000;
@@ -108,7 +117,7 @@ static void emitOwn() {
     escJson(client, clientE, sizeof clientE);
     escJson(nick ? nick : "", nickE, sizeof nickE);
     snprintf(body, sizeof body,
-             "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"nick\":\"%s\",\"client\":\"%s\",\"lang\":\"%c\","
+             "{\"t\":\"peer\",\"mac\":\"%s\",\"name\":\"%s\",\"nick\":\"%s\",\"client\":\"%s\",\"usb\":1,\"lang\":\"%c\","
              "\"outfit\":%u,\"shade\":%u,"
              "\"desk\":{\"squad\":%u,\"crowd\":%u,\"visit\":%u,"
              "\"clk\":%u,\"clkfont\":%u,\"clkbg\":%u,\"bg\":%u}}",
@@ -277,6 +286,21 @@ void tick(uint32_t now, const DetectionEngine& eng) {
     }
 
     if (now - s_lastPeerMs > PEER_EVERY_MS) emitSnapshot(now);
+
+    // Read receipts ("<who> opened your message"): peeked, never consumed.
+    char readBy[32];
+    if (MeshTalk::peekRead(readBy, sizeof readBy)) {
+        if (!s_read.have || strcmp(s_read.who, readBy) != 0) {
+            char whoE[48], body[128];
+            escJson(readBy, whoE, sizeof whoE);
+            snprintf(body, sizeof body, "{\"t\":\"readby\",\"who\":\"%s\"}", whoE);
+            emit(body);
+            s_read.have = true;
+            snprintf(s_read.who, sizeof s_read.who, "%s", readBy);
+        }
+    } else {
+        s_read.have = false;
+    }
 }
 
 void onLine(const char* line) {
@@ -288,9 +312,18 @@ void onLine(const char* line) {
     const uint32_t now = millis();
 
     if (strcasecmp(t, "send") == 0) {
-        char text[MeshMsg::TEXT_MAX + 1];
+        // Room for TEXT_MAX Cyrillic letters in UTF-8: jfield would cut a
+        // Russian message at 48 BYTES (~24 letters) before transliteration.
+        char text[MeshMsg::TEXT_MAX * 2 + 1];
         if (jfield(js, "text", text, sizeof text) && text[0]) {
-            MeshTalk::sendText(text, now);
+            // The web types anything — lower case, Cyrillic, emoji. The air
+            // is upper-case Latin, so it flies transliterated (SHCH, not
+            // SHH), fitted to TEXT_MAX, the unsendable dropped. Without this
+            // sendText() fails silently and a typed message never leaves.
+            char wide[MeshMsg::TEXT_MAX * 4 + 1];
+            Qwerty::transliterateRu(text, wide, sizeof wide);
+            wide[MeshMsg::TEXT_MAX] = '\0';
+            if (wide[0]) MeshTalk::sendText(wide, now);
             return;
         }
         char num[12];
@@ -308,6 +341,27 @@ void onLine(const char* line) {
                 MeshTalk::sendEmote((uint8_t)e, setup, now);
             }
         }
+    } else if (strcasecmp(t, "read") == 0) {
+        // The web tapped the den letter: exactly the board tap —
+        // markRead() queues the KIND_READ receipt, the radio sends it on
+        // the next tick (and only if this board transmits at all).
+        MeshTalk::markRead();
+    } else if (strcasecmp(t, "react") == 0) {
+        // A web thumb on the den letter: a LIKE/DISLIKE is an ordinary
+        // canned 48/49 to the squad broadcast (the air has no addressing),
+        // and reacting is reading — uiMessageSendReaction() minus the
+        // board's own toast (the web shows its own).
+        char kind[12];
+        uint8_t canned = 0;
+        if (jfield(js, "kind", kind, sizeof kind)) {
+            if (strcasecmp(kind, "like") == 0)           canned = MeshMsg::CANNED_REACT_LIKE;
+            else if (strcasecmp(kind, "dislike") == 0)   canned = MeshMsg::CANNED_REACT_DISLIKE;
+        }
+        if (!canned) return;
+        if (!MeshTalk::ready() || !Settings::meshTransmit()) return;
+        if (MeshTalk::sendingMessage(now)) return;
+        if (MeshTalk::send(canned, now) != MeshTalk::Send::OK) return;
+        MeshTalk::markRead();
     } else if (strcasecmp(t, "hello") == 0) {
         // A listener just came up (gateway start, page reload): hand it the
         // board as a peer plus everything current, so the web UI fills in.

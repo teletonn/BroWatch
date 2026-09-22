@@ -1,7 +1,7 @@
 // SquachWatch-CYD — one MORE INFO page per DEVICE, not per type.
 //
 // A DetectionType is a bucket: HACKER holds a Flipper Zero, a Pwnagotchi, a
-// WiFi Pineapple and an ESP deauther, CAMERA holds eleven brands, FLOCK holds
+// WiFi Pineapple and an ESP deauther, CAMERA holds eighteen brands, FLOCK holds
 // the one registered Flock block and a pile of chips Flock merely might use.
 // "Wireless testing hardware" is true of all four HACKER devices and useful
 // about none of them, so every device the firmware can name in its log gets
@@ -24,6 +24,9 @@ struct Device {
     const char*   vendors;   // "A|B": vendor labels that mean this device, exact; or nullptr
     const char*   names;     // "A|B": advertised-name prefixes, any case; or nullptr
     const char*   text;      // fits the panel in portrait: seven lines of 34
+    const char*   textRU;    // the same page in Russian: seven lines of ~23
+                             // glyphs, under 320 bytes (wrapTextRU's buffer),
+                             // ASCII + Cyrillic only. Titles stay Latin.
 };
 
 extern const Device  kDevices[];

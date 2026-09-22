@@ -14,7 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 PORT = int(os.environ.get("BROWATCH_PORT", "40400"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(ROOT, "static")
@@ -32,8 +32,11 @@ detections = []   # [{type,mac,rssi,vendor,ts}]
 next_msg_id = [1]
 subs = []         # list[queue.Queue]
 subs_lock = threading.Lock()
-outbox = []       # web -> board: [{"t":"send",...}], drained by gateway
+outbox = []       # web -> board: [{"t":"send",...,"for":<board id>}], drained by gateway
 board_cache = {"online": None, "board": None}
+# Какую USB-плату использовать как мост, когда их несколько. None = авто
+# (свежайшая). Выбор живёт в RAM: хост один, вкладки делят его.
+selected_board = {"id": None}
 
 # Safety net против повторных кадров моста: hello/reconnect шлюза
 # пересылает бэклог inbox целиком, и без этого окна каждая такая пересылка
@@ -53,6 +56,37 @@ def mesh_dupe(kind, key):
         recent_mesh.append((t, kind, key))
         recent_mesh[:] = recent_mesh[-200:]
         return False
+
+
+# Санитизация текста веб -> эфир. Эфир — верхний Latin + цифры + ` .,?!'-`
+# (MeshMsg::TEXT_CHARSET, 6 бит), поэтому строчные верхнятся, кириллица идёт
+# транслитом, остальное (эмодзи и т.п.) дропается. Таблица — 1:1 с RU_TR
+# в src/qwerty.cpp (порядок RU_GLYPH: ЙЦУКЕН/ФЫВАП/ЯЧСМИТЬ, Ё едет на Е):
+# мост (bw_bridge.cpp) делает то же самое authoritatively через тот же
+# transliterateRu; здесь — чтобы очередь уже лежала чистой, а пустое
+# (смайлик-only) отклонялось 400, а не улетало молча в никуда.
+RU_TR = ["J", "TS", "U", "K", "E", "N", "G", "SH", "SHCH", "Z", "H",
+         "F", "Y", "V", "A", "P", "R", "O", "L", "D", "ZH", "E",
+         "YA", "CH", "S", "M", "I", "T", "'", "B", "YU", "'"]
+RU_IDX = {ch: i for i, ch in enumerate("ЙЦУКЕНГШЩЗХФЫВАПРОЛДЖЭЯЧСМИТЬБЮЪ")}
+AIR_KEEP = set("0123456789 .,?!'-")
+
+
+def to_air(text):
+    out = []
+    for ch in (text or ""):
+        if "a" <= ch <= "z":
+            out.append(chr(ord(ch) - 32))
+        elif "A" <= ch <= "Z" or ch in AIR_KEEP:
+            out.append(ch)
+            continue
+        else:
+            u = ch.upper()
+            if u == "Ё":
+                out.append("E")
+            elif u in RU_IDX:
+                out.append(RU_TR[RU_IDX[u]])
+    return "".join(out)[:48]
 
 
 def now():
@@ -78,7 +112,7 @@ def pub_peer(p, t=None):
     return {"id": p["id"], "name": p.get("name") or p["id"],
             "nick": p.get("nick"),
             "outfit": p.get("outfit"), "shade": p.get("shade"),
-            "desk": p.get("desk"),
+            "desk": p.get("desk"), "usb": bool(p.get("usb")),
             "rssi": p.get("rssi"), "client": p.get("client"),
             "lang": p.get("lang"), "last_seen": p.get("last_seen", 0),
             "age_s": max(0, int(t - p.get("last_seen", t))),
@@ -100,14 +134,37 @@ def publish(kind, payload):
                 pass
 
 
-def board_snapshot_locked(t=None):
-    """Сама плата (кадр announce c client 'bw ...'), если свежая."""
+def usb_boards_locked(t=None):
+    """Все USB-платы (мост, 'usb':1 в own-announce), свежие первыми."""
     t = t or now()
+    lst = [pub_peer(p, t) for p in peers.values()
+           if p.get("usb") and t - p.get("last_seen", 0) <= BOARD_STALE_S]
+    lst.sort(key=lambda p: -p["last_seen"])
+    return lst
+
+
+def board_snapshot_locked(t=None):
+    """Плата-мост: выбранная вручную, если свежая, иначе свежайшая USB.
+    USB-признак ('usb':1 в own-announce моста) всегда побеждает свежесть:
+    сосед по эфиру с тем же клиентом — не та плата, через которую шлём."""
+    t = t or now()
+    cands = [p for p in peers.values()
+             if is_board(p) and t - p.get("last_seen", 0) <= BOARD_STALE_S]
+    if not cands:
+        return None
+    sel = selected_board["id"]
+    if sel:
+        for p in cands:
+            if p["id"] == sel:
+                return pub_peer(p, t)
     best = None
-    for p in peers.values():
-        if is_board(p) and t - p.get("last_seen", 0) <= BOARD_STALE_S:
-            if best is None or p["last_seen"] > best["last_seen"]:
-                best = p
+    for p in cands:
+        if best is None:
+            best = p
+        elif p.get("usb") and not best.get("usb"):
+            best = p
+        elif bool(p.get("usb")) == bool(best.get("usb")) and p["last_seen"] > best["last_seen"]:
+            best = p
     return pub_peer(best, t) if best else None
 
 
@@ -122,7 +179,7 @@ def _int01(v, lo, hi):
 
 
 def add_peer(pid, name=None, rssi=None, client=None, lang=None, nick=None,
-             outfit=None, shade=None, desk=None):
+             outfit=None, shade=None, desk=None, usb=None):
     t = now()
     with store_lock:
         p = peers.get(pid)
@@ -151,6 +208,8 @@ def add_peer(pid, name=None, rssi=None, client=None, lang=None, nick=None,
             p["shade"] = s
         if isinstance(desk, dict) and desk:
             p["desk"] = {str(k)[:12]: desk[k] for k in list(desk)[:12]}
+        if usb:
+            p["usb"] = True
         rng = in_range(p, t)
         changed = created or p.get("_pub_range") != rng
         p["_pub_range"] = rng
@@ -221,7 +280,15 @@ def ingest(obj):
             return "drop", {"ok": False, "note": "bad peer id"}
         return "peer", add_peer(pid, obj.get("name"), obj.get("rssi"),
                                  obj.get("client"), obj.get("lang"), obj.get("nick"),
-                                 obj.get("outfit"), obj.get("shade"), obj.get("desk"))
+                                 obj.get("outfit"), obj.get("shade"), obj.get("desk"),
+                                 obj.get("usb"))
+    if t == "readby":
+        # Кто-то открыл наше последнее сообщение (мост отзеркалил квитанцию
+        # KIND_READ для веб-тоста; плата тостит её сама). В чат не кладём.
+        who = str(obj.get("who", "?"))[:32]
+        d = {"who": who, "ts": now()}
+        publish("readby", d)
+        return "readby", d
     if t in ("msg", "message"):
         frm, text = obj.get("from", "unknown"), obj.get("text", "")
         if mesh_dupe("msg", (frm, text)):
@@ -337,7 +404,9 @@ class H(BaseHTTPRequestHandler):
                                         "in_range": sum(1 for p in recent if in_range(p, t)),
                                         "messages": len(messages),
                                         "board_online": board is not None,
-                                        "board": board})
+                                        "board": board,
+                                        "usb_boards": usb_boards_locked(t),
+                                        "selected_board": selected_board["id"]})
         if path == "/api/peers":
             with store_lock:
                 t = now()
@@ -362,11 +431,14 @@ class H(BaseHTTPRequestHandler):
                     if pid:
                         last_by_peer.setdefault(pid, m)
                 lst = []
+                lower = {str(k).lower(): v for k, v in last_by_peer.items()}
                 for p in peers.values():
                     if t - p.get("last_seen", 0) > RECENT_S:
                         continue
                     d = pub_peer(p, t)
-                    d["last_msg"] = last_by_peer.get(p["id"])
+                    d["last_msg"] = (last_by_peer.get(p["id"])
+                                     or lower.get(str(p.get("nick") or "").lower())
+                                     or lower.get(str(p.get("name") or "").lower()))
                     # Как на плате: сначала кто здесь, потом остальные по свежести.
                     lst.append(d)
                 lst.sort(key=lambda p: (not p["in_range"], -p["last_seen"]))
@@ -387,11 +459,16 @@ class H(BaseHTTPRequestHandler):
                 lst = [d for d in detections if d["ts"] > since][-100:]
             return self._json(200, lst)
         if path == "/api/bridge/outbox":
-            # Шлюз забирает очередь целиком (drain): плата получит [BW {...}].
+            # Шлюз забирает только очередь СВОЕЙ платы (?board=<mac> из её
+            # announce): при двух платах на USB чужие кадры остаются лежать.
+            # Без board — всё безадресное (совместимость).
+            want = (q.get("board", [""])[0] or "")[:32]
             with store_lock:
-                items = outbox[:]
-                del outbox[:]
-            return self._json(200, items)
+                mine = [it for it in outbox
+                        if not it.get("for") or it.get("for") == want]
+                mine_ids = set(map(id, mine))
+                outbox[:] = [it for it in outbox if id(it) not in mine_ids]
+            return self._json(200, mine)
         if path == "/api/stream":
             return self._sse()
         return self._json(404, {"error": "not found"})
@@ -465,7 +542,7 @@ class H(BaseHTTPRequestHandler):
                                                str(obj.get("emote", "?"))[:24], via="web"))
         if path == "/api/ingest":
             kind, payload = ingest(obj)
-            ok = kind in ("peer", "message", "emotion", "detection")
+            ok = kind in ("peer", "message", "emotion", "detection", "readby")
             return self._json(200, {"ok": ok, "kind": kind, "data": payload})
         if path == "/api/bridge/send":
             # Веб -> плата (через gateway.py в Serial): текст, canned-индекс
@@ -502,13 +579,57 @@ class H(BaseHTTPRequestHandler):
                 if not 0 <= fwd["emote"] <= 34:
                     return self._json(400, {"error": "emote index 0..34"})
             else:
-                fwd["text"] = text[:48]
+                air = to_air(text)
+                if not air:
+                    return self._json(400, {"error": "nothing the air can carry"})
+                fwd["text"] = air
             with store_lock:
+                fwd["for"] = b["id"]  # плате-мосту, не кому попало по USB
                 outbox.append(fwd)
                 outbox[:] = outbox[-50:]
             m = add_message(persona, text[:500], via="board")
             return self._json(200, {"ok": True, "queued": fwd, "message": m,
                                     "persona": persona})
+        if path == "/api/bridge/read":
+            # Веб тапнул письмо в Логове: плате [BW {"t":"read"}] — та же
+            # квитанция KIND_READ, что при тапе по письму на устройстве.
+            with store_lock:
+                b = board_snapshot_locked()
+            if not b:
+                return self._json(503, {"error": "board offline"})
+            with store_lock:
+                outbox.append({"t": "read", "for": b["id"]})
+                outbox[:] = outbox[-50:]
+            return self._json(200, {"ok": True})
+        if path == "/api/bridge/react":
+            # Лайк/дизлайк письму в Логове: плате [BW {"t":"react",...}] —
+            # обычный canned 48/49 в эфир + markRead, как кнопки на письме
+            # устройства (адресации в эфире нет, увидят все с той же фразой).
+            kind = str(obj.get("kind", "")).lower()
+            if kind not in ("like", "dislike"):
+                return self._json(400, {"error": "kind must be like|dislike"})
+            with store_lock:
+                b = board_snapshot_locked()
+            if not b:
+                return self._json(503, {"error": "board offline"})
+            with store_lock:
+                outbox.append({"t": "react", "kind": kind, "for": b["id"]})
+                outbox[:] = outbox[-50:]
+            return self._json(200, {"ok": True, "kind": kind})
+        if path == "/api/bridge/select":
+            # Выбор платы-моста при нескольких USB. Пустой id = авто.
+            want = str(obj.get("id", "") or "")[:32]
+            with store_lock:
+                if want:
+                    ok_ids = [p["id"] for p in peers.values()
+                              if p.get("usb") and now() - p.get("last_seen", 0) <= BOARD_STALE_S]
+                    if want not in ok_ids:
+                        return self._json(404, {"error": "no such usb board online"})
+                selected_board["id"] = want or None
+                b = board_snapshot_locked()
+            publish("board", {"online": b is not None, "board": b})
+            return self._json(200, {"ok": True, "selected": selected_board["id"],
+                                    "board": b})
         return self._json(404, {"error": "not found"})
 
 

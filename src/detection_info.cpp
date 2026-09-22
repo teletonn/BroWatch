@@ -3,6 +3,7 @@
 #include "detection.h"
 #include "device_info.h"
 #include "type_names.h"
+#include "settings.h"
 #include <stdio.h>
 
 namespace DetectionInfo {
@@ -20,8 +21,8 @@ static const char* const EXPLAIN_TEXT[] = {
     "Camera glasses -- Ray-Ban Meta, Snap Spectacles and the like. They record video and photos, and the little LED that's supposed to warn you is easy to miss and easier to cover. Careful with this one: Meta puts the same Bluetooth ID on Quest headsets, so it can also just be a VR headset in a bag.",
     // SKIMMER
     "A Bluetooth card skimmer, usually wired into an ATM or gas pump reader. It quietly exfiltrates stolen card data over BLE instead of needing physical pickup.",
-    // RAVEN
-    "A Raven gunshot-detection sensor, usually mounted on a streetlight or rooftop. It listens constantly, not just after something happens. Matched on Raven's own Bluetooth service IDs, which have not been checked against real hardware -- hence the middling confidence. NOT ShotSpotter: those hold no registered hardware ID at all and backhaul over cellular rather than broadcasting, so nothing here can see one.",
+    // MESH
+    "A mesh node talking off-grid: Meshtastic, MeshCore or Reticulum. Matched on Meshtastic's own Bluetooth ID, or the advertised name. Hikers and volunteers run these -- no towers needed.",
     // AIRTAG
     "An Apple AirTag, riding Apple's Find My network. Legitimate for keys and luggage -- also a known method for tracking a person or vehicle without consent.",
     // DRONE
@@ -56,8 +57,60 @@ static const uint8_t EXPLAIN_TEXT_N = sizeof(EXPLAIN_TEXT) / sizeof(EXPLAIN_TEXT
 static_assert(EXPLAIN_TEXT_N == (uint8_t)DetectionType::COUNT,
               "every DetectionType needs a MORE INFO entry, in enum order");
 
+// BroWatch RU: the same paragraphs, adapted -- not transliterated. Russian
+// needs fewer words for the same panel: seven lines of ~23 glyphs, under
+// 320 bytes total (wrapTextRU's buffer), ASCII + Cyrillic only (no «»/--,
+// the RU face has neither). Titles stay Latin product names on purpose.
+static const char* const EXPLAIN_TEXT_RU[] = {
+    // UNKNOWN
+    "Совпадений в сигнатурах нет. Тип-заглушка: находка без описания. Видишь это про реальный сигнал - расскажи разработчику, это баг.",
+    // FLOCK
+    "Flock Safety: камеры-читалки номеров. Пишут все номера подряд. Из 29 префиксов Flock принадлежит лишь ОДИН, остальные - обычные чипы Espressif и Liteon. LOW - версия, не камера.",
+    // AXON
+    "Axon: нательные камеры и тейзеры полиции. Ловим собственный радиосигнал камеры, а не точное место офицера.",
+    // META
+    "Очки с камерой: Ray-Ban Meta, Snap Spectacles и подобные. Пишут видео и фото; светодиод легко не заметить или заклеить. Тот же Bluetooth-ID стоит на шлемах Quest - может, это VR в рюкзаке.",
+    // SKIMMER
+    "Bluetooth-скиммер: обычно впаян в банкомат или колонку АЗС. Тихо сливает краденые данные карт по BLE - забирать там нечего, подходить не надо.",
+    // MESH
+    "Узел меш-сети: Meshtastic, MeshCore или Reticulum. Ловим по Bluetooth-ID Meshtastic или имени узла. Туристы и волонтеры: связь без вышек и сети.",
+    // AIRTAG
+    "Apple AirTag в сети Локатора. Нормально для ключей и багажа - и известный способ следить за человеком или машиной без спроса.",
+    // DRONE
+    "Дрон с Remote ID - беспроводным номером от FAA. Декодировано: где борт, часто и где пилот. Не видеопоток - он закрыт. Только Bluetooth Legacy: чип BLE 4.2, Bluetooth 5 ему невидим.",
+    // ALPR
+    "Читалка номеров не от Flock. То же самое: пишет все номера подряд, обычно в общую базу.",
+    // CAMERA
+    "Радио камерного бренда по WiFi или Bluetooth - совпадение по производителю чипа, а не по конкретной сети. Может быть звонок, камера, что угодно с объективом.",
+    // SAMSUNG_TAG
+    "Samsung Galaxy SmartTag в собственной сети поиска Samsung. Та же беда со слежкой без спроса, что у AirTag, - другая экосистема.",
+    // GOOGLE_TAG
+    "Трекер в сети Find My Device от Google: Chipolo, Pebblebee, Moto Tag и другие сидят на одной системе. Ответ Android миру Find My.",
+    // TILE
+    "Tile - один из первых Bluetooth-трекеров. Вне сетей Apple, Google и Samsung, возможности те же.",
+    // RING
+    "Звонок или камера Ring - видеодомофоны Amazon. Часто сбиты в соседскую сеть через приложение Neighbors.",
+    // DEAUTH
+    "Не устройство, а пачка WiFi-кадров деаутентификации: так сгоняют устройства с сети. Один кадр - обычный трафик, flood - обычно нет.",
+    // EVILTWIN
+    "Два ящика с одним именем сети спорят о защите: один с паролем, другой открыт. Так заманивает поддельная точка. Домашний mesh сам с собой не спорит.",
+    // IBEACON
+    "Маяк близости: орет ID, а приложение докладывает, где ты. Сам не следит. Выключен из коробки - маяков слишком много. Включается в ФИЛЬТРЕ НАХОДОК.",
+    // HACKER
+    "Железо радиохакеров: Flipper Zero, Pwnagotchi, Pineapple, деаутентификатор. ПЕРЕДАЕТ в эфир, а не слушает - в этом отличие. Pwnagotchi орет имя и счет: по этому ловим.",
+};
+static const uint8_t EXPLAIN_TEXT_RU_N = sizeof(EXPLAIN_TEXT_RU) / sizeof(EXPLAIN_TEXT_RU[0]);
+static_assert(EXPLAIN_TEXT_RU_N == (uint8_t)DetectionType::COUNT,
+              "every DetectionType needs a RU MORE INFO entry, in enum order");
+
+static inline bool isRU() { return Settings::lang() == 1; }
+
 const char* explain(DetectionType t) {
     uint8_t idx = (uint8_t)t;
+    if (isRU()) {
+        if (idx >= EXPLAIN_TEXT_RU_N) idx = 0;
+        return EXPLAIN_TEXT_RU[idx];
+    }
     if (idx >= EXPLAIN_TEXT_N) idx = 0;
     return EXPLAIN_TEXT[idx];
 }
@@ -75,15 +128,19 @@ const char* explainLive(DetectionType t, const DetectionEngine& eng) {
     // than a safe stand-in for "not known yet".
     static char buf[320];
     int n = 0;
+    const bool ru = isRU();
     if (rid.haveBasic)
-        n += snprintf(buf + n, sizeof(buf) - n, "ID %s, a %s. ",
+        n += snprintf(buf + n, sizeof(buf) - n, "ID %s, %s. ",
                       rid.serial, RemoteId::uaTypeName(rid.uaType));
     if (rid.haveLoc && n < (int)sizeof(buf))
-        n += snprintf(buf + n, sizeof(buf) - n, "AIRCRAFT %.5f, %.5f at %dm. ",
+        n += snprintf(buf + n, sizeof(buf) - n,
+                      ru ? "ДРОН %.5f, %.5f, высота %dm. "
+                         : "AIRCRAFT %.5f, %.5f at %dm. ",
                       (double)rid.lat, (double)rid.lon, (int)rid.altM);
     if (rid.haveOperator && n < (int)sizeof(buf))
         n += snprintf(buf + n, sizeof(buf) - n,
-                      "OPERATOR %.5f, %.5f -- that is where the pilot is standing.",
+                      ru ? "ОПЕРАТОР %.5f, %.5f - пилот стоит здесь."
+                         : "OPERATOR %.5f, %.5f -- that is where the pilot is standing.",
                       (double)rid.opLat, (double)rid.opLon);
     buf[sizeof(buf) - 1] = '\0';
     return buf;
@@ -93,7 +150,9 @@ const char* explainFor(DetectionType t, const char* vendor, const char* name,
                        const DetectionEngine& eng) {
     if (t == DetectionType::DRONE) return explainLive(t, eng);
     const DeviceInfo::Device* d = DeviceInfo::find(t, vendor, name);
-    return d ? d->text : explain(t);
+    if (!d) return explain(t);
+    if (isRU() && d->textRU && d->textRU[0]) return d->textRU;
+    return d->text;
 }
 
 const char* titleFor(DetectionType t, const char* vendor, const char* name) {
@@ -106,6 +165,9 @@ const char* titleFor(DetectionType t, const char* vendor, const char* name) {
 const char* rssiConfidencePrimer() {
     // Trimmed to fit the bigger text size this now renders at --
     // shorter sentences, same two facts.
+    if (isRU())
+        return "RSSI - сила сигнала в дБм: ближе к нулю - ближе, глубже в минус - дальше. "
+               "Уверенность - насколько верим совпадению: HIGH - крепкое, MED и LOW - слабые догадки.";
     return "RSSI is signal strength in dBm -- closer to zero means closer, more negative means farther. "
            "Confidence is how sure the match is: HIGH is a strong match, MED/LOW are looser guesses.";
 }

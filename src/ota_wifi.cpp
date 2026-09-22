@@ -585,10 +585,13 @@ void removeSaved(uint8_t i) {
 
 void printSaved() {
     readSaved();
-    static const char* const R[] = { "not tried", "joined", "wrong password", "not found" };
+    static const char* const R[] = { "not tried", "joined", "wrong password", "not found", "no answer" };
     Serial.printf("[wifi] %u saved, USE is %u\n", (unsigned)s_n, (unsigned)s_use);
-    for (uint8_t i = 0; i < s_n; i++)
-        Serial.printf("[wifi]   %u: %s -- %s\n", (unsigned)i, s_list[i].ssid, R[(uint8_t)s_list[i].result & 3]);
+    for (uint8_t i = 0; i < s_n; i++) {
+        const unsigned r = (unsigned)s_list[i].result;
+        Serial.printf("[wifi]   %u: %s -- %s\n", (unsigned)i, s_list[i].ssid,
+                      r < sizeof R / sizeof R[0] ? R[r] : "?");
+    }
 }
 
 void useSaved(uint8_t i) {
@@ -629,7 +632,7 @@ void connect(const char* ssid, const char* pass, bool save) {
     }
 }
 
-bool bootCheck(uint32_t budgetMs) {
+bool bootCheck(uint32_t budgetMs, bool checkUpdate) {
     readSaved();
     if (!s_n) return false;
     const uint32_t t0 = millis();
@@ -711,12 +714,20 @@ bool bootCheck(uint32_t budgetMs) {
                       (unsigned long)(millis() - tj), (int)st, (unsigned)s_dropReason);
     memset(pass, 0, sizeof pass);
     // How it went, for the WIFI NETWORKS screen. A join that merely ran out
-    // of time says nothing about the password, so it changes nothing.
+    // of time used to say nothing -- UNTRIED forever, "not tried yet" on a
+    // network tried every boot. It gets TIMEOUT now. Reason 15 from the
+    // driver (handshake never finished) is a wrong password wearing a
+    // timeout's clothes, so that one is named honestly.
     if (st == WL_CONNECTED)           setResult((int8_t)pick, SavedResult::JOINED);
     else if (st == WL_NO_SSID_AVAIL)  setResult((int8_t)pick, SavedResult::NOT_FOUND);
-    else if (st == WL_CONNECT_FAILED) setResult((int8_t)pick, SavedResult::BAD_PASSWORD);
+    else if (st == WL_CONNECT_FAILED || s_dropReason == 15) setResult((int8_t)pick, SavedResult::BAD_PASSWORD);
+    else                              setResult((int8_t)pick, SavedResult::TIMEOUT);
     bool found = false;
-    if (st == WL_CONNECTED) {
+    if (st == WL_CONNECTED && !checkUpdate) {
+        // UPDATE CHECK off: the clock is the whole errand. Skip the site,
+        // keep the join's record above.
+        Serial.println("[ota] boot check: update check off, time only");
+    } else if (st == WL_CONNECTED) {
         Serial.printf("[ota] boot check: joined in %lu ms\n", (unsigned long)(millis() - t0));
         uint8_t body[1024];
         size_t  len = 0;

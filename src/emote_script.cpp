@@ -439,7 +439,7 @@ const char* spokenName(uint8_t t) {
         case DetectionType::AXON:        return "AXON";
         case DetectionType::META:        return "GLASSES";
         case DetectionType::SKIMMER:     return "SKIMMER";
-        case DetectionType::RAVEN:       return "RAVEN";
+        case DetectionType::MESH:        return "MESH";
         case DetectionType::AIRTAG:      return "AIRTAG";
         case DetectionType::DRONE:       return "DRONE";
         case DetectionType::ALPR:        return "ALPR";

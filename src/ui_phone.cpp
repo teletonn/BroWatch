@@ -258,6 +258,14 @@ static const int PRESS_REACH = 6;
 // nothing to learn.
 static const int SLIDE_REACH = 12;
 
+// Letters share one text size across the board (see the key loop): the
+// Latin A-Z and the Russian key ids. Digits, punctuation and the controls
+// are not letters and keep their own fit.
+static bool isLetterKey(char c) {
+    if (Qwerty::isRuKey(c)) return true;
+    return c >= 'A' && c <= 'Z';
+}
+
 // What a key says. Letters are themselves; the controls borrow the keypad's
 // own words, DEL rather than an arrow the 5x7 font does not have. Russian
 // keys answer with their Cyrillic glyph -- printRU draws them, one[] below
@@ -668,15 +676,30 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
 
         // ---- keys ---------------------------------------------------------
         // Laid out here, every frame, and read by the hit test -- see s_keys.
-        s_keyN = Qwerty::layout(w, Qwerty::BAND_TOP, h - Qwerty::BAND_BOTTOM_INSET, s_keys, msg(),
-                                Settings::phoneQwertyRu() ? Qwerty::Board::RU : Qwerty::Board::EN);
+        const Qwerty::Board bd =
+            Settings::phoneQwertyRu() ? Qwerty::Board::RU : Qwerty::Board::EN;
+        s_keyN = Qwerty::layout(w, Qwerty::BAND_TOP, h - Qwerty::BAND_BOTTOM_INSET, s_keys, msg(), bd);
+        // One size for every LETTER key. The old per-key fallback shrank wide
+        // Cyrillic (Ж Ш Щ Ы Ю) to size 1 while neighbours stayed size 2, and
+        // the eleven-wide RU board read uneven. If any letter overflows its
+        // key at size 2, all letters step down together; digits, punctuation
+        // and the controls keep their own fit.
+        int letterSize = 2;
+        t.setTextSize(2);
+        for (uint8_t i = 0; i < s_keyN; i++) {
+            const Qwerty::Key& k = s_keys[i];
+            if (!isLetterKey(k.ch)) continue;
+            if (Theme::textWidthRU(t, keyLabel(k.ch)) > k.w - 6) { letterSize = 1; break; }
+        }
         for (uint8_t i = 0; i < s_keyN; i++) {
             const Qwerty::Key& k = s_keys[i];
             const bool lit = (s_armed == (int8_t)i);
             Theme::drawSteelKey(t, k.x, k.y, k.w, k.h, lit);
             const char* lab = keyLabel(k.ch);
-            t.setTextSize(2);
-            if (Theme::textWidthRU(t, lab) > k.w - 6) t.setTextSize(1);
+            int sz = 2;
+            if (isLetterKey(k.ch)) sz = letterSize;
+            else { t.setTextSize(2); if (Theme::textWidthRU(t, lab) > k.w - 6) sz = 1; }
+            t.setTextSize(sz);
             t.setTextColor(lit ? Theme::VAPOR_YELLOW : Theme::WHITE);
             t.setCursor(k.x + (k.w - Theme::textWidthRU(t, lab)) / 2, k.y + (k.h - t.fontHeight()) / 2);
             Theme::printRU(t, lab);

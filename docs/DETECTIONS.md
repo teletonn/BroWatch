@@ -124,16 +124,37 @@ v1.1 task).
 
 ---
 
-## Raven gunshot detector — `RAVEN` — **Medium confidence**
+## Off-grid mesh nodes — `MESH` — **graded per signature**
 
-**Why it works:** Raven devices advertise custom service UUIDs in
-the `0x3100`–`0x3500` range (proprietary, not in the Bluetooth
-SIG assigned range).
+**Why it works:** the three off-grid mesh networks all speak Bluetooth
+to the operator's phone, and two of the three signatures are exact.
+Meshtastic advertises its own 128-bit service UUID
+`6ba1b218-15a8-461f-9fa8-5dcae273eafd` in the primary advert packet --
+even a node its owner renamed still matches, and nothing else uses that
+UUID. MeshCore companion radios and RNode/Reticulum modems share the
+Nordic UART service UUID `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` with
+every DIY ble_uart project on earth, so those two are matched on the
+advertised name instead: `MeshCore-…` (plus third-party companion
+builds `Whisper-`, `WisCore-`, `LowMesh_MC_`) and `RNode XXXX`.
 
-**Source:** [Flock You documentation](https://github.com/colonelpanichacks/flock-you/wiki/Detection-Datasets#raven).
+**Sources:** Meshtastic firmware (`BluetoothCommon.h`, `NimbleBluetooth.cpp`,
+`main.cpp getDeviceName`, `WiFiAPClient.cpp`) and docs (client-api,
+radio/network, radio/lora); MeshCore `companion_protocol.md` and
+`companion_radio/MyMesh.h`; RNode_Firmware `Bluetooth.h`; EastMesh docs
+(`MeshCore-OTA`).
 
-**Confidence in v1.0:** **Medium**. We match the UUIDs but haven't
-verified them against a physical Raven device. Likely works.
+**What is NOT matched, on purpose:** a bare Nordic-UART advert with no
+mesh name (indistinguishable from DIY projects -- stays UNKNOWN);
+any `Meshtastic_*` / `RNode-*` WiFi SSID (neither network raises an AP
+in normal operation; Meshtastic 2.x is STA-only); MeshCore repeaters
+and room servers (no phone-facing BLE, invisible to any BLE scanner).
+
+**Confidence:** **High** for the Meshtastic service UUID; **Medium**
+for the name rules (a string anybody can set -- same split as HACKER).
+Value 5 used to be RAVEN, a US gunshot detector whose 16-bit IDs
+(`0x3100`–`0x3500`) were never verified on hardware; the block is now
+free and old black-box "5" rows were Raven hits. There is no gunshot
+category any more: nothing in RU carries those radios.
 
 ---
 
@@ -202,6 +223,18 @@ the NimBLE one and is not implemented.
 **Confidence:** **Medium**. Compliance is rolling out so detection is
 opportunistic, and half the transport is unreachable per above.
 
+**In Russia:** DJI (Mini/Neo/Mavic via parallel import), Autel and
+homebuilts all broadcast standard ASTM F3411 Remote ID (BLE legacy /
+WiFi beacon on 2.4 GHz ch.6) -- DJI sends its serial as the ID -- so
+the stock DRONE path sees them with no RU-specific code. DJI's own
+proprietary DroneID (OcuSync) needs an SDR and is out of scope.
+Analog FPV video (5.8 GHz) and ELRS/Crossfire links are different
+bands by construction: invisible to any BLE/WiFi scanner. Since
+PP-1701 (11.2024) registered craft must carry remote-ID gear and
+NLG UI-BAS (Rosaviatsia 829-P, 11.2025) certifies it, legal boards
+light up more every year. Details: `docs/browatch/07-rossiya-detekt.md`
+§6; on-device page: REMOTE ID.
+
 ---
 
 ## Motorola / Genetec ALPR — `ALPR` — **Medium confidence**
@@ -254,6 +287,47 @@ discussed (see the note atop `kOuiTable` in `signatures.cpp`) but
 would need a real audit of Espressif's OUI ranges against known false
 positives before shipping — it is **not** built, and the UI does not
 show a Low-confidence camera reading in v1.0.
+
+### RU/EU consumer cameras (same `CAMERA` type)
+
+The brands actually on Russian shelves 2020–2026, all from the IEEE
+MA-L registry via maclookup.app (cross-checked with netify.ai /
+hwaddress.com) -- the same evidentiary standard as the rows above.
+Full per-brand findings, models and manual sources:
+`docs/browatch/07-rossiya-detekt.md`.
+
+- **EZVIZ** (Hikvision consumer brand): own blocks `0C:A6:4C`,
+  `20:BB:BC`, `34:C6:DD`, `38:F2:5D`, `54:D6:0D`, `58:8F:CF`,
+  `64:24:4D`, `64:F2:FB`, `78:A6:A0`, `78:C1:AE`, `94:EC:13`,
+  `AC:1C:26`, `EC:97:E0`, `F4:70:18`, `FC:24:22` (HIGH), plus setup AP
+  `EZVIZ_XXXXXX` (SSID rule, from EZVIZ's own QSG).
+- **Hikvision** proper: ten more of their 84 blocks join the three old
+  ones (`4C:BD:8F`, `C4:2F:90`, `54:C4:15`, `18:68:CB`, `64:DB:8B`,
+  `BC:AD:28`, `D4:88:90`, `94:E1:AC`, `A4:14:37`, `B4:A3:82`, HIGH),
+  plus setup AP `HAP_xxxxxx` (SSID rule, from Hikvision's own WiFi
+  guide). Covers RVi/Novicam OEM rebadges, which carry these blocks.
+- **Dahua** (27 blocks, HIGH) + **Imou/Huacheng** (`90:6A:94`,
+  `A8:31:62`, `30:24:50`, HIGH), plus setup AP `DAP-XXXXXXXXX` (SSID
+  rules `DAP-`/`DAP_`, from Imou/Dahua manuals). Covers ActiveCam's
+  Dahua-OEM lineup.
+- **Imilab** (`60:7E:A4`, `78:DF:72`, `94:F8:27`, `B8:88:80`,
+  `B4:10:1C`, HIGH): builds Xiaomi/Mi Home cameras, which pair by QR
+  with no setup AP -- the OUI is the whole signature.
+- **TP-Link Tapo**: setup AP `Tapo_Cam_XXXX` (SSID rule, from TP-Link's
+  FAQ). No OUI rows: TP-Link's 260+ blocks sit on routers, and a
+  router logged as a camera is the Sonos mistake again.
+- **Xiaomi corporate blocks**: deliberately absent for the same reason
+  (they sit on phones). **Xiongmai `MV+ID` hotspots**: absent -- a
+  two-letter prefix is not a signature (UNVERIFIED, needs a field
+  measurement). **D-Link DCS**: single OUI `B0:C5:54` (MED, seen on a
+  live unit); broad D-Link blocks stay out (routers).
+- **Axis** gains `AC:CC:8E`, `E8:27:25`; **Hanwha Vision**
+  (ex-Samsung Techwin) `00:09:18`, `E4:30:22` (both HIGH).
+
+Deliberately unmatched: RVi/Beward/Novicam/Falcon Eye (no own IEEE
+blocks -- caught via Hikvision/Dahua pools or not at all); wired-only
+state systems (Safe City PoE, Beward panels, Dozor bodycams,
+AvtoUragan/Vocord/Strelka -- no RF signature exists).
 
 ---
 
