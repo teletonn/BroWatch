@@ -22,9 +22,14 @@
 class DetectionEngine;
 
 // What a tap landed on. NONE means it hit a gap.
-// In the order they are drawn -- the hit test maps a row index straight onto
-// this, so the two orders must never differ.
-enum class MeshMenuRow : uint8_t { DETECT, TRANSMIT, MESSAGES, CROWD, SQUAD, PHRASE, NAME, BACK, NONE };
+// The row list is built at draw time (buildRows below) because COMPANION mode
+// shows a different set from BROMESH; the hit test maps through the same list,
+// so the two can never disagree about what a row means.
+enum class MeshMenuRow : uint8_t {
+    MODE, DETECT, TRANSMIT, MESSAGES, CROWD, SQUAD, PHRASE, NAME,     // BROMESH
+    TARGET, NODE, CHANNEL, CHAT,                                      // COMPANION
+    BACK, NONE
+};
 
 void uiMeshMenuInit(TFT_eSPI& t);
 // Takes the engine only for the backdrop: THE GIBSON reads the log and the

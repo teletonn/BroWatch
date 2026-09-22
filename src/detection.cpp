@@ -24,6 +24,9 @@
 #include "squachy.h"
 #include "settings.h"
 #endif
+#if MESH_COMPANION
+#include "mesh_link.h"
+#endif
 #include <esp_bt.h>
 #include <esp_gap_bt_api.h>
 #include <esp_heap_caps.h>
@@ -135,6 +138,25 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         // 2.x hands back a reference to the device's own address, so the
         // pointer is good for the whole of this call.
         const uint8_t* mac = adv->getAddress().getBase()->val;
+#if MESH_COMPANION
+        // COMPANION MODE: the same scan that feeds detection also finds the
+        // external LoRa node this device is meant to attach to. Only while
+        // the mode is on and the user is looking for a node -- and the advert
+        // has to carry the node's own service UUID, so a random peripheral
+        // cannot be offered as one. The scan is not restarted or duplicated;
+        // this is a tap on the stream detection already has.
+        if (Settings::companionMode()) {
+            static const NimBLEUUID kMeshtasticSvc("6ba1b218-15a8-461f-9fa8-5dcae273eafd");
+            const uint8_t svcN = adv->getServiceUUIDCount();
+            for (uint8_t i = 0; i < svcN; i++) {
+                const NimBLEUUID u = adv->getServiceUUID(i);
+                if (u.bitSize() == 128 && u.equals(kMeshtasticSvc)) {
+                    MeshLink::onAdvertised(mac, adv->getName().c_str(), (int8_t)adv->getRSSI(), 0);
+                    break;
+                }
+            }
+        }
+#endif
 #if SQUACH_MESH
         // A peer is handled here and RETURNS, so it never reaches the
         // signature tables and can never become a Detection. Getting that

@@ -325,6 +325,10 @@ static void drawCrashCard(TFT_eSPI& t) {
 #include "ui_invite.h"
 #include "meshmsg.h"
 #endif
+#if MESH_COMPANION
+#include "mesh_link.h"
+#include "ui_meshlink.h"
+#endif
 #include "ignore_list.h"
 #include "ignore_list.h"
 #include "ui_detfilter.h"
@@ -1788,6 +1792,19 @@ static void enterMeshMenu() {
     uiMeshMenuInit(*canvas);
 }
 
+#if MESH_COMPANION
+static void enterMeshNodes() {
+    state = AppState::MESH_LINK_NODES;
+    transitionStart = millis();
+    uiMeshNodesInit(*canvas);
+}
+static void enterMeshChat() {
+    state = AppState::MESH_LINK_CHAT;
+    transitionStart = millis();
+    uiMeshChatInit(*canvas);
+}
+#endif
+
 static void enterPhone() {
     state = AppState::PHONE;
     transitionStart = millis();
@@ -2484,6 +2501,11 @@ void setup() {
     // against a frame built by an independent implementation.
     MeshTalk::begin();
 #endif
+#if MESH_COMPANION
+    // The companion link's BLE-client task. It does nothing until COMPANION
+    // mode is on and a node is picked; in BROMESH it just sits idle.
+    MeshLink::begin();
+#endif
 #if defined(BW_BRIDGE)
     // After the radio: the first announce waits for our own MAC anyway.
     BwBridge::begin();
@@ -2817,6 +2839,9 @@ void loop() {
     MeshProbe::tick(now);
     Mesh::tick(now);
     MeshTalk::tick(now);
+#if MESH_COMPANION
+    MeshLink::tick(now);
+#endif
     {
         char who[13];
         if (MeshTalk::takeRead(who, sizeof who)) {
@@ -4446,12 +4471,78 @@ void loop() {
                     case MeshMenuRow::SQUAD:    enterSquad(true);              break;
                     case MeshMenuRow::PHRASE:   enterMeshPhrase();             break;
                     case MeshMenuRow::NAME:     enterPhone();                  break;
+#if MESH_COMPANION
+                    case MeshMenuRow::MODE:
+                        Settings::toggleCompanionMode();
+                        // Leaving COMPANION tears the link down; entering it
+                        // starts the hunt for a node.
+                        if (Settings::companionMode()) MeshLink::startScan();
+                        else                           MeshLink::shutdown();
+                        break;
+                    case MeshMenuRow::TARGET:   Settings::cycleCompanionTarget(); break;
+                    case MeshMenuRow::NODE:     enterMeshNodes();              break;
+                    case MeshMenuRow::CHANNEL: {
+                        const uint8_t cn = MeshLink::channelCount();
+                        if (cn) MeshLink::setSendChannel((uint8_t)((MeshLink::sendChannel() + 1) % cn));
+                    } break;
+                    case MeshMenuRow::CHAT:     enterMeshChat();               break;
+#endif
                     case MeshMenuRow::BACK:     enterSettings();               break;
                     default: break;
                 }
             }
             break;
         }
+#if MESH_COMPANION
+        case AppState::MESH_LINK_NODES: {
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiMeshNodesTick(t, now, advance); });
+            if (touchJustDown && Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) {
+                lastTouch = now;
+                enterMeshMenu();
+                break;
+            }
+            if (touchJustDown) {
+                int row = -1;
+                switch (uiMeshNodesHit(*canvas, tp.x, tp.y, &row)) {
+                    case MeshNodesHit::ROW:
+                        if (row >= 0 && row < MeshLink::nodeCount()) { /* selection only; CONNECT acts */ }
+                        break;
+                    case MeshNodesHit::SCAN:       MeshLink::startScan();  break;
+                    case MeshNodesHit::CONNECT:    if (row >= 0) MeshLink::connect((uint8_t)row); break;
+                    case MeshNodesHit::DISCONNECT: MeshLink::disconnect(); break;
+                    case MeshNodesHit::BACK:       enterMeshMenu();        break;
+                    default: break;
+                }
+            }
+            break;
+        }
+        case AppState::MESH_LINK_CHAT: {
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiMeshChatTick(t, now, advance); });
+            if (touchJustDown && Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) {
+                lastTouch = now;
+                enterMeshMenu();
+                break;
+            }
+            if (touchJustDown) {
+                switch (uiMeshChatHit(*canvas, tp.x, tp.y)) {
+                    case MeshChatHit::CHANNEL: {
+                        const uint8_t cn = MeshLink::channelCount();
+                        if (cn) MeshLink::setSendChannel((uint8_t)((MeshLink::sendChannel() + 1) % cn));
+                    } break;
+                    case MeshChatHit::WRITE:
+                        // TODO(companion): a text entry that sends through
+                        // MeshLink. The BROMESH compose screen is wired to
+                        // MeshTalk, so it cannot be reused as-is.
+                        Theme::showToast(Theme::tr("WRITE", "ПИСАТЬ"),
+                                         Theme::tr("coming next", "скоро"), Theme::AMBER);
+                        break;
+                    case MeshChatHit::BACK:    enterMeshMenu();     break;
+                    default: break;
+                }
+            }
+            break;
+        }
+#endif
         case AppState::UPDATE: {
             // An update in progress owns the screen. Dimming, auto-lock and
             // the idle frame cap all run off lastTouch, so holding it at now

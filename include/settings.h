@@ -393,6 +393,26 @@ namespace Settings {
     // skipped tutorial counts as seen; "?" on the message screen replays it.
     bool        meshTutorSeen();
     void        setMeshTutorSeen();
+#if MESH_COMPANION
+    // COMPANION MODE. BROMESH (false) is everything above and is unchanged.
+    // COMPANION (true) points the radio at an external LoRa node instead --
+    // see mesh_link.h. The two are mutually exclusive uses of the same radio,
+    // so this is a mode switch rather than another toggle beside detect and
+    // transmit.
+    bool        companionMode();
+    void        setCompanionMode(bool v);
+    void        toggleCompanionMode();
+    // Which node protocol to speak: 0 Meshtastic, 1 MeshCore. Stored as the
+    // number so an old NVS value keeps meaning something if the list grows.
+    uint8_t     companionTarget();
+    void        setCompanionTarget(uint8_t t);
+    void        cycleCompanionTarget();
+    const char* companionTargetLabel();
+    // Whether the object-detection BLE scan keeps running while linked.
+    bool        companionScanPause();
+    void        toggleCompanionScanPause();
+    const char* companionModeLabel();
+#endif
 #endif
 
     // The mascot's pace, chosen by eye on a real board (PACE N / TEMPO P on

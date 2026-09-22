@@ -192,6 +192,12 @@ enum class AppState : uint8_t {
     // row steps it in place now.
     BINGO            = 36  // the detection bingo card, from Settings' BINGO
                             // row. See ui_bingo.h.
+#if MESH_COMPANION
+    ,
+    MESH_LINK_NODES  = 37, // COMPANION: find and connect to an external LoRa
+                            // node. See ui_meshlink.h.
+    MESH_LINK_CHAT   = 38  // COMPANION: the message log and reply.
+#endif
 };
 
 enum class ButtonId : uint8_t {

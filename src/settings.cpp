@@ -24,6 +24,20 @@ static bool        s_phoneQwerty  = false;
 static bool        s_phoneQwertyRu = false;
 static bool        s_messagesOn   = false;
 static bool        s_msgTutor     = false;
+#if MESH_COMPANION
+// Companion mode: this device is the client of an external LoRa node rather
+// than a SquachMesh peer. OFF is BROMESH -- the whole existing feature -- so a
+// board that has never touched this behaves exactly as before.
+static bool        s_companionMode = false;
+// 0 = Meshtastic, 1 = MeshCore. Only Meshtastic is implemented; the value is
+// stored and shown so the setting is honest about what was chosen.
+static uint8_t     s_companionTgt  = 0;
+// Whether the object-detection radios keep running while linked to a node.
+// Default ON: BLE centrals and the observer scan share the stack, so the
+// background scan can stay on; a user who wants the radio to itself can turn
+// it off. (WiFi transport will force a pause regardless.)
+static bool        s_companionScanPause = false;
+#endif
 #endif
 static bool        s_infoPrimerShown = false;
 static bool        s_rotationLocked = false;
@@ -254,6 +268,12 @@ void load() {
     s_phoneQwerty  = s_prefs.getBool("qwerty", false);
     s_messagesOn   = s_prefs.getBool("msgon", false);
     s_msgTutor     = s_prefs.getBool("msgtut", false);
+#if MESH_COMPANION
+    s_companionMode     = s_prefs.getBool("cmpmode", false);
+    s_companionTgt      = s_prefs.getUChar("cmptgt", 0);
+    if (s_companionTgt > 1) s_companionTgt = 0;
+    s_companionScanPause= s_prefs.getBool("cmpscan", false);
+#endif
 #endif
     s_infoPrimerShown = s_prefs.getBool("infoprimer", false);
     s_rotationLocked = s_prefs.getBool("rotlock", false);
@@ -741,6 +761,32 @@ void toggleMessages() {
 }
 bool meshTutorSeen()    { return s_msgTutor; }
 void setMeshTutorSeen() { s_msgTutor = true; s_prefs.putBool("msgtut", true); }
+#endif
+
+#if MESH_COMPANION
+bool    companionMode() { return s_companionMode; }
+void    setCompanionMode(bool v) {
+    s_companionMode = v;
+    s_prefs.putBool("cmpmode", v);
+}
+void    toggleCompanionMode() { setCompanionMode(!s_companionMode); }
+uint8_t companionTarget() { return s_companionTgt; }
+void    setCompanionTarget(uint8_t t) {
+    s_companionTgt = t > 1 ? 0 : t;
+    s_prefs.putUChar("cmptgt", s_companionTgt);
+}
+void    cycleCompanionTarget() { setCompanionTarget((uint8_t)(s_companionTgt ? 0 : 1)); }
+bool    companionScanPause() { return s_companionScanPause; }
+void    toggleCompanionScanPause() {
+    s_companionScanPause = !s_companionScanPause;
+    s_prefs.putBool("cmpscan", s_companionScanPause);
+}
+const char* companionTargetLabel() {
+    return s_companionTgt == 1 ? Theme::tr("MESHCORE", "МЕШКОР") : Theme::tr("MESHTASTIC", "МЕШТАСТИК");
+}
+const char* companionModeLabel() {
+    return Theme::tr(s_companionMode ? "COMPANION" : "BROMESH", s_companionMode ? "КОМПАНЬОН" : "БРОМЕШ");
+}
 #endif
 
 uint16_t mascotPaceMs() { return s_mascotPace; }
