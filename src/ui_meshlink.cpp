@@ -28,7 +28,9 @@ int s_nodeSel = -1;
 int s_nodesScroll    = 0;
 int s_chansScroll    = 0;
 int s_contactsScroll = 0;
-int s_chatScroll     = 0;
+// Chat scrolls in pixels (bubbles vary in height); one gesture row ≈ 36 px.
+int s_chatScrollPx   = 0;
+bool s_chatStick     = true;   // pinned to the newest while the user explores
 
 bool in(int x, int y, int bx, int by, int bw, int bh) {
     const int slop = 6;
@@ -112,7 +114,7 @@ void copyUtf8(char* dst, size_t cap, const char* src, size_t maxBytes) {
 void uiMeshNodesScroll(int delta)    { s_nodesScroll += delta; }
 void uiMeshChannelsScroll(int delta) { s_chansScroll += delta; }
 void uiMeshContactsScroll(int delta) { s_contactsScroll += delta; }
-void uiMeshChatScroll(int delta)     { s_chatScroll += delta; }
+void uiMeshChatScroll(int delta)     { s_chatScrollPx += delta * 36; s_chatStick = false; }
 
 // =====================================================================
 //  NODES
@@ -232,15 +234,38 @@ void uiMeshChannelsTick(TFT_eSPI& t, uint32_t now, bool advance) {
         t.setTextColor(off ? Theme::W95_SHADOW : Theme::WHITE, Theme::TASKBAR);
         t.setCursor(14, y + 4);
         Theme::printRU(t, head);
-        t.setTextColor(c.hasPsk ? Theme::CYAN : Theme::W95_LIGHT, Theme::TASKBAR);
-        t.setCursor(14, y + 15);
-        Theme::printRU(t, c.hasPsk ? Theme::tr("keyed", "с ключом") : Theme::tr("open", "без ключа"));
+        // Right side: role, the notify bell, the unread dot. The bell is a
+        // 24-px tap zone of its own (BELL hit); the rest of the row selects.
+        const int bellX = w - 8 - 26;
+        const bool bell = !off && MeshLink::channelNotify(c.index);
+        t.drawCircle(bellX + 8, y + ROW_H / 2, 7, bell ? Theme::AMBER : Theme::W95_SHADOW);
+        if (bell) {
+            t.fillCircle(bellX + 8, y + ROW_H / 2, 2, Theme::AMBER);
+            t.drawCircle(bellX + 8, y + ROW_H / 2, 4, Theme::AMBER);
+        }
         t.setTextColor(off ? Theme::W95_SHADOW : Theme::VAPOR_YELLOW, Theme::TASKBAR);
-        t.setCursor(w - 16 - Theme::textWidthRU(t, roleTxt), y + 4);
+        t.setCursor(bellX - 6 - Theme::textWidthRU(t, roleTxt), y + 4);
         Theme::printRU(t, roleTxt);
+        const uint8_t un = MeshLink::unreadChannel(c.index);
+        if (un) t.fillCircle(bellX - 12, y + ROW_H / 2, 4, Theme::RED);
+        // Second line: the last message (messenger-style preview) when the
+        // channel has mail, else the key/role facts.
+        const MeshLink::Message* last = nullptr;
+        for (uint8_t k = 0; k < MeshLink::inboxCount(); k++) {
+            const MeshLink::Message& m = MeshLink::inboxAt(k);
+            if (!m.direct && m.channel == c.index) { last = &m; break; }
+        }
+        char sub[48];
+        if (last) snprintf(sub, sizeof sub, "%s: %s", last->from, last->body);
+        else snprintf(sub, sizeof sub, "%s", c.hasPsk ? Theme::tr("keyed", "с ключом") : Theme::tr("open", "без ключа"));
+        char clip[40];
+        copyUtf8(clip, sizeof clip, sub, 34);
+        t.setTextColor(last ? (last->outgoing ? Theme::CYAN : Theme::W95_LIGHT) : (c.hasPsk ? Theme::CYAN : Theme::W95_LIGHT), Theme::TASKBAR);
+        t.setCursor(14, y + 15);
+        Theme::printRU(t, clip);
         if (active) {
             t.setTextColor(Theme::GREEN, Theme::TASKBAR);
-            t.setCursor(w - 16 - Theme::textWidthRU(t, "<-"), y + 15);
+            t.setCursor(bellX - 6 - Theme::textWidthRU(t, "<-"), y + 15);
             Theme::printRU(t, "<-");
         }
     }
@@ -259,6 +284,7 @@ MeshChannelsHit uiMeshChannelsHit(TFT_eSPI& t, int x, int y, int* row) {
         const int ry = ROW_Y0 + vi * ROW_PITCH;
         if (y >= ry && y < ry + ROW_PITCH && x >= 8 && x <= t.width() - 8) {
             if (row) *row = i;
+            if (x > t.width() - 8 - 32) return MeshChannelsHit::BELL;
             return MeshChannelsHit::ROW;
         }
     }
@@ -316,6 +342,9 @@ void uiMeshContactsTick(TFT_eSPI& t, uint32_t now, bool advance) {
         t.setTextColor(Theme::VAPOR_YELLOW, Theme::TASKBAR);
         t.setCursor(w - 16 - Theme::textWidthRU(t, num), y + 15);
         Theme::printRU(t, num);
+        // Unread DMs in this thread: a red dot ahead of the node number.
+        if (MeshLink::unreadDirect(c.num))
+            t.fillCircle(w - 16 - Theme::textWidthRU(t, num) - 9, y + ROW_H / 2, 4, Theme::RED);
     }
     if (n > (uint8_t)fit) Theme::drawScrollbar(t, w - 4, ROW_Y0, bodyH, n, fit, s_contactsScroll);
     Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, Theme::tr("BACK", "НАЗАД"), false);
@@ -340,10 +369,79 @@ MeshContactsHit uiMeshContactsHit(TFT_eSPI& t, int x, int y, int* row) {
 }
 
 // =====================================================================
-//  CHAT (one conversation)
+//  CHAT (one conversation) -- messenger bubbles
 // =====================================================================
+// Incoming left, ours right; the name rides inside the bubble like the apps
+// do, and long texts wrap instead of cutting at 44 characters. Bubbles vary
+// in height, so the list scrolls in pixels and sticks to the newest until
+// the user drags it up.
+namespace {
+constexpr int CHAT_LINE_MAX = 10;    // lines drawn per bubble, then "…"
+constexpr int CHAT_LINE_W   = 96;    // bytes per wrapped line (Cyrillic-safe)
+// Wrap `text` to `maxW` px. Returns the line count (capped); each line is
+// NUL-terminated and UTF-8 safe. Splits on spaces; an overlong word is
+// hard-cut on a character boundary.
+int chatWrap(TFT_eSPI& t, const char* text, int maxW, char out[][CHAT_LINE_W], int maxLines) {
+    int lines = 0;
+    const char* p = text ? text : "";
+    while (*p && lines < maxLines) {
+        // Skip leading spaces.
+        while (*p == ' ') p++;
+        if (!*p) break;
+        // Take words while they fit.
+        const char* lineStart = p;
+        const char* lineEnd = p;
+        const char* cur = p;
+        char probe[CHAT_LINE_W];
+        for (;;) {
+            while (*cur && *cur != ' ') cur++;   // end of word
+            size_t n = (size_t)(cur - lineStart);
+            if (n >= sizeof(probe)) {  // single word longer than the buffer
+                n = sizeof(probe) - 1;
+                while (n > 0 && ((uint8_t)lineStart[n] & 0xC0) == 0x80) n--;
+                memcpy(probe, lineStart, n); probe[n] = '\0';
+                if (Theme::textWidthRU(t, probe) > maxW && lineEnd > lineStart) break;
+                lineEnd = lineStart + n;
+                break;
+            }
+            memcpy(probe, lineStart, n); probe[n] = '\0';
+            if (Theme::textWidthRU(t, probe) > maxW) break;   // word does not fit
+            lineEnd = cur;
+            if (!*cur) break;
+            cur++;  // skip the space, try adding the next word
+        }
+        if (lineEnd == lineStart) {  // first word already too wide: hard cut
+            size_t n = (size_t)(cur - lineStart);
+            if (n >= sizeof(probe)) n = sizeof(probe) - 1;
+            while (n > 0 && ((uint8_t)lineStart[n] & 0xC0) == 0x80) n--;
+            if (!n) n = 1;
+            // A word with no spaces at all: shrink to the width, so the
+            // bubble never overflows its bank.
+            char cut[CHAT_LINE_W];
+            for (;;) {
+                memcpy(cut, lineStart, n); cut[n] = '\0';
+                if (Theme::textWidthRU(t, cut) <= maxW || n <= 1) break;
+                do { n--; } while (n > 0 && ((uint8_t)lineStart[n] & 0xC0) == 0x80);
+            }
+            lineEnd = lineStart + n;
+        }
+        size_t n = (size_t)(lineEnd - lineStart);
+        if (n >= (size_t)CHAT_LINE_W) {
+            n = CHAT_LINE_W - 1;
+            while (n > 0 && ((uint8_t)lineStart[n] & 0xC0) == 0x80) n--;
+        }
+        memcpy(out[lines], lineStart, n);
+        out[lines][n] = '\0';
+        lines++;
+        p = lineEnd;
+    }
+    return lines;
+}
+} // namespace
+
 void uiMeshChatInit(TFT_eSPI& t) {
-    s_chatScroll = 0;
+    s_chatScrollPx = 0;
+    s_chatStick = true;   // open on the newest, like every messenger
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
 
@@ -358,37 +456,75 @@ void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance) {
     t.setTextWrap(false);
     const int w = t.width();
     const Bar b = bar(t, 3);
-    const int fit = rowsThatFit(t, b.y[0]);
-    const int bodyH = b.y[0] - ROW_Y0 - 6;
-    const uint8_t n = MeshLink::inboxCount();
-    int matchN = 0;
-    for (int i = 0; i < (int)n; i++) if (msgMatches(MeshLink::inboxAt((uint8_t)i))) matchN++;
-    uiClampScroll(s_chatScroll, matchN, bodyH, ROW_PITCH);
-    int mi = 0;
-    for (int i = 0; i < (int)n && mi < matchN; i++) {
+    const int viewY0 = ROW_Y0;
+    const int viewY1 = b.y[0] - 6;
+    const int viewH = viewY1 - viewY0;
+    const int lineH = t.fontHeight() + 3;
+
+    // Collect the conversation oldest-first (inbox is newest-first).
+    const MeshLink::Message* msgs[MeshLink::MSG_MAX];
+    uint8_t matchN = 0;
+    for (int i = (int)MeshLink::inboxCount() - 1; i >= 0 && matchN < MeshLink::MSG_MAX; i--) {
         const MeshLink::Message& m = MeshLink::inboxAt((uint8_t)i);
-        if (!msgMatches(m)) continue;
-        const int vis = mi - s_chatScroll;
-        mi++;
-        if (vis < 0 || vis >= fit) continue;
-        const int y = ROW_Y0 + vis * ROW_PITCH;
-        t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
-        t.drawRect(8, y, w - 16, ROW_H, m.outgoing ? Theme::VAPOR_PURPLE : Theme::VAPOR_PINK);
-        t.setTextColor(m.outgoing ? Theme::CYAN : Theme::VAPOR_YELLOW, Theme::TASKBAR);
-        t.setCursor(14, y + 4);
-        Theme::printRU(t, m.from);
-        char body[48];
-        copyUtf8(body, sizeof body, m.body, 44);
-        t.setTextColor(Theme::WHITE, Theme::TASKBAR);
-        t.setCursor(14, y + 15);
-        Theme::printRU(t, body);
+        if (msgMatches(m)) msgs[matchN++] = &m;
+    }
+
+    const int maxBW = w - 16 - 64;   // bubble width ceiling, room to align
+    // Pass 1: heights (cached per frame; ≤24 short texts, cheap).
+    int hs[MeshLink::MSG_MAX];
+    int totalH = 0;
+    for (uint8_t i = 0; i < matchN; i++) {
+        char lines[CHAT_LINE_MAX][CHAT_LINE_W];
+        int nl = chatWrap(t, msgs[i]->body, maxBW - 14, lines, CHAT_LINE_MAX);
+        if (!nl) nl = 1;
+        hs[i] = 6 + lineH + nl * lineH + 6;   // pad + name + body + pad
+        totalH += hs[i] + 6;
+    }
+    const int maxScroll = totalH > viewH ? totalH - viewH : 0;
+    if (s_chatStick) s_chatScrollPx = maxScroll;
+    if (s_chatScrollPx < 0) s_chatScrollPx = 0;
+    if (s_chatScrollPx > maxScroll) { s_chatScrollPx = maxScroll; s_chatStick = true; }
+
+    // Pass 2: draw visible bubbles.
+    int y = viewY0 - s_chatScrollPx;
+    for (uint8_t i = 0; i < matchN; i++) {
+        const MeshLink::Message* m = msgs[i];
+        const int bh = hs[i];
+        if (y + bh >= viewY0 && y <= viewY1) {
+            char lines[CHAT_LINE_MAX][CHAT_LINE_W];
+            int nl = chatWrap(t, m->body, maxBW - 14, lines, CHAT_LINE_MAX);
+            if (!nl) { lines[0][0] = '\0'; nl = 1; }
+            int bw = 0;
+            for (int k = 0; k < nl; k++) {
+                const int lw = Theme::textWidthRU(t, lines[k]);
+                if (lw > bw) bw = lw;
+            }
+            const int nw = Theme::textWidthRU(t, m->from);
+            if (nw > bw) bw = nw;
+            bw += 14;
+            if (bw > maxBW) bw = maxBW;
+            const int bx = m->outgoing ? (w - 8 - bw) : 8;
+            const uint16_t rim = m->outgoing ? Theme::CYAN : Theme::VAPOR_PURPLE;
+            t.fillRoundRect(bx, y, bw, bh, 4, Theme::TASKBAR);
+            t.drawRoundRect(bx, y, bw, bh, 4, rim);
+            t.setTextColor(m->outgoing ? Theme::CYAN : Theme::VAPOR_YELLOW, Theme::TASKBAR);
+            t.setCursor(bx + 7, y + 4);
+            Theme::printRU(t, m->from);
+            t.setTextColor(Theme::WHITE, Theme::TASKBAR);
+            for (int k = 0; k < nl; k++) {
+                t.setCursor(bx + 7, y + 4 + lineH + k * lineH);
+                Theme::printRU(t, lines[k]);
+            }
+        }
+        y += bh + 6;
     }
     if (!matchN) {
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
         t.setCursor(8, ROW_Y0 + 4);
-        Theme::printRU(t, Theme::tr("Nothing here yet.", "Пока пусто."));
+        Theme::printRU(t, Theme::tr("Nothing here yet. SEND writes the first line.",
+                                    "Пока пусто. ОТПР напишет первую строку."));
     }
-    if (matchN > fit) Theme::drawScrollbar(t, w - 4, ROW_Y0, bodyH, matchN, fit, s_chatScroll);
+    if (maxScroll > 0) Theme::drawScrollbar(t, w - 4, viewY0, viewH, totalH, viewH, s_chatScrollPx);
     static char chl[24];
     if (MeshLink::dmTarget()) snprintf(chl, sizeof chl, "%s", Theme::tr("CHANNELS", "КАНАЛЫ"));
     else                     snprintf(chl, sizeof chl, "%s", MeshLink::channelAt(MeshLink::sendChannel()).name);

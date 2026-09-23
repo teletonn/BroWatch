@@ -22,7 +22,10 @@ void uiMeshNodesScroll(int delta);
 
 void uiMeshChannelsInit(TFT_eSPI& t);
 void uiMeshChannelsTick(TFT_eSPI& t, uint32_t now, bool advance = true);
-enum class MeshChannelsHit : uint8_t { ROW, BACK, NONE };
+// ROW selects the channel (opens its chat); BELL toggles whether the
+// channel's mail pops up on the main screen (toast + bubble). DMs always
+// notify, channels are opt-in.
+enum class MeshChannelsHit : uint8_t { ROW, BELL, BACK, NONE };
 MeshChannelsHit uiMeshChannelsHit(TFT_eSPI& t, int x, int y, int* row);
 void uiMeshChannelsScroll(int delta);
 

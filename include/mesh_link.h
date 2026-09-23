@@ -110,6 +110,10 @@ uint8_t        channelCount();
 const Channel& channelAt(uint8_t i);
 void           setSendChannel(uint8_t i);
 uint8_t        sendChannel();
+// Per-channel main-screen notification (toast + herald bubble). DMs always
+// notify; a channel only when its bell is on (primary by default).
+bool           channelNotify(uint8_t idx);
+void           setChannelNotify(uint8_t idx, bool on);
 
 // ---- contacts ----
 // Nodes the radio has heard (Meshtastic NodeInfo). Read from the config dump
@@ -161,8 +165,16 @@ uint8_t        inboxCount();
 const Message& inboxAt(uint8_t i);   // 0 is the newest
 // How many inbox messages are still unread, for the main screen's badge.
 uint8_t        unreadCount();
+// Unread in one channel / one DM thread, for the list dots.
+uint8_t        unreadChannel(uint8_t idx);
+uint8_t        unreadDirect(uint32_t num);
 // Mark everything read. Called when a conversation is opened.
 void           markInboxRead();
+// Mark the open conversation (DM target or send channel) read.
+void           markChatRead();
+// True when a message belongs to the open conversation (same rule the chat
+// list draws by).
+bool           chatMatches(const Message& m);
 
 // Queue a channel text for the task to send. Returns false when not READY or
 // the text is empty. The copy is bounded by TEXT_MAX. Texts go out paced

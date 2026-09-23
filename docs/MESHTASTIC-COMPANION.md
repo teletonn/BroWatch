@@ -37,20 +37,33 @@ region_presets=19`.
 
 `ToRadio.packet` (field 1) → `MeshPacket`:
 
-- `from=1` — **our node num. Always set it.** The firmware zeroes it before
-  routing, but self-addressed routing NAKs/acks (rate limit, PKI failure,
-  encode errors) are addressed to the phone-supplied `from`; with `from=0`
-  they go to `to=0` and never reach us. Without `from` our text writes were
-  silently dropped by the node (no QueueStatus, no routing reply at all).
-- `to=2` — `0xFFFFFFFF` for a channel broadcast, else the destination node num.
-- `channel=3` — the channel **index** (0-based). DMs use 0; the firmware
-  substitutes the channel it last heard the destination on
+- `from=1` — **our node num, encoded fixed32 (wire 5). Always set it.** The
+  firmware zeroes it before routing, but self-addressed routing NAKs/acks
+  (rate limit, PKI failure, encode errors) are addressed to the
+  phone-supplied `from`; with `from=0` they go to `to=0` and never reach us.
+  Without `from` our text writes were silently dropped by the node
+  (no QueueStatus, no routing reply at all).
+- `to=2` — `0xFFFFFFFF` for a channel broadcast, else the destination node
+  num, **fixed32**.
+- `channel=3` — the channel **index** (0-based), varint. DMs use 0; the
+  firmware substitutes the channel it last heard the destination on
   (`getEffectiveChannelIndex`), or keeps 0.
 - `decoded=4` — `Data{ portnum=1 (TEXT_MESSAGE_APP), payload }`, ≤200 bytes
   (`meshtastic_Constants_DATA_PAYLOAD_LEN` is 233; we use 200, UTF-8 safe).
-- `id=6` — random nonzero uint32. Used for the flood dedup, the PKI nonce,
-  and to match QueueStatus/Routing replies. `esp_random()`, never 0.
-- `hop_limit=9` — 3. `want_ack=10` — 1 (the firmware clears it for broadcast).
+- `id=6` — random nonzero uint32, **fixed32**. Used for the flood dedup, the
+  PKI nonce, and to match QueueStatus/Routing replies. `esp_random()`,
+  never 0.
+- `hop_limit=9` — 3 (varint). `want_ack=10` — 1 for DMs only (varint bool);
+  nobody acks a broadcast, and the firmware clears it there anyway.
+- **Wire-format gotcha (2025+, firmware ≥2.5): `MeshPacket.from/to/id`,
+  `Data.request_id/reply_id/dest/source`, `NodeInfo.last_heard` are
+  fixed32 (wire 5), NOT varints.** Verified against the official Python
+  client's `mesh_pb2` descriptors and live packets from STVG
+  (`0D 5C0A304A ...` = from as fixed32 LE). A varint-encoded `from/to/id`
+  is skipped by the node's decoder, so the node sees `from=0/to=0`: our
+  sends were dropped/misrouted and every incoming parsed as
+  `from=0000/to=broadcast` (DMs misfiled as channel mail from "0000").
+  Decode must accept both wires (old firmware sent varints); encode fixed32.
 - **Do NOT set `pki_encrypted` or `public_key`.** The firmware decides PKI vs
   channel on its own. Setting `pki_encrypted=true` when PKI is impossible
   forces a hard failure instead of a fallback.
@@ -73,9 +86,13 @@ region_presets=19`.
   we have seen (`Contact.hasKey`).
 - Receiving: the node decrypts PKI/channel itself and hands the phone a
   `decoded` packet. A DM to us arrives as `packet{ decoded{ portnum=1 } }`
-  with `to` = our num. Our parser only needs portnum 1 + payload.
+  with `to` = our num (fixed32) and `from` = sender (fixed32). Our parser
+  only needs portnum 1 + payload + from/to.
 - MeshPacket fields we must skip on RX: `public_key=16`, `pki_encrypted=17`,
-  `rx_time=7`, `rx_snr=8` (fixed32), etc. — all handled by the generic skipper.
+  `rx_time=7` (fixed32), `rx_snr=8` (float/fixed32), `rx_rssi=12` (varint
+  int32), etc. — all handled by the generic skipper.
+- `NodeInfo`: `num=1` (varint), `user=2`, **`last_heard=5` (fixed32)** —
+  not field 6 (`device_metrics`, a message). Parse field 5.
 
 ## 5. Node-side limits that bite
 
@@ -107,7 +124,24 @@ PhoneAPI state, so it is the cheapest end-to-end health check.
    target and returns to the chat.
 2. **Missing `MeshPacket.from`.** Our writes were ACKed by BLE but produced
    no QueueStatus at all. Setting `from` = own node num fixed it.
-3. **MTU left at 23.** Raised to 517 for the ~40-byte ToRadio writes.
+3. **varint-encoded `from/to/id` (firmware ≥2.5 speaks fixed32).** Every
+   incoming parsed as `from=0000/to=broadcast`: DMs showed as channel mail
+   from "0000" and never reached the DM chat; Routing `request_id` never
+   matched, so delivery was never confirmed; our own sends (varint
+   `from/to`) were skipped by the node's decoder and dropped/misrouted.
+   Fixed: encode fixed32, decode either wire; `Data.request_id` likewise;
+   `NodeInfo.last_heard` is field 5 fixed32 (was read as field 6 varint —
+   always 0).
+4. **MTU left at 23.** Raised to 517 for the ~40-byte ToRadio writes.
+5. **Link drops every ~minute: disconnect reason 520.** 520 = 0x208 =
+   `BLE_HS_HCI_ERR(0x08)` = HCI Connection Timeout (supervision timer):
+   the shared observer scan left running beside the GATT link starves its
+   link-layer events on the single radio until the timer fires. Fix: the
+   scan runs only while hunting -- off for the life of a link, back on for
+   discovery/retries (`hwScanSet`). Detection never restarts a stopped scan
+   itself; leaving COMPANION mode (`shutdown`) restores it for BROMESH.
+   Also: an auth wait that times out (status 0, not just -1) is now a
+   `pair timeout` failure instead of stumbling on unencrypted.
 4. **Bench/test code force-entered compose and spam-sent.** Removed; sends
    now go only through the paced UI path.
 

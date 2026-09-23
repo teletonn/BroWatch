@@ -43,9 +43,13 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
 enum class CompanionHit : uint8_t { NONE, CHANNELS, CONTACTS, MESSAGES };
 CompanionHit uiClearCompanionHit(int x, int y);
 // A companion message just arrived: the herald flies in across the main
-// screen carrying the letter, hovers, and leaves. Purely a sighting -- the
-// message itself is the toast and the inbox.
+// screen carrying the letter, hovers, and leaves -- and a message bubble
+// slides in with it, showing who wrote and what, so the mail is readable
+// without leaving the main screen. Tapping the bubble opens that exact
+// conversation (uiClearHeraldHit); it hides itself after a few seconds.
 void uiClearHerald(uint32_t now);
+void uiClearHeraldMsg(uint32_t now, const char* from, const char* body, bool direct, const char* where);
+bool uiClearHeraldHit(int x, int y);
 #endif
 
 #if SQUACH_MESH

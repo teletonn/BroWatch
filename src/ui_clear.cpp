@@ -2730,17 +2730,123 @@ CompanionHit uiClearCompanionHit(int x, int y) {
 // main screen was up. It flies in from the right, hovers over the mascot with
 // a slow bob while the envelope dips below it, then carries on out to the
 // left. Drawn last so it passes in front of everything, the way the pet does.
+// With it slides a message bubble -- who wrote, what they said -- so the
+// mail is readable right here; tapping the bubble opens that conversation.
 // Deliberately small and quick: a sighting, not a takeover.
 static uint32_t s_heraldStart = 0;
-static const uint32_t HERALD_MS = 4200;
+static const uint32_t HERALD_MS = 6000;
+static char s_heraldFrom[8] = "";
+static char s_heraldBody[MeshLink::TEXT_MAX + 1] = "";
+static char s_heraldWhere[16] = "";
+static bool s_heraldDm = false;
+static int s_heraldCard[4] = {0, 0, 0, 0};  // x,y,w,h for the tap
+static bool s_heraldCardOn = false;
 
 void uiClearHerald(uint32_t now) { s_heraldStart = now; }
+void uiClearHeraldMsg(uint32_t now, const char* from, const char* body, bool direct, const char* where) {
+    s_heraldStart = now;
+    if (from) { strncpy(s_heraldFrom, from, sizeof(s_heraldFrom) - 1); s_heraldFrom[sizeof(s_heraldFrom) - 1] = '\0'; }
+    else s_heraldFrom[0] = '\0';
+    if (body) { strncpy(s_heraldBody, body, sizeof(s_heraldBody) - 1); s_heraldBody[sizeof(s_heraldBody) - 1] = '\0'; }
+    else s_heraldBody[0] = '\0';
+    if (where) { strncpy(s_heraldWhere, where, sizeof(s_heraldWhere) - 1); s_heraldWhere[sizeof(s_heraldWhere) - 1] = '\0'; }
+    else s_heraldWhere[0] = '\0';
+    s_heraldDm = direct;
+}
+bool uiClearHeraldHit(int x, int y) {
+    if (!Settings::companionMode() || !s_heraldCardOn) return false;
+    return x >= s_heraldCard[0] && x < s_heraldCard[0] + s_heraldCard[2] &&
+           y >= s_heraldCard[1] && y < s_heraldCard[1] + s_heraldCard[3];
+}
+
+// Word-wrap for the bubble card: two lines max, UTF-8 safe.
+static int heraldWrap(TFT_eSPI& t, const char* text, int maxW, char out[][64], int maxLines) {
+    int lines = 0;
+    const char* p = text ? text : "";
+    while (*p && lines < maxLines) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        const char* ls = p;
+        const char* le = p;
+        const char* cur = p;
+        char probe[64];
+        for (;;) {
+            while (*cur && *cur != ' ') cur++;
+            size_t n = (size_t)(cur - ls);
+            if (n >= sizeof(probe)) n = sizeof(probe) - 1;
+            memcpy(probe, ls, n); probe[n] = '\0';
+            if (Theme::textWidthRU(t, probe) > maxW) break;
+            le = cur;
+            if (!*cur) break;
+            cur++;
+        }
+        if (le == ls) {
+            size_t n = (size_t)(cur - ls);
+            if (n >= sizeof(probe)) n = sizeof(probe) - 1;
+            while (n > 0 && ((uint8_t)ls[n] & 0xC0) == 0x80) n--;
+            if (!n) n = 1;
+            char cut[64];
+            for (;;) {
+                memcpy(cut, ls, n); cut[n] = '\0';
+                if (Theme::textWidthRU(t, cut) <= maxW || n <= 1) break;
+                do { n--; } while (n > 0 && ((uint8_t)ls[n] & 0xC0) == 0x80);
+            }
+            le = ls + n;
+        }
+        size_t n = (size_t)(le - ls);
+        if (n >= 64) { n = 63; while (n > 0 && ((uint8_t)ls[n] & 0xC0) == 0x80) n--; }
+        memcpy(out[lines], ls, n);
+        out[lines][n] = '\0';
+        lines++;
+        p = le;
+    }
+    return lines;
+}
 
 static void drawHerald(TFT_eSPI& t, uint32_t now) {
-    if (!s_heraldStart) return;
+    if (!s_heraldStart) { s_heraldCardOn = false; return; }
     const uint32_t e = now - s_heraldStart;
-    if (e > HERALD_MS) { s_heraldStart = 0; return; }
+    if (e > HERALD_MS) { s_heraldStart = 0; s_heraldCardOn = false; return; }
     const int w = t.width();
+    // The message card: slides in from the right, parks under the title,
+    // slides out at the end. Tapping it opens the conversation.
+    s_heraldCardOn = false;
+    if (s_heraldFrom[0] || s_heraldBody[0]) {
+        t.setTextSize(1);
+        t.setTextWrap(false);
+        const int cw = w - 20;
+        char l0[64], l1[64];
+        char ww[2][64];
+        int nl = heraldWrap(t, s_heraldBody, cw - 16, ww, 2);
+        if (nl < 1) { ww[0][0] = '\0'; nl = 1; }
+        strncpy(l0, ww[0], sizeof l0 - 1); l0[sizeof l0 - 1] = '\0';
+        if (nl > 1) { strncpy(l1, ww[1], sizeof l1 - 1); l1[sizeof l1 - 1] = '\0'; }
+        else l1[0] = '\0';
+        const int lh = t.fontHeight() + 2;
+        const int ch = 8 + lh + nl * lh + 7;
+        const int cy = 34;
+        int cx;
+        const int parkX = 10;
+        if (e < 700) cx = w - (int)((int32_t)(w - parkX) * (int)e / 700);
+        else if (e < HERALD_MS - 700) cx = parkX;
+        else cx = parkX - (int)((int32_t)(parkX + cw + 10) * (int)(e - (HERALD_MS - 700)) / 700);
+        t.fillRoundRect(cx, cy, cw, ch, 5, Theme::TASKBAR);
+        t.drawRoundRect(cx, cy, cw, ch, 5, s_heraldDm ? Theme::VAPOR_PINK : Theme::CYAN);
+        char head[28];
+        snprintf(head, sizeof head, "%s %s", s_heraldFrom, s_heraldDm ? "DM" : s_heraldWhere);
+        t.setTextColor(s_heraldDm ? Theme::VAPOR_YELLOW : Theme::CYAN, Theme::TASKBAR);
+        t.setCursor(cx + 8, cy + 5);
+        Theme::printRU(t, head);
+        t.setTextColor(Theme::WHITE, Theme::TASKBAR);
+        t.setCursor(cx + 8, cy + 5 + lh);
+        Theme::printRU(t, l0);
+        if (l1[0]) {
+            t.setCursor(cx + 8, cy + 5 + 2 * lh);
+            Theme::printRU(t, l1);
+        }
+        s_heraldCard[0] = cx; s_heraldCard[1] = cy; s_heraldCard[2] = cw; s_heraldCard[3] = ch;
+        s_heraldCardOn = true;
+    }
     const int hx = w / 2 + 40;          // where it hovers
     int x;
     if (e < 1200)       x = (w + 30) - (int)((int32_t)(w + 30 - hx) * (int)e / 1200);

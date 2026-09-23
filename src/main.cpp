@@ -575,6 +575,12 @@ uint32_t            bootStart = 0;
 uint32_t            alertStart= 0;
 uint32_t            watchAlertStart = 0;
 uint32_t            lastTouch = 0;
+#if MESH_COMPANION
+// The conversation the herald bubble advertises: tapping it opens exactly
+// this thread (DM peer or channel), not just whatever chat was last open.
+MeshLink::Message   s_heraldMsg;
+bool                s_heraldMsgOn = false;
+#endif
 bool                prevTouchValid = false; // last frame's tp.valid, for true press/release edge detection (see loop())
 DetectionType       lastAlertType = DetectionType::UNKNOWN;
 Confidence          lastAlertConf = Confidence::HIGH_CONF;
@@ -1799,7 +1805,7 @@ static void enterMeshNodes() {
     uiMeshNodesInit(*canvas);
 }
 static void enterMeshChat() {
-    MeshLink::markInboxRead();
+    MeshLink::markChatRead();
     state = AppState::MESH_LINK_CHAT;
     transitionStart = millis();
     uiMeshChatInit(*canvas);
@@ -2877,6 +2883,17 @@ void loop() {
         MeshLink::Message m;
         while (MeshLink::popMessage(m)) {
             if (m.outgoing) continue;
+            // Reading this thread right now: no toast, and it never goes
+            // unread under your eyes.
+            if (state == AppState::MESH_LINK_CHAT && MeshLink::chatMatches(m)) {
+                MeshLink::markChatRead();
+                continue;
+            }
+            // Notify like the official clients: DMs always pop; a channel
+            // only when its bell is on (see CHANNELS). Anything else is
+            // collected silently -- the dots and the badge still count it.
+            const bool notify = m.direct || MeshLink::channelNotify(m.channel);
+            if (!notify) continue;
             // Bytes, but never through the middle of a Russian letter.
             char b[40];
             size_t n = strlen(m.body);
@@ -2886,7 +2903,22 @@ void loop() {
             snprintf(sub, sizeof sub, "%s: %s", m.from, b);
             Theme::showToast(Theme::tr("MESSAGE", "СООБЩЕНИЕ"), sub, Theme::VAPOR_PINK, 3500);
             // ...and the herald carries it across the main screen.
-            if (state == AppState::CLEAR) uiClearHerald(now);
+            if (state == AppState::CLEAR) {
+                char where[16] = "";
+                if (!m.direct) {
+                    for (uint8_t ci = 0; ci < MeshLink::channelCount(); ci++) {
+                        const MeshLink::Channel& c = MeshLink::channelAt(ci);
+                        if (c.index == m.channel && c.name[0]) {
+                            strncpy(where, c.name, sizeof(where) - 1);
+                            break;
+                        }
+                    }
+                    if (!where[0]) snprintf(where, sizeof where, "CH%u", (unsigned)m.channel);
+                }
+                uiClearHeraldMsg(now, m.from, m.body, m.direct, where);
+                s_heraldMsg = m;
+                s_heraldMsgOn = true;
+            }
         }
     }
     // A send the node refused, surfaced instead of silently vanishing: the
@@ -3501,7 +3533,19 @@ void loop() {
             // screen: it sits in the counter row's place and must win over the
             // edge-zone slivers it overlaps on the left and right.
 #if MESH_COMPANION
+            // The herald's message bubble, ahead of the footer panel: it is
+            // drawn over everything, so its tap wins too. Opens exactly the
+            // thread the bubble advertises.
             if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
+                uiClearHeraldHit(tp.x, tp.y)) {
+                lastTouch = now;
+                sqActive  = false;
+                if (s_heraldMsgOn) {
+                    if (s_heraldMsg.direct) MeshLink::setDmTarget(s_heraldMsg.fromNum);
+                    else { MeshLink::setDmTarget(0); MeshLink::setSendChannel(s_heraldMsg.channel); }
+                    enterMeshChat();
+                }
+            } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                 uiClearCompanionHit(tp.x, tp.y) != CompanionHit::NONE) {
                 lastTouch = now;
                 sqActive  = false;
@@ -4660,6 +4704,17 @@ void loop() {
                                 enterMeshChat();            // open it to read and send
                             }
                             break;
+                        case MeshChannelsHit::BELL: {
+                            // The bell: this channel's mail does (or stops
+                            // doing) the main-screen toast + bubble. Stays on
+                            // the list; the bell redraws itself.
+                            if (row >= 0 && row < MeshLink::channelCount()) {
+                                const uint8_t idx = MeshLink::channelAt((uint8_t)row).index;
+                                if (MeshLink::channelAt((uint8_t)row).role != 0)
+                                    MeshLink::setChannelNotify(idx, !MeshLink::channelNotify(idx));
+                            }
+                            break;
+                        }
                         case MeshChannelsHit::BACK: enterClear(); break;
                         default: break;
                     }

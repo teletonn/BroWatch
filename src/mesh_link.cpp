@@ -47,6 +47,9 @@ uint8_t  s_nodeN = 0;
 // -------- channels --------
 Channel  s_chans[CHAN_MAX];
 uint8_t  s_chanN = 0;
+// Show this channel's mail on the main screen (toast + herald bubble). DMs
+// always notify; channels are opt-in per channel, primary on by default.
+bool     s_notify[CHAN_MAX] = {false};
 
 // -------- contacts: every node the radio has told us about --------
 Contact  s_contacts[CONTACT_MAX];
@@ -205,6 +208,22 @@ static bool pbBytes(Pb& b, const uint8_t*& data, size_t& len) {
     data = b.p + b.i; len = (size_t)l; b.i += (size_t)l;
     return true;
 }
+// fixed32 (wire 5), little-endian: what current firmware uses for node
+// numbers and packet ids (MeshPacket.from/to/id, Data.request_id/reply_id,
+// NodeInfo.last_heard). Older firmware sent the same fields as varints, so
+// the parsers below accept both wires.
+static bool pbFixed32(Pb& b, uint32_t& v) {
+    if (b.i + 4 > b.n) { b.ok = false; return false; }
+    v = (uint32_t)b.p[b.i] | ((uint32_t)b.p[b.i + 1] << 8) |
+        ((uint32_t)b.p[b.i + 2] << 16) | ((uint32_t)b.p[b.i + 3] << 24);
+    b.i += 4;
+    return true;
+}
+static bool pbU32either(Pb& b, uint32_t wire, uint32_t& out) {
+    if (wire == 0) { uint64_t v; if (!pbVarint(b, v)) return false; out = (uint32_t)v; return true; }
+    if (wire == 5) return pbFixed32(b, out);
+    b.ok = false; return false;
+}
 
 // ---- writer ----
 struct Pbw { uint8_t* p; size_t n; size_t i; };
@@ -214,6 +233,12 @@ static void wVarint(Pbw& w, uint64_t v) {
 }
 static void wTag(Pbw& w, uint32_t field, uint32_t wire) { wVarint(w, ((uint64_t)field << 3) | wire); }
 static void wVarintField(Pbw& w, uint32_t field, uint64_t v) { wTag(w, field, 0); wVarint(w, v); }
+// fixed32 field (wire 5): node numbers and packet ids on current firmware.
+static void wFixed32Field(Pbw& w, uint32_t field, uint32_t v) {
+    wTag(w, field, 5);
+    if (w.i + 4 <= w.n) { w.p[w.i++] = (uint8_t)v; w.p[w.i++] = (uint8_t)(v >> 8); w.p[w.i++] = (uint8_t)(v >> 16); w.p[w.i++] = (uint8_t)(v >> 24); }
+    else w.i = w.n;
+}
 static void wBytesField(Pbw& w, uint32_t field, const uint8_t* d, size_t len) {
     wTag(w, field, 2); wVarint(w, len);
     size_t c = (w.i + len <= w.n) ? len : (w.n - w.i);
@@ -254,9 +279,9 @@ static void parseNodeInfo(Pb b) {
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
-        if (f == 1 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; num = (uint32_t)v; }
+        if (f == 1 && (w == 0 || w == 5)) { if (!pbU32either(b, w, num)) break; }
         else if (f == 2 && w == 2) { Pb u; if (pbSub(b, u)) parseUser(u, tmp); }
-        else if (f == 6 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; lastHeard = (uint32_t)v; }
+        else if (f == 5 && (w == 0 || w == 5)) { if (!pbU32either(b, w, lastHeard)) break; }
         else if (!pbSkip(b, w)) break;
     }
     Contact* c = upsertContact(num);
@@ -314,6 +339,14 @@ static void parseChannel(Pb b) {
         s_chans[index].pskLen = (uint8_t)pskLen;
         if (pskLen) memcpy(s_chans[index].psk, psk, pskLen);
         s_chans[index].present = true;
+        // A freshly synced primary notifies the main screen; secondaries
+        // stay quiet until the user rings their bell. Do not clobber a
+        // choice the user already made this session.
+        static bool s_notifyTouched[CHAN_MAX] = {false};
+        if (!s_notifyTouched[index]) {
+            s_notify[index] = (role == 1);
+            s_notifyTouched[index] = true;
+        }
         if (name[0]) { strncpy(s_chans[index].name, name, sizeof(s_chans[index].name) - 1); s_chans[index].name[sizeof(s_chans[index].name) - 1] = '\0'; }
         else if (role == 1) snprintf(s_chans[index].name, sizeof(s_chans[index].name), "PRIMARY");
         else if (role == 0) snprintf(s_chans[index].name, sizeof(s_chans[index].name), "OFF");
@@ -346,10 +379,10 @@ static void parseMeshPacket(Pb b) {
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
-        if (f == 1 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; fromNum = (uint32_t)v; }
-        else if (f == 2 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; toNum = (uint32_t)v; }
+        if (f == 1 && (w == 0 || w == 5)) { if (!pbU32either(b, w, fromNum)) break; }
+        else if (f == 2 && (w == 0 || w == 5)) { if (!pbU32either(b, w, toNum)) break; }
         else if (f == 3 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; channel = (uint8_t)v; }
-        else if (f == 6 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; reqId = (uint32_t)v; }
+        else if (f == 6 && (w == 0 || w == 5)) { if (!pbU32either(b, w, reqId)) break; }
         else if (f == 4 && w == 2) {  // Data
             Pb d;
             if (pbSub(b, d)) {
@@ -358,7 +391,7 @@ static void parseMeshPacket(Pb b) {
                     if (!pbTag(d, df, dw)) break;
                     if (df == 1 && dw == 0) { uint64_t v; if (!pbVarint(d, v)) break; portnum = (uint32_t)v; }
                     else if (df == 2 && dw == 2) { if (!pbBytes(d, payload, plen)) break; }
-                    else if (df == 6 && dw == 0) { uint64_t v; if (!pbVarint(d, v)) break; reqOf = (uint32_t)v; }
+                    else if (df == 6 && (dw == 0 || dw == 5)) { if (!pbU32either(d, dw, reqOf)) break; }
                     else if (!pbSkip(d, dw)) break;
                 }
             }
@@ -367,6 +400,24 @@ static void parseMeshPacket(Pb b) {
     }
     if (portnum == 1 /* TEXT_MESSAGE_APP */ && payload && plen)
         pushIncoming(fromNum, toNum, channel, payload, plen);
+    else if (portnum == 4 /* NODEINFO_APP */ && payload && plen && fromNum) {
+        // A live identity broadcast: the User message itself is the payload.
+        // This is how keys and names arrive between config dumps -- without
+        // it a contact met after connect stays keyless and unnreachable.
+        Contact* c = upsertContact(fromNum);
+        if (c) {
+            Contact tmp; memset(&tmp, 0, sizeof tmp);
+            Pb u{ payload, plen, 0, true };
+            parseUser(u, tmp);
+            if (tmp.shortName[0]) { strncpy(c->shortName, tmp.shortName, sizeof(c->shortName) - 1); c->shortName[sizeof(c->shortName) - 1] = '\0'; }
+            if (tmp.longName[0])  { strncpy(c->longName,  tmp.longName,  sizeof(c->longName)  - 1); c->longName[sizeof(c->longName) - 1] = '\0'; }
+            if (tmp.role) c->role = tmp.role;
+            if (tmp.hasKey) {
+                c->hasKey = true;
+                if (tmp.keyLen) { memcpy(c->key, tmp.key, tmp.keyLen); c->keyLen = tmp.keyLen; }
+            }
+        }
+    }
     else if (portnum == 5 /* ROUTING_APP */) {
         // A want_ack send comes back as a Routing packet addressed to us. An
         // error_reason of NONE means the mesh took it; anything else is the
@@ -548,7 +599,22 @@ void sendHeartbeat(uint32_t nonce) {
     wVarintField(h, 1, nonce);                // Heartbeat.nonce
     uint8_t buf[8]; Pbw w{ buf, sizeof buf, 0 };
     wBytesField(w, 7, hb, h.i);               // ToRadio.heartbeat
-    s_toRadio->writeValue(buf, w.i, true);
+    bool ok = s_toRadio->writeValue(buf, w.i, true);
+    Serial.printf("[meshlink] BEAT nonce=%u %s\n", (unsigned)nonce, ok ? "sent" : "WRITE FAILED");
+}
+
+// The shared observer scan and a GATT link share one radio. A scan left
+// running beside the connection starves its link-layer events until the
+// supervision timer fires (disconnect reason 520 = HCI 0x08 Connection
+// Timeout, seen every minute or so on the bench). So the scan runs only
+// while hunting: off for the life of a link, back on for discovery and
+// retries. Detection never restarts a stopped scan on its own, and leaving
+// COMPANION mode (shutdown) puts it back for BROMESH object detection.
+static void hwScanSet(bool on) {
+    NimBLEScan* sc = NimBLEDevice::getScan();
+    if (!sc) return;
+    if (on) { if (!sc->isScanning()) sc->start(0, false, false); }
+    else if (sc->isScanning()) sc->stop();
 }
 
 // A byte cap that never splits a UTF-8 character: back off the continuation
@@ -571,14 +637,16 @@ bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text) {
     wBytesField(d, 2, (const uint8_t*)text, tlen);  // Data.payload
 
     uint8_t pkt[16 + sizeof data]; Pbw p{ pkt, sizeof pkt, 0 };
-    wVarintField(p, 1, s_ownNodeNum);          // MeshPacket.from (needed for local routing acks)
+    wFixed32Field(p, 1, s_ownNodeNum);        // MeshPacket.from (fixed32 on current firmware)
     const uint32_t pid = esp_random() ? esp_random() : 1;
-    wVarintField(p, 2, toNum);                 // MeshPacket.to (broadcast or a node)
+    wFixed32Field(p, 2, toNum);               // MeshPacket.to (broadcast or a node)
     wVarintField(p, 3, channel);               // MeshPacket.channel
     wBytesField(p, 4, data, d.i);              // MeshPacket.decoded
-    wVarintField(p, 6, pid);                   // MeshPacket.id
+    wFixed32Field(p, 6, pid);                  // MeshPacket.id
     wVarintField(p, 9, 3);                     // MeshPacket.hop_limit
-    wVarintField(p, 10, 1);                    // MeshPacket.want_ack
+    // want_ack only makes sense point to point: nobody acks a broadcast, and
+    // the flag on one would just promise a Routing reply that never comes.
+    if (toNum != BROADCAST_TO && toNum != 0) wVarintField(p, 10, 1);
 
     uint8_t out[8 + sizeof pkt]; Pbw o{ out, sizeof out, 0 };
     wBytesField(o, 1, pkt, p.i);               // ToRadio.packet
@@ -619,11 +687,9 @@ void doConnect(uint8_t index) {
                   s_nodes[index].mac[3], s_nodes[index].mac[4], s_nodes[index].mac[5]);
     // The continuous observer scan owns the radio, and with it running the
     // initiating connect is not scheduled and times out (BLE_HS_ETIMEOUT).
-    // Pause it for the attempt and bring it back either way -- the scan
-    // callbacks live on the singleton, so a stop/start keeps detection whole.
-    NimBLEScan* sc = NimBLEDevice::getScan();
-    const bool wasScanning = sc && sc->isScanning();
-    if (wasScanning) sc->stop();
+    // Pause it for the attempt; on failure discovery resumes, on success it
+    // stays off for the life of the link (see hwScanSet).
+    hwScanSet(false);
 
     s_connStatus = 0;
     s_connReason = 0;
@@ -651,7 +717,7 @@ void doConnect(uint8_t index) {
         ok = ok2;
     }
     if (!ok) {
-        if (wasScanning) sc->start(0, false, false);
+        hwScanSet(s_scanning);
         s_state = State::ERROR;
         snprintf(s_reason, sizeof s_reason, "connect failed");
         Serial.printf("[meshlink] connect FAILED (reason=%d)\n", s_connReason);
@@ -672,15 +738,18 @@ void doConnect(uint8_t index) {
         while (s_authStatus == 0 && millis() - t0 < 12000) vTaskDelay(pdMS_TO_TICKS(50));
     }
     Serial.printf("[meshlink] auth status=%d\n", (int)s_authStatus);
-    if (s_authStatus < 0) {
-        if (wasScanning) sc->start(0, false, false);
+    if (s_authStatus <= 0) {
+        // -1: refused. 0: the 12 s wait ran out (secureConnection itself can
+        // block ~30 s on a dying link) -- either way there is no encrypted
+        // link, and without it the node hides the mesh service.
+        hwScanSet(s_scanning);
         s_client->disconnect();
         s_state = State::ERROR;
-        snprintf(s_reason, sizeof s_reason, "pair failed");
+        snprintf(s_reason, sizeof s_reason, s_authStatus < 0 ? "pair failed" : "pair timeout");
         return;
     }
 
-    if (wasScanning) sc->start(0, false, false);
+    // Linked: the observer stays off until the drop (see hwScanSet).
     Serial.printf("[meshlink] discovering GATT (MTU=%u)\n", (unsigned)s_client->getMTU());
     NimBLERemoteService* svc = s_client->getService(NimBLEUUID(kMeshSvc));
     if (!svc) { snprintf(s_reason, sizeof s_reason, "no mesh service"); s_client->disconnect(); s_state = State::ERROR; return; }
@@ -719,6 +788,7 @@ void doConnect(uint8_t index) {
 void doDisconnect() {
     if (s_client && s_client->isConnected()) s_client->disconnect();
     s_toRadio = s_fromRadio = nullptr;
+    hwScanSet(s_scanning);
     s_state = s_scanning ? State::SCANNING : State::OFF;
 }
 
@@ -763,6 +833,13 @@ void taskLoop(void*) {
                 s_lastRead = s_fromNum;
                 Serial.printf("[meshlink] READY: own=%08X, %u channels, %u contacts\n",
                               (unsigned)s_ownNodeNum, (unsigned)s_chanN, (unsigned)s_contactN);
+                // Sync, the way the official clients do on connect: the dump
+                // above is the channels/contacts; a nonce-1 heartbeat asks the
+                // node to re-broadcast our NodeInfo (so the mesh re-learns us),
+                // and the READY drain below keeps live NodeInfos/texts flowing.
+                // (There is no "missed messages" fetch in PhoneAPI -- a node
+                // only streams live packets unless it runs Store & Forward.)
+                sendHeartbeat(1);
 #if MESH_COMPANION_AUTOSTART
                 for (uint8_t ci = 0; ci < s_chanN; ci++)
                     Serial.printf("[meshlink]   ch%u role=%u psk=%d name='%s'\n",
@@ -798,6 +875,9 @@ void taskLoop(void*) {
                 s_reason[0] = '\0';
                 snprintf(s_reason, sizeof s_reason, "lost node");
                 s_state = State::ERROR;
+                // The retry path below hunts by advert again, so discovery
+                // gets the radio back now.
+                hwScanSet(s_scanning);
             }
         }
         // THE BOUND NODE. While the board is told to be connected, a scan in
@@ -893,6 +973,8 @@ void shutdown() {
     s_pickSingle = false;
     if (s_reqQ) { Req r; memset(&r, 0, sizeof r); r.kind = Req::DISCONNECT; xQueueSend(s_reqQ, &r, 0); }
     s_scanning = false;
+    // Back to BROMESH object detection, which never restarts a stopped scan.
+    hwScanSet(true);
 }
 
 void setTarget(Target t) { s_target = t; }
@@ -901,6 +983,7 @@ Target target()          { return s_target; }
 void startScan() {
     s_scanning = true;
     s_scanSince = millis();
+    hwScanSet(true);   // a stopped observer (see hwScanSet) finds nothing
     if (s_state == State::OFF || s_state == State::ERROR) s_state = State::SCANNING;
     if (s_reqQ) { Req r; memset(&r, 0, sizeof r); r.kind = Req::SCAN_ON; xQueueSend(s_reqQ, &r, 0); }
 }
@@ -966,6 +1049,8 @@ uint8_t        channelCount() { return s_chanN; }
 const Channel& channelAt(uint8_t i) { return s_chans[i < CHAN_MAX ? i : 0]; }
 void           setSendChannel(uint8_t i) { s_sendChan = i; }
 uint8_t        sendChannel() { return s_sendChan; }
+bool           channelNotify(uint8_t idx) { return idx < CHAN_MAX ? s_notify[idx] : false; }
+void           setChannelNotify(uint8_t idx, bool on) { if (idx < CHAN_MAX) s_notify[idx] = on; }
 
 bool sendChannelText(uint8_t channel, const char* text) {
     if (s_state != State::READY || !s_reqQ) { s_sendResult = SendResult::NOT_READY; return false; }
@@ -1030,6 +1115,37 @@ uint8_t unreadCount() {
 }
 void markInboxRead() {
     for (uint8_t i = 0; i < s_inboxLen; i++) s_inbox[i].unread = false;
+}
+// Per-conversation read/unread, for the dots in the channel/contact lists:
+// a conversation is the open DM, else the send channel.
+static bool msgInOpenChat(const Message& m) {
+    if (s_dmTarget) return m.direct && (m.fromNum == s_dmTarget || m.toNum == s_dmTarget);
+    return !m.direct && m.channel == s_sendChan;
+}
+bool chatMatches(const Message& m) { return msgInOpenChat(m); }
+uint8_t unreadChannel(uint8_t idx) {
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < s_inboxLen; i++) {
+        const Message& m = inboxAt(i);
+        if (m.unread && !m.direct && m.channel == idx) n++;
+    }
+    return n;
+}
+uint8_t unreadDirect(uint32_t num) {
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < s_inboxLen; i++) {
+        const Message& m = inboxAt(i);
+        if (m.unread && m.direct && (m.fromNum == num || m.toNum == num)) n++;
+    }
+    return n;
+}
+void markChatRead() {
+    for (uint8_t i = 0; i < s_inboxLen; i++) {
+        int idx = (int)s_inboxHead - 1 - (int)i;
+        while (idx < 0) idx += INBOX_N;
+        Message& m = s_inbox[idx % INBOX_N];
+        if (msgInOpenChat(m)) m.unread = false;
+    }
 }
 
 void onAdvertised(const uint8_t mac[6], const char* name, int8_t rssi, uint8_t target, uint8_t addrType) {
