@@ -576,10 +576,10 @@ uint32_t            alertStart= 0;
 uint32_t            watchAlertStart = 0;
 uint32_t            lastTouch = 0;
 #if MESH_COMPANION
-// The conversation the herald bubble advertises: tapping it opens exactly
-// this thread (DM peer or channel), not just whatever chat was last open.
-MeshLink::Message   s_heraldMsg;
-bool                s_heraldMsgOn = false;
+// Open the herald card's thread and file its announcements away.
+static void heraldOpenThread(const MeshLink::Message& cm);
+// A 👍/👎 at the card's sender, quoting their message; files the card away.
+static void heraldReact(const MeshLink::Message& cm, bool like);
 #endif
 bool                prevTouchValid = false; // last frame's tp.valid, for true press/release edge detection (see loop())
 DetectionType       lastAlertType = DetectionType::UNKNOWN;
@@ -1810,6 +1810,29 @@ static void enterMeshChat() {
     transitionStart = millis();
     uiMeshChatInit(*canvas);
 }
+#if MESH_COMPANION
+static void heraldOpenThread(const MeshLink::Message& cm) {
+    if (cm.direct) MeshLink::setDmTarget(cm.fromNum);
+    else { MeshLink::setDmTarget(0); MeshLink::setSendChannel(cm.channel); }
+    uiClearHeraldDismissMatch(cm.direct, cm.direct ? cm.fromNum : 0, cm.channel);
+    enterMeshChat();
+}
+static void heraldReact(const MeshLink::Message& cm, bool like) {
+    // A thumbs-up/down at the sender, quoting their message so modern
+    // clients thread it; older ones just see the glyph. Files the card --
+    // the thread keeps the mail either way.
+    const char* txt = like ? "\xF0\x9F\x91\x8D" : "\xF0\x9F\x91\x8E";  // 👍 / 👎
+    if (cm.direct) MeshLink::sendDirectText(cm.fromNum, txt, cm.msgId);
+    else MeshLink::sendChannelText(cm.channel, txt, cm.msgId);
+    uiClearHeraldDismiss();
+}
+static void enterMeshMsgInfo(uint32_t pktId) {
+    uiMeshMsgInfoShow(pktId);
+    state = AppState::MESH_LINK_MSGINFO;
+    transitionStart = millis();
+    uiMeshMsgInfoInit(*canvas);
+}
+#endif
 static void enterMeshChannels() {
     state = AppState::MESH_LINK_CHANNELS;
     transitionStart = millis();
@@ -2903,22 +2926,7 @@ void loop() {
             snprintf(sub, sizeof sub, "%s: %s", m.from, b);
             Theme::showToast(Theme::tr("MESSAGE", "СООБЩЕНИЕ"), sub, Theme::VAPOR_PINK, 3500);
             // ...and the herald carries it across the main screen.
-            if (state == AppState::CLEAR) {
-                char where[16] = "";
-                if (!m.direct) {
-                    for (uint8_t ci = 0; ci < MeshLink::channelCount(); ci++) {
-                        const MeshLink::Channel& c = MeshLink::channelAt(ci);
-                        if (c.index == m.channel && c.name[0]) {
-                            strncpy(where, c.name, sizeof(where) - 1);
-                            break;
-                        }
-                    }
-                    if (!where[0]) snprintf(where, sizeof where, "CH%u", (unsigned)m.channel);
-                }
-                uiClearHeraldMsg(now, m.from, m.body, m.direct, where);
-                s_heraldMsg = m;
-                s_heraldMsgOn = true;
-            }
+            if (state == AppState::CLEAR) uiClearHeraldPush(m);
         }
     }
     // A send the node refused, surfaced instead of silently vanishing: the
@@ -3533,19 +3541,52 @@ void loop() {
             // screen: it sits in the counter row's place and must win over the
             // edge-zone slivers it overlaps on the left and right.
 #if MESH_COMPANION
-            // The herald's message bubble, ahead of the footer panel: it is
-            // drawn over everything, so its tap wins too. Opens exactly the
-            // thread the bubble advertises.
-            if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
-                uiClearHeraldHit(tp.x, tp.y)) {
+            // The herald card: buttons act on press, the body taps open the
+            // thread, a sideways swipe browses the stack. Drawn over
+            // everything, so it eats its gestures ahead of the footer panel.
+            static bool hDown = false;
+            static int hDx = 0, hDy = 0;
+            bool heraldEaten = false;
+            if (touchJustDown && uiClearHeraldVisible() &&
+                (uiClearHeraldHit(tp.x, tp.y) || uiClearHeraldBtnHit(tp.x, tp.y) != HeraldBtn::NONE)) {
                 lastTouch = now;
                 sqActive  = false;
-                if (s_heraldMsgOn) {
-                    if (s_heraldMsg.direct) MeshLink::setDmTarget(s_heraldMsg.fromNum);
-                    else { MeshLink::setDmTarget(0); MeshLink::setSendChannel(s_heraldMsg.channel); }
-                    enterMeshChat();
+                heraldEaten = true;
+                MeshLink::Message cm;
+                const HeraldBtn hb = uiClearHeraldBtnHit(tp.x, tp.y);
+                if (hb != HeraldBtn::NONE && uiClearHeraldCurrent(cm)) {
+                    switch (hb) {
+                        case HeraldBtn::LIKE:    heraldReact(cm, true); break;
+                        case HeraldBtn::DISLIKE: heraldReact(cm, false); break;
+                        case HeraldBtn::CHAT:    heraldOpenThread(cm); break;
+                        case HeraldBtn::CLOSE:   uiClearHeraldDismiss(); break;
+                        default: break;
+                    }
+                } else if (uiClearHeraldHit(tp.x, tp.y)) {
+                    hDown = true; hDx = tp.x; hDy = tp.y;
                 }
-            } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
+            } else if (touchJustUp && hDown) {
+                hDown = false;
+                lastTouch = now;
+                sqActive  = false;
+                heraldEaten = true;
+                // Swipe browses the stack; a plain tap opens the thread.
+                // tp may already be invalid on release -- then it is a tap.
+                const int dx = tp.valid ? tp.x - hDx : 0;
+                const int dy = tp.valid ? tp.y - hDy : 0;
+                MeshLink::Message cm;
+                if (abs(dx) > 24 && abs(dx) > abs(dy) * 2) {
+                    if (dx < 0) uiClearHeraldNext(); else uiClearHeraldPrev();
+                } else if (uiClearHeraldCurrent(cm)) {
+                    heraldOpenThread(cm);
+                }
+            } else if (!tp.valid) hDown = false;
+            if (heraldEaten) {
+                // Gesture consumed above; fall through to nothing.
+            } else
+#endif
+#if MESH_COMPANION
+            if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                 uiClearCompanionHit(tp.x, tp.y) != CompanionHit::NONE) {
                 lastTouch = now;
                 sqActive  = false;
@@ -4765,6 +4806,8 @@ void loop() {
                 if (!gMoved) {
                     lastTouch = now;
                     if (Theme::pinnedBackHit(gx, gy, canvas->width(), canvas->height())) { enterClear(); break; }
+                    uint32_t bid = 0;
+                    if (uiMeshChatBubbleHit(*canvas, gx, gy, &bid) && bid) { enterMeshMsgInfo(bid); break; }
                     switch (uiMeshChatHit(*canvas, gx, gy)) {
                         case MeshChatHit::CHANNEL:
                             // The target button: with a DM up it clears back to
@@ -4836,6 +4879,23 @@ void loop() {
                     else                      MeshLink::sendChannelText(MeshLink::sendChannel(), m);
                 }
                 enterMeshChat();
+            }
+            break;
+        }
+        case AppState::MESH_LINK_MSGINFO: {
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiMeshMsgInfoTick(t, now, advance); });
+            if (touchJustUp) {
+                lastTouch = now;
+                if (Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) { enterMeshChat(); break; }
+                switch (uiMeshMsgInfoHit(*canvas, tp.x, tp.y)) {
+                    case MeshInfoHit::TRACE: {
+                        const uint32_t peer = uiMeshMsgInfoPeer();
+                        if (peer) MeshLink::traceStart(peer);
+                        break;
+                    }
+                    case MeshInfoHit::BACK: enterMeshChat(); break;
+                    default: break;
+                }
             }
             break;
         }

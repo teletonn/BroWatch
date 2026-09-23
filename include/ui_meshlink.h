@@ -9,6 +9,7 @@
 #if MESH_COMPANION
 #include <TFT_eSPI.h>
 #include <stdint.h>
+#include "mesh_link.h"
 
 class DetectionEngine;
 
@@ -40,6 +41,22 @@ void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance = true);
 enum class MeshChatHit : uint8_t { CHANNEL, WRITE, BACK, NONE };
 MeshChatHit uiMeshChatHit(TFT_eSPI& t, int x, int y);
 void uiMeshChatScroll(int delta);
+// Which message bubble sits under a tap (own or чужой -- both have an info
+// screen). False when the tap hit no bubble.
+bool uiMeshChatBubbleHit(TFT_eSPI& t, int x, int y, uint32_t* pktId);
+
+// One message's delivery story: state, timeline, hops, traceroute.
+void        uiMeshMsgInfoShow(uint32_t pktId);
+// The DM peer of the shown message (0 for channels / unknown), for TRACE.
+uint32_t    uiMeshMsgInfoPeer();
+void        uiMeshMsgInfoInit(TFT_eSPI& t);
+void        uiMeshMsgInfoTick(TFT_eSPI& t, uint32_t now, bool advance = true);
+enum class MeshInfoHit : uint8_t { TRACE, BACK, NONE };
+MeshInfoHit uiMeshMsgInfoHit(TFT_eSPI& t, int x, int y);
+
+// Human words for a delivery state / routing error.
+const char* meshStatusLabel(MeshLink::MsgStatus s);
+const char* meshRouteErrLabel(uint8_t err);
 
 // The SEND chooser: canned messages, and a MANUAL row that opens the keyboard.
 // Index 0 is MANUAL; 1.. are templates. uiMeshTemplateAt() returns the text of

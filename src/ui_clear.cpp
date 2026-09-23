@@ -2726,37 +2726,89 @@ CompanionHit uiClearCompanionHit(int x, int y) {
 }
 
 // ---- the herald --------------------------------------------------------------
-// A pigeon with a letter in its beak, for a message that arrived while the
-// main screen was up. It flies in from the right, hovers over the mascot with
-// a slow bob while the envelope dips below it, then carries on out to the
-// left. Drawn last so it passes in front of everything, the way the pet does.
-// With it slides a message bubble -- who wrote, what they said -- so the
-// mail is readable right here; tapping the bubble opens that conversation.
-// Deliberately small and quick: a sighting, not a takeover.
+// A pigeon with a letter in its beak announces mail on the main screen: it
+// flies in from the right, hovers, leaves. The message card itself PARKS
+// under the title until dealt with -- several stack up and swipe left/right
+// to browse, with LIKE / DISLIKE / CHAT / X under the current one.
 static uint32_t s_heraldStart = 0;
 static const uint32_t HERALD_MS = 6000;
-static char s_heraldFrom[8] = "";
-static char s_heraldBody[MeshLink::TEXT_MAX + 1] = "";
-static char s_heraldWhere[16] = "";
-static bool s_heraldDm = false;
-static int s_heraldCard[4] = {0, 0, 0, 0};  // x,y,w,h for the tap
+static const uint8_t HERALD_MAX = 8;
+struct HeraldCard { MeshLink::Message m; bool used; };
+static HeraldCard s_cards[HERALD_MAX];
+static uint8_t s_cardN = 0;
+static uint8_t s_cardCur = 0;
+static uint32_t s_cardAnimAt = 0;   // slide-in start for the current card
+static int s_heraldCard[4] = {0, 0, 0, 0};  // card rect, for the tap
 static bool s_heraldCardOn = false;
+static int s_heraldBtn[4][4];       // LIKE/DISLIKE/CHAT/X rects
+static bool s_heraldBtnOn = false;
 
 void uiClearHerald(uint32_t now) { s_heraldStart = now; }
-void uiClearHeraldMsg(uint32_t now, const char* from, const char* body, bool direct, const char* where) {
-    s_heraldStart = now;
-    if (from) { strncpy(s_heraldFrom, from, sizeof(s_heraldFrom) - 1); s_heraldFrom[sizeof(s_heraldFrom) - 1] = '\0'; }
-    else s_heraldFrom[0] = '\0';
-    if (body) { strncpy(s_heraldBody, body, sizeof(s_heraldBody) - 1); s_heraldBody[sizeof(s_heraldBody) - 1] = '\0'; }
-    else s_heraldBody[0] = '\0';
-    if (where) { strncpy(s_heraldWhere, where, sizeof(s_heraldWhere) - 1); s_heraldWhere[sizeof(s_heraldWhere) - 1] = '\0'; }
-    else s_heraldWhere[0] = '\0';
-    s_heraldDm = direct;
+void uiClearHeraldPush(const MeshLink::Message& m) {
+    s_heraldStart = millis();
+    // Full: the oldest announcement falls off (the inbox keeps it).
+    if (s_cardN >= HERALD_MAX) {
+        for (uint8_t i = 1; i < HERALD_MAX; i++) s_cards[i - 1] = s_cards[i];
+        s_cardN = HERALD_MAX - 1;
+        if (s_cardCur) s_cardCur--;
+    }
+    s_cards[s_cardN].m = m;
+    s_cards[s_cardN].used = true;
+    s_cardCur = s_cardN;
+    s_cardN++;
+    s_cardAnimAt = millis();
+}
+bool uiClearHeraldVisible() { return s_cardN > 0; }
+bool uiClearHeraldCurrent(MeshLink::Message& out) {
+    if (!s_cardN || s_cardCur >= s_cardN || !s_cards[s_cardCur].used) return false;
+    out = s_cards[s_cardCur].m;
+    return true;
+}
+void uiClearHeraldNext() {
+    if (s_cardN < 2) return;
+    s_cardCur = (uint8_t)((s_cardCur + 1) % s_cardN);
+    s_cardAnimAt = millis();
+}
+void uiClearHeraldPrev() {
+    if (s_cardN < 2) return;
+    s_cardCur = (uint8_t)((s_cardCur + s_cardN - 1) % s_cardN);
+    s_cardAnimAt = millis();
+}
+void uiClearHeraldDismiss() {
+    if (!s_cardN || s_cardCur >= s_cardN) return;
+    for (uint8_t i = s_cardCur + 1; i < s_cardN; i++) s_cards[i - 1] = s_cards[i];
+    s_cardN--;
+    s_cards[s_cardN].used = false;
+    if (s_cardCur >= s_cardN && s_cardN) s_cardCur = (uint8_t)(s_cardN - 1);
+    s_cardAnimAt = millis();
+}
+void uiClearHeraldDismissMatch(bool direct, uint32_t peer, uint8_t channel) {
+    for (uint8_t i = 0; i < s_cardN;) {
+        const MeshLink::Message& m = s_cards[i].m;
+        bool hit = (m.direct == direct) &&
+                   (direct ? (m.fromNum == peer || m.toNum == peer) : (m.channel == channel));
+        if (hit) {
+            for (uint8_t k = i + 1; k < s_cardN; k++) s_cards[k - 1] = s_cards[k];
+            s_cardN--;
+            if (s_cardCur >= s_cardN && s_cardN) s_cardCur = (uint8_t)(s_cardN - 1);
+            if (s_cardCur > i && s_cardCur) s_cardCur--;
+        } else i++;
+    }
+    if (!s_cardN) { s_heraldCardOn = false; s_heraldBtnOn = false; }
 }
 bool uiClearHeraldHit(int x, int y) {
     if (!Settings::companionMode() || !s_heraldCardOn) return false;
     return x >= s_heraldCard[0] && x < s_heraldCard[0] + s_heraldCard[2] &&
            y >= s_heraldCard[1] && y < s_heraldCard[1] + s_heraldCard[3];
+}
+HeraldBtn uiClearHeraldBtnHit(int x, int y) {
+    if (!Settings::companionMode() || !s_heraldBtnOn) return HeraldBtn::NONE;
+    for (uint8_t i = 0; i < 4; i++) {
+        if (x >= s_heraldBtn[i][0] && x < s_heraldBtn[i][0] + s_heraldBtn[i][2] &&
+            y >= s_heraldBtn[i][1] && y < s_heraldBtn[i][1] + s_heraldBtn[i][3])
+            return (HeraldBtn)((int)HeraldBtn::LIKE + i);
+    }
+    return HeraldBtn::NONE;
 }
 
 // Word-wrap for the bubble card: two lines max, UTF-8 safe.
@@ -2804,49 +2856,83 @@ static int heraldWrap(TFT_eSPI& t, const char* text, int maxW, char out[][64], i
 }
 
 static void drawHerald(TFT_eSPI& t, uint32_t now) {
-    if (!s_heraldStart) { s_heraldCardOn = false; return; }
-    const uint32_t e = now - s_heraldStart;
-    if (e > HERALD_MS) { s_heraldStart = 0; s_heraldCardOn = false; return; }
+    // The pigeon: a 6-second flight per announcement, then gone. The card
+    // below parks until dismissed and is drawn whenever any is stacked.
+    if (s_heraldStart) {
+        const uint32_t e = now - s_heraldStart;
+        if (e > HERALD_MS) s_heraldStart = 0;
+    }
     const int w = t.width();
-    // The message card: slides in from the right, parks under the title,
-    // slides out at the end. Tapping it opens the conversation.
     s_heraldCardOn = false;
-    if (s_heraldFrom[0] || s_heraldBody[0]) {
+    s_heraldBtnOn = false;
+    MeshLink::Message cm;
+    memset(&cm, 0, sizeof cm);
+    if (s_cardN && s_cardCur < s_cardN && s_cards[s_cardCur].used) {
+        cm = s_cards[s_cardCur].m;
         t.setTextSize(1);
         t.setTextWrap(false);
         const int cw = w - 20;
-        char l0[64], l1[64];
         char ww[2][64];
-        int nl = heraldWrap(t, s_heraldBody, cw - 16, ww, 2);
+        int nl = heraldWrap(t, cm.body, cw - 16, ww, 2);
         if (nl < 1) { ww[0][0] = '\0'; nl = 1; }
-        strncpy(l0, ww[0], sizeof l0 - 1); l0[sizeof l0 - 1] = '\0';
-        if (nl > 1) { strncpy(l1, ww[1], sizeof l1 - 1); l1[sizeof l1 - 1] = '\0'; }
-        else l1[0] = '\0';
         const int lh = t.fontHeight() + 2;
         const int ch = 8 + lh + nl * lh + 7;
         const int cy = 34;
-        int cx;
+        // Slide in from the right when the card changes, then park.
+        const uint32_t ae = now - s_cardAnimAt;
         const int parkX = 10;
-        if (e < 700) cx = w - (int)((int32_t)(w - parkX) * (int)e / 700);
-        else if (e < HERALD_MS - 700) cx = parkX;
-        else cx = parkX - (int)((int32_t)(parkX + cw + 10) * (int)(e - (HERALD_MS - 700)) / 700);
+        int cx = parkX;
+        if (ae < 400) cx = w - (int)((int32_t)(w - parkX) * (int)ae / 400);
         t.fillRoundRect(cx, cy, cw, ch, 5, Theme::TASKBAR);
-        t.drawRoundRect(cx, cy, cw, ch, 5, s_heraldDm ? Theme::VAPOR_PINK : Theme::CYAN);
+        t.drawRoundRect(cx, cy, cw, ch, 5, cm.direct ? Theme::VAPOR_PINK : Theme::CYAN);
         char head[28];
-        snprintf(head, sizeof head, "%s %s", s_heraldFrom, s_heraldDm ? "DM" : s_heraldWhere);
-        t.setTextColor(s_heraldDm ? Theme::VAPOR_YELLOW : Theme::CYAN, Theme::TASKBAR);
+        if (s_cardN > 1) snprintf(head, sizeof head, "%s %s %u/%u", cm.from,
+                                  cm.direct ? "DM" : "CH", (unsigned)(s_cardCur + 1), (unsigned)s_cardN);
+        else snprintf(head, sizeof head, "%s %s", cm.from, cm.direct ? "DM" : "CH");
+        t.setTextColor(cm.direct ? Theme::VAPOR_YELLOW : Theme::CYAN, Theme::TASKBAR);
         t.setCursor(cx + 8, cy + 5);
         Theme::printRU(t, head);
         t.setTextColor(Theme::WHITE, Theme::TASKBAR);
         t.setCursor(cx + 8, cy + 5 + lh);
-        Theme::printRU(t, l0);
-        if (l1[0]) {
+        Theme::printRU(t, ww[0]);
+        if (nl > 1) {
             t.setCursor(cx + 8, cy + 5 + 2 * lh);
-            Theme::printRU(t, l1);
+            Theme::printRU(t, ww[1]);
         }
         s_heraldCard[0] = cx; s_heraldCard[1] = cy; s_heraldCard[2] = cw; s_heraldCard[3] = ch;
         s_heraldCardOn = true;
+        // The action row: LIKE / DISLIKE (thumb glyphs) / CHAT / X.
+        const int bh = 24, by = cy + ch + 4;
+        const int gap = 6;
+        const int bwid = (cw - 3 * gap) / 4;
+        const char* bl[4] = {nullptr, nullptr, "CHAT", "X"};
+        for (uint8_t i = 0; i < 4; i++) {
+            const int bx = cx + i * (bwid + gap);
+            Theme::drawButton(t, bx, by, bwid, bh, bl[i] ? bl[i] : "", false);
+            if (i < 2) {
+                // Thumb up / down, pixel-drawn (the font has no emoji).
+                const uint16_t c = i == 0 ? Theme::GREEN : Theme::RED;
+                const int ix = bx + bwid / 2 - 5, iy = by + bh / 2 - 6;
+                if (i == 0) {
+                    t.fillRect(ix + 4, iy + 4, 6, 7, c);
+                    t.fillRect(ix + 4, iy + 0, 2, 5, c);
+                    t.fillRect(ix + 2, iy + 3, 2, 3, c);
+                    t.drawLine(ix + 0, iy + 5, ix + 2, iy + 5, c);
+                } else {
+                    t.fillRect(ix + 4, iy + 1, 6, 7, c);
+                    t.fillRect(ix + 4, iy + 7, 2, 5, c);
+                    t.fillRect(ix + 2, iy + 6, 2, 3, c);
+                    t.drawLine(ix + 0, iy + 6, ix + 2, iy + 6, c);
+                }
+            }
+            s_heraldBtn[i][0] = bx; s_heraldBtn[i][1] = by;
+            s_heraldBtn[i][2] = bwid; s_heraldBtn[i][3] = bh;
+        }
+        s_heraldBtnOn = true;
     }
+    if (!s_heraldStart) return;
+    const uint32_t e = now - s_heraldStart;
+    if (e > HERALD_MS) { s_heraldStart = 0; return; }
     const int hx = w / 2 + 40;          // where it hovers
     int x;
     if (e < 1200)       x = (w + 30) - (int)((int32_t)(w + 30 - hx) * (int)e / 1200);

@@ -93,9 +93,11 @@ static void inboxPush(const Message& m) {
 
 // -------- outgoing requests (loop writes, task reads) --------
 struct Req {
-    enum Kind : uint8_t { CONNECT, DISCONNECT, SEND, SCAN_ON, SCAN_OFF } kind;
+    enum Kind : uint8_t { CONNECT, DISCONNECT, SEND, SCAN_ON, SCAN_OFF, TRACE } kind;
     uint8_t  channel;
     uint32_t to;              // BROADCAST_TO for a channel message, else a node
+    uint32_t pid;             // our MeshPacket.id, pre-generated with the inbox copy
+    uint32_t reply;           // Data.reply_id: 0, or the message this answers
     char     text[TEXT_MAX + 1];
 };
 QueueHandle_t s_reqQ = nullptr;
@@ -354,7 +356,9 @@ static void parseChannel(Pb b) {
         if (index + 1 > s_chanN) s_chanN = (uint8_t)(index + 1);
     }
 }
-static void pushIncoming(uint32_t fromNum, uint32_t toNum, uint8_t channel, const uint8_t* text, size_t len) {
+static void pushIncoming(uint32_t fromNum, uint32_t toNum, uint8_t channel,
+                         const uint8_t* text, size_t len,
+                         uint32_t msgId, uint8_t hops, uint32_t relayNode) {
     Message m;
     memset(&m, 0, sizeof m);
     m.have = true; m.unread = true; m.outgoing = false;
@@ -363,6 +367,11 @@ static void pushIncoming(uint32_t fromNum, uint32_t toNum, uint8_t channel, cons
     m.toNum = toNum;
     m.direct = (toNum != 0xFFFFFFFFu && toNum != 0);
     m.at = millis();
+    m.msgId = msgId;
+    m.pktId = 0;
+    m.status = MsgStatus::DELIVERED;   // incoming: already here; hops below
+    m.hops = hops;
+    m.relayNode = relayNode;
     char nb[8];
     strncpy(m.from, nameFor(fromNum, nb, sizeof nb), sizeof(m.from) - 1);
     size_t c = len < TEXT_MAX ? len : TEXT_MAX;
@@ -372,10 +381,83 @@ static void pushIncoming(uint32_t fromNum, uint32_t toNum, uint8_t channel, cons
     if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);   // newest first
     Serial.printf("[meshlink] RX %s ch%u from %s: %s\n", m.direct ? "DM" : "ch", (unsigned)channel, m.from, m.body);
 }
+// Find our outgoing inbox copy by packet id, for status updates.
+static Message* findByPid(uint32_t pid) {
+    if (!pid) return nullptr;
+    for (uint8_t i = 0; i < s_inboxLen; i++) {
+        int idx = (int)s_inboxHead - 1 - (int)i;
+        while (idx < 0) idx += INBOX_N;
+        Message& m = s_inbox[idx % INBOX_N];
+        if (m.outgoing && m.pktId == pid) return &m;
+    }
+    return nullptr;
+}
+// -------- traceroute state (task writes, loop reads) --------
+static TraceResult s_trace = {};
+constexpr uint32_t TRACE_TIMEOUT_MS = 30000;
+// RouteDiscovery: route=1 fixed32, snr_towards=2 int32, route_back=3
+// fixed32, snr_back=4 int32 -- each packed or unpacked on the wire.
+static void parseTraceReply(uint32_t fromNum, uint32_t toNum, const uint8_t* p, size_t n) {
+    if (!s_trace.active || !s_trace.waiting || fromNum != s_trace.target) return;
+    if (toNum != s_ownNodeNum && toNum != 0 && toNum != BROADCAST_TO) return;
+    Pb b{ p, n, 0, true };
+    uint8_t rn = 0;
+    int8_t sn[8] = {0};
+    uint8_t snN = 0;
+    while (b.ok && b.i < b.n) {
+        uint32_t f, w;
+        if (!pbTag(b, f, w)) break;
+        if ((f == 1 || f == 3) && (w == 5 || w == 2)) {
+            // Unpacked fixed32 entries, or one packed run of them.
+            const uint8_t* run = nullptr; size_t runN = 0;
+            uint32_t one = 0;
+            if (w == 5) { if (!pbFixed32(b, one)) break; }
+            else { if (!pbBytes(b, run, runN)) break; }
+            uint32_t vals[8]; uint8_t vn = 0;
+            if (w == 5) { vals[0] = one; vn = 1; }
+            else {
+                Pb pk{ run, runN, 0, true };
+                while (pk.ok && pk.i < pk.n && vn < 8) { uint32_t v; if (!pbFixed32(pk, v)) break; vals[vn++] = v; }
+            }
+            if (f == 1) {
+                for (uint8_t i = 0; i < vn && rn < 8; i++) s_trace.route[rn++] = vals[i];
+                s_trace.n = rn;
+            }
+        } else if ((f == 2 || f == 4) && (w == 0 || w == 2)) {
+            int32_t vals[8]; uint8_t vn = 0;
+            if (w == 0) {
+                uint64_t v; if (!pbVarint(b, v)) break;
+                vals[0] = (int32_t)(int64_t)v; vn = 1;
+            } else {
+                const uint8_t* run = nullptr; size_t runN = 0;
+                if (!pbBytes(b, run, runN)) break;
+                Pb pk{ run, runN, 0, true };
+                while (pk.ok && pk.i < pk.n && vn < 8) {
+                    uint64_t v; if (!pbVarint(pk, v)) break;
+                    vals[vn++] = (int32_t)(int64_t)v;
+                }
+            }
+            if (f == 2) {
+                for (uint8_t i = 0; i < vn && snN < 8; i++) sn[snN++] = (int8_t)vals[i];
+                for (uint8_t i = 0; i < snN; i++) s_trace.snr[i] = sn[i];
+            }
+        }
+        else if (!pbSkip(b, w)) break;
+    }
+    if (s_trace.n || snN) {
+        // A route, or SNRs with an empty route (a direct neighbour answers
+        // with no hops to list) -- either way the peer is reachable.
+        s_trace.waiting = false;
+        s_trace.replied = true;
+        Serial.printf("[meshlink] TRACE reply from %08X: %u hops\n", (unsigned)fromNum, (unsigned)s_trace.n);
+    }
+}
 static void parseMeshPacket(Pb b) {
     uint32_t fromNum = 0, toNum = 0; uint8_t channel = 0;
     uint32_t portnum = 0; const uint8_t* payload = nullptr; size_t plen = 0;
     uint32_t reqId = 0, reqOf = 0;
+    uint32_t hopLimit = 0, hopStart = 0, relayNode = 0;
+    bool hasHopLimit = false, hasHopStart = false;
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
@@ -383,6 +465,9 @@ static void parseMeshPacket(Pb b) {
         else if (f == 2 && (w == 0 || w == 5)) { if (!pbU32either(b, w, toNum)) break; }
         else if (f == 3 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; channel = (uint8_t)v; }
         else if (f == 6 && (w == 0 || w == 5)) { if (!pbU32either(b, w, reqId)) break; }
+        else if (f == 9 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; hopLimit = (uint32_t)v; hasHopLimit = true; }
+        else if (f == 15 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; hopStart = (uint32_t)v; hasHopStart = true; }
+        else if (f == 19 && (w == 0 || w == 5)) { if (!pbU32either(b, w, relayNode)) break; }
         else if (f == 4 && w == 2) {  // Data
             Pb d;
             if (pbSub(b, d)) {
@@ -398,8 +483,13 @@ static void parseMeshPacket(Pb b) {
         }
         else if (!pbSkip(b, w)) break;
     }
+    uint8_t hops = 0;
+    if (hasHopStart && hasHopLimit && hopStart >= hopLimit && hopStart - hopLimit < 16)
+        hops = (uint8_t)(hopStart - hopLimit);
     if (portnum == 1 /* TEXT_MESSAGE_APP */ && payload && plen)
-        pushIncoming(fromNum, toNum, channel, payload, plen);
+        pushIncoming(fromNum, toNum, channel, payload, plen, reqId, hops, relayNode);
+    else if (portnum == 70 /* TRACEROUTE_APP */ && payload != nullptr)
+        parseTraceReply(fromNum, toNum, payload, plen);
     else if (portnum == 4 /* NODEINFO_APP */ && payload && plen && fromNum) {
         // A live identity broadcast: the User message itself is the payload.
         // This is how keys and names arrive between config dumps -- without
@@ -438,10 +528,15 @@ static void parseMeshPacket(Pb b) {
         // PKI_SEND_FAIL_PUBLIC_KEY 39.
         if (pendingMatches(reqOf)) {
             pendingDrop(reqOf);
-            if (err == 0) s_sendResult = SendResult::SENT;
+            Message* m = findByPid(reqOf);
+            if (err == 0) {
+                s_sendResult = SendResult::SENT;
+                if (m) { m->status = MsgStatus::DELIVERED; m->tDone = millis(); m->routeErr = 0; }
+            }
             else if (err == 38) s_sendResult = SendResult::RATE_LIMITED;
             else if (err == 34 || err == 35 || err == 39) s_sendResult = SendResult::PKI_FAILED;
             else s_sendResult = SendResult::FAILED;
+            if (err != 0 && m) { m->status = MsgStatus::FAILED; m->tDone = millis(); m->routeErr = (uint8_t)err; }
         }
         Serial.printf("[meshlink] ROUTING ack id=%08X err=%u%s\n", (unsigned)reqId, (unsigned)err,
                       err ? " (NOT delivered)" : " (ok)");
@@ -498,8 +593,21 @@ static void parseFromRadio(const uint8_t* d, size_t n) {
                 // the node refusing it outright; drop the pending id so a late
                 // ack cannot resurrect it as delivered.
                 if (pendingMatches(pid)) {
-                    if (res == 0) s_sendResult = SendResult::QUEUED;
-                    else { s_sendResult = SendResult::FAILED; pendingDrop(pid); }
+                    Message* m = findByPid(pid);
+                    if (res == 0) {
+                        s_sendResult = SendResult::QUEUED;
+                        if (m) {
+                            m->tQueued = millis();
+                            // Broadcasts never get a Routing ack: acceptance
+                            // is their terminal state. DMs wait for the ack.
+                            if (m->direct) m->status = MsgStatus::QUEUED;
+                            else { m->status = MsgStatus::IN_MESH; m->tDone = m->tQueued; }
+                        }
+                    }
+                    else {
+                        s_sendResult = SendResult::FAILED; pendingDrop(pid);
+                        if (m) { m->status = MsgStatus::FAILED; m->tDone = millis(); m->routeErr = (uint8_t)(res + 100); }
+                    }
                 }
                 Serial.printf("[meshlink] QUEUE res=%u free=%u/%u id=%08X\n",
                               (unsigned)res, (unsigned)freeSlots, (unsigned)maxlen, (unsigned)pid);
@@ -627,18 +735,22 @@ static size_t utf8SafeLen(const char* s, size_t cap) {
     return n;
 }
 
-bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text) {
-    if (!s_toRadio || !text || !text[0]) return false;
-    const size_t tlen = utf8SafeLen(text, TEXT_LIMIT);
-    if (!tlen) return false;
-    // ToRadio{ packet: MeshPacket{ to, channel, decoded: Data{ portnum=1, payload }, id, want_ack } }
+// One Meshtastic app packet on the air. `track` wires it into delivery
+// tracking (pending ids + the inbox copy's status); traces skip it --
+// their Routing acks would otherwise masquerade as text deliveries.
+static bool sendAppNow(uint32_t toNum, uint8_t channel, uint32_t portnum,
+                       const uint8_t* payload, size_t plen,
+                       bool wantAck, uint32_t replyId, bool wantResponse,
+                       uint32_t pid, bool track) {
+    if (!s_toRadio) return false;
     uint8_t data[8 + TEXT_MAX]; Pbw d{ data, sizeof data, 0 };
-    wVarintField(d, 1, 1);                     // Data.portnum = TEXT_MESSAGE_APP
-    wBytesField(d, 2, (const uint8_t*)text, tlen);  // Data.payload
+    wVarintField(d, 1, portnum);                  // Data.portnum
+    wBytesField(d, 2, payload ? payload : (const uint8_t*)"", plen);  // Data.payload
+    if (wantResponse) wVarintField(d, 3, 1);      // Data.want_response
+    if (replyId) wFixed32Field(d, 7, replyId);    // Data.reply_id (a reply/reaction)
 
     uint8_t pkt[16 + sizeof data]; Pbw p{ pkt, sizeof pkt, 0 };
     wFixed32Field(p, 1, s_ownNodeNum);        // MeshPacket.from (fixed32 on current firmware)
-    const uint32_t pid = esp_random() ? esp_random() : 1;
     wFixed32Field(p, 2, toNum);               // MeshPacket.to (broadcast or a node)
     wVarintField(p, 3, channel);               // MeshPacket.channel
     wBytesField(p, 4, data, d.i);              // MeshPacket.decoded
@@ -646,7 +758,7 @@ bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text) {
     wVarintField(p, 9, 3);                     // MeshPacket.hop_limit
     // want_ack only makes sense point to point: nobody acks a broadcast, and
     // the flag on one would just promise a Routing reply that never comes.
-    if (toNum != BROADCAST_TO && toNum != 0) wVarintField(p, 10, 1);
+    if (wantAck) wVarintField(p, 10, 1);
 
     uint8_t out[8 + sizeof pkt]; Pbw o{ out, sizeof out, 0 };
     wBytesField(o, 1, pkt, p.i);               // ToRadio.packet
@@ -655,24 +767,30 @@ bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text) {
 #endif
     bool ok = s_toRadio->writeValue(out, o.i, true);
     if (ok) {
-        pendingRemember(pid);
-        s_lastTextAt = millis();
-        Message m; memset(&m, 0, sizeof m);
-        m.have = true; m.unread = false; m.outgoing = true;
-        m.channel = channel; m.toNum = toNum; m.fromNum = s_ownNodeNum;
-        m.direct = (toNum != BROADCAST_TO && toNum != 0);
-        m.at = millis();
-        strncpy(m.from, "YOU", sizeof(m.from) - 1);
-        memcpy(m.body, text, tlen); m.body[tlen] = '\0';
-        s_last = m;
-        inboxPush(m);
-        if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);
-        Serial.printf("[meshlink] TX %s ch%u to=%08X: %s\n",
-                      m.direct ? "DM" : "ch", (unsigned)channel, (unsigned)toNum, m.body);
+        if (track) {
+            pendingRemember(pid);
+            s_lastTextAt = millis();
+            if (Message* m = findByPid(pid)) { m->status = MsgStatus::SENT; m->tSent = millis(); }
+        } else {
+            // An untracked write still occupies the node's intake: pace the
+            // next tracked text behind it.
+            s_lastTextAt = millis();
+        }
+        Serial.printf("[meshlink] TX port%u ch%u to=%08X id=%08X\n",
+                      (unsigned)portnum, (unsigned)channel, (unsigned)toNum, (unsigned)pid);
     } else {
         Serial.println("[meshlink] TX failed: write to ToRadio refused");
     }
     return ok;
+}
+
+static bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text, uint32_t replyId, uint32_t pid) {
+    if (!text || !text[0]) return false;
+    const size_t tlen = utf8SafeLen(text, TEXT_LIMIT);
+    if (!tlen) return false;
+    const bool dm = (toNum != BROADCAST_TO && toNum != 0);
+    return sendAppNow(toNum, channel, 1 /* TEXT */, (const uint8_t*)text, tlen,
+                      dm /* want_ack */, replyId, false /* want_response */, pid, true);
 }
 
 void doConnect(uint8_t index) {
@@ -812,11 +930,37 @@ void taskLoop(void*) {
                             break;
                         }
                     }
-                    sendChannelTextNow(r.to, r.channel, r.text);
+                    sendChannelTextNow(r.to, r.channel, r.text, r.reply, r.pid);
                     break;
                 }
                 case Req::SCAN_ON:    s_scanning = true;  if (s_state == State::OFF) s_state = State::SCANNING; break;
                 case Req::SCAN_OFF:   s_scanning = false; if (s_state == State::SCANNING) s_state = State::OFF; break;
+                case Req::TRACE: {
+                    // An empty RouteDiscovery on TRACEROUTE_APP, like the
+                    // official clients send it; the mesh fills the path in.
+                    // Untracked: its Routing acks must not read as text
+                    // deliveries. Paced like a text (shared intake).
+                    if (s_state != State::READY || !r.to) {
+                        s_trace.active = false; s_trace.waiting = false;
+                        break;
+                    }
+                    if (s_lastTextAt) {
+                        int32_t wait = (int32_t)(s_lastTextAt + SEND_PACE_MS - millis());
+                        if (wait > 0) {
+                            xQueueSendToFront(s_reqQ, &r, 0);
+                            paced = true;
+                            break;
+                        }
+                    }
+                    const uint32_t tpid = esp_random() ? esp_random() : 1;
+                    memset(&s_trace, 0, sizeof s_trace);
+                    s_trace.active = true; s_trace.waiting = true;
+                    s_trace.target = r.to; s_trace.at = millis();
+                    if (!sendAppNow(r.to, 0, 70 /* TRACEROUTE_APP */, nullptr, 0,
+                                    true /* want_ack */, 0, true /* want_response */, tpid, false))
+                        { s_trace.active = false; s_trace.waiting = false; }
+                    break;
+                }
             }
         }
 
@@ -1052,30 +1196,98 @@ uint8_t        sendChannel() { return s_sendChan; }
 bool           channelNotify(uint8_t idx) { return idx < CHAN_MAX ? s_notify[idx] : false; }
 void           setChannelNotify(uint8_t idx, bool on) { if (idx < CHAN_MAX) s_notify[idx] = on; }
 
-bool sendChannelText(uint8_t channel, const char* text) {
+bool sendChannelText(uint8_t channel, const char* text, uint32_t replyId) {
     if (s_state != State::READY || !s_reqQ) { s_sendResult = SendResult::NOT_READY; return false; }
     if (!text || !text[0]) return false;
+    const size_t tlen = utf8SafeLen(text, TEXT_LIMIT);
+    if (!tlen) return false;
     Req r; memset(&r, 0, sizeof r);
     r.kind = Req::SEND; r.channel = channel; r.to = BROADCAST_TO;
-    strncpy(r.text, text, TEXT_MAX);
-    return xQueueSend(s_reqQ, &r, 0) == pdTRUE;
+    r.pid = esp_random() ? esp_random() : 1;
+    r.reply = replyId;
+    memcpy(r.text, text, tlen); r.text[tlen] = '\0';
+    // Visible immediately as PENDING; the task flips it to SENT on write.
+    Message m; memset(&m, 0, sizeof m);
+    m.have = true; m.unread = false; m.outgoing = true;
+    m.channel = channel; m.toNum = BROADCAST_TO; m.fromNum = s_ownNodeNum;
+    m.direct = false; m.at = millis();
+    m.msgId = r.pid; m.pktId = r.pid; m.status = MsgStatus::PENDING;
+    strncpy(m.from, "YOU", sizeof(m.from) - 1);
+    memcpy(m.body, text, tlen); m.body[tlen] = '\0';
+    if (xQueueSend(s_reqQ, &r, 0) != pdTRUE) {
+        m.status = MsgStatus::FAILED; m.tDone = millis(); m.routeErr = 200;  // local queue full
+        s_sendResult = SendResult::FAILED;
+    }
+    s_last = m;
+    inboxPush(m);
+    if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);
+    return m.status != MsgStatus::FAILED;
 }
 
-bool sendDirectText(uint32_t toNum, const char* text) {
+bool sendDirectText(uint32_t toNum, const char* text, uint32_t replyId) {
     if (s_state != State::READY || !s_reqQ) { s_sendResult = SendResult::NOT_READY; return false; }
     if (!text || !text[0] || !toNum) return false;
     // No public key, no PKI: the node cannot encrypt a DM to this contact and
     // fails it outright. Refuse early so the UI can say why.
     if (!contactHasKey(toNum)) { s_sendResult = SendResult::NO_KEY; return false; }
+    const size_t tlen = utf8SafeLen(text, TEXT_LIMIT);
+    if (!tlen) return false;
     Req r; memset(&r, 0, sizeof r);
     r.kind = Req::SEND; r.channel = 0; r.to = toNum;   // DMs go on the primary channel
-    strncpy(r.text, text, TEXT_MAX);
-    return xQueueSend(s_reqQ, &r, 0) == pdTRUE;
+    r.pid = esp_random() ? esp_random() : 1;
+    r.reply = replyId;
+    memcpy(r.text, text, tlen); r.text[tlen] = '\0';
+    Message m; memset(&m, 0, sizeof m);
+    m.have = true; m.unread = false; m.outgoing = true;
+    m.channel = 0; m.toNum = toNum; m.fromNum = s_ownNodeNum;
+    m.direct = true; m.at = millis();
+    m.msgId = r.pid; m.pktId = r.pid; m.status = MsgStatus::PENDING;
+    strncpy(m.from, "YOU", sizeof(m.from) - 1);
+    memcpy(m.body, text, tlen); m.body[tlen] = '\0';
+    if (xQueueSend(s_reqQ, &r, 0) != pdTRUE) {
+        m.status = MsgStatus::FAILED; m.tDone = millis(); m.routeErr = 200;
+        s_sendResult = SendResult::FAILED;
+    }
+    s_last = m;
+    inboxPush(m);
+    if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);
+    return m.status != MsgStatus::FAILED;
 }
 
 bool contactHasKey(uint32_t num) {
     Contact* c = findContact(num);
     return c && c->hasKey && c->keyLen > 0;
+}
+
+bool traceStart(uint32_t num) {
+    if (s_state != State::READY || !s_reqQ || !num) return false;
+    Req r; memset(&r, 0, sizeof r);
+    r.kind = Req::TRACE; r.to = num;
+    if (xQueueSend(s_reqQ, &r, 0) != pdTRUE) return false;
+    // Marked in flight now; the task fills target/at on write (or clears on
+    // refusal). The UI shows "sending" meanwhile.
+    s_trace.active = true; s_trace.waiting = true;
+    s_trace.target = num; s_trace.at = millis(); s_trace.n = 0;
+    return true;
+}
+const TraceResult& traceResult() { return s_trace; }
+void tracePoll() {
+    if (s_trace.active && s_trace.waiting && (millis() - s_trace.at) > TRACE_TIMEOUT_MS)
+        s_trace.waiting = false;   // timed out; active stays so the UI can say so
+}
+
+bool msgById(uint32_t pktId, Message& out) {
+    Message* m = findByPid(pktId);
+    if (!m) {
+        // Incoming messages file by their air id, not pktId.
+        for (uint8_t i = 0; i < s_inboxLen; i++) {
+            const Message& c = inboxAt(i);
+            if (!c.outgoing && c.msgId == pktId && pktId) { out = c; return true; }
+        }
+        return false;
+    }
+    out = *m;
+    return true;
 }
 
 SendResult takeSendResult() {
@@ -1088,6 +1300,17 @@ uint8_t        contactCount() { return s_contactN; }
 const Contact& contactAt(uint8_t i) {
     static Contact empty;
     return s_contacts[i < s_contactN ? i : 0];
+}
+bool contactName(uint32_t num, char* out, size_t cap) {
+    if (!out || !cap) return false;
+    out[0] = '\0';
+    Contact* c = findContact(num);
+    if (!c) return false;
+    const char* s = c->shortName[0] ? c->shortName : (c->longName[0] ? c->longName : nullptr);
+    if (!s) return false;
+    strncpy(out, s, cap - 1);
+    out[cap - 1] = '\0';
+    return true;
 }
 void     setDmTarget(uint32_t num) { s_dmTarget = num; }
 uint32_t dmTarget() { return s_dmTarget; }

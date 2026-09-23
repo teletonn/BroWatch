@@ -132,6 +132,8 @@ struct Contact {
 };
 uint8_t        contactCount();
 const Contact& contactAt(uint8_t i);
+// Copy a contact's short (fallback long) name. False when unknown.
+bool           contactName(uint32_t num, char* out, size_t cap);
 // A DM target (0 = none). sendChannelText to the target's channel with
 // `to` set to the contact is a direct message.
 void     setDmTarget(uint32_t num);
@@ -145,6 +147,11 @@ uint32_t dmTarget();
 constexpr uint16_t TEXT_LIMIT = 200;
 constexpr uint8_t TEXT_MAX = 200;
 constexpr uint8_t MSG_MAX  = 24;
+// Delivery states of an outgoing message, in order. Broadcasts never get a
+// Routing ack, so IN_MESH (the node took it) is their terminal state;
+// DMs continue to DELIVERED (Routing NONE) or FAILED. Times are millis()
+// stamps, 0 when the step has not happened yet.
+enum class MsgStatus : uint8_t { PENDING, SENT, QUEUED, IN_MESH, DELIVERED, FAILED };
 struct Message {
     bool     have;
     bool     unread;
@@ -157,6 +164,18 @@ struct Message {
     char     from[8];         // sender's short name, or YOU
     char     body[TEXT_MAX + 1];
     uint32_t at;              // millis() when it landed in our queue
+    // Outgoing delivery tracking.
+    uint32_t  pktId;          // our MeshPacket.id, links QueueStatus/Routing
+    uint32_t  msgId;          // air id: ours (== pktId) or the sender's packet
+                              // id for incoming (what a reply/reaction names)
+    MsgStatus status;         // PENDING until written to the node
+    uint32_t  tSent;          // written to ToRadio
+    uint32_t  tQueued;        // node accepted (QueueStatus res=0)
+    uint32_t  tDone;          // DELIVERED / IN_MESH / FAILED moment
+    uint8_t   routeErr;       // Routing error_reason, or QueueStatus res
+    // Incoming path info.
+    uint8_t   hops;           // hop_start - hop_limit, 0 when direct/unknown
+    uint32_t  relayNode;      // last relay, 0 when none/direct
 };
 bool           popMessage(Message& out);
 const Message& lastMessage();
@@ -175,16 +194,36 @@ void           markChatRead();
 // True when a message belongs to the open conversation (same rule the chat
 // list draws by).
 bool           chatMatches(const Message& m);
+// A copy of the inbox message with this packet id (for the info screen).
+bool           msgById(uint32_t pktId, Message& out);
+
+// ---- traceroute ----
+// Ask the mesh how our packets reach `num`: an empty RouteDiscovery on
+// TRACEROUTE_APP, the way the official clients do it. The reply lands in
+// traceResult(); poll it (timeout 30 s) from the UI tick.
+bool           traceStart(uint32_t num);
+struct TraceResult {
+    bool     active;          // a trace is in flight or finished
+    bool     waiting;         // in flight, no reply yet
+    bool     replied;         // a reply was parsed (path may still be empty)
+    uint32_t target;
+    uint32_t at;              // millis() when sent
+    uint8_t  n;               // hops in route[]
+    uint32_t route[8];        // node numbers along the path
+    int8_t   snr[8];          // SNR towards each hop, dB
+};
+const TraceResult& traceResult();
+void               tracePoll();
 
 // Queue a channel text for the task to send. Returns false when not READY or
 // the text is empty. The copy is bounded by TEXT_MAX. Texts go out paced
 // (see SEND_PACE_MS): the task holds them so the node never sees two texts
 // inside its 2-second rate window.
-bool sendChannelText(uint8_t channel, const char* text);
+bool sendChannelText(uint8_t channel, const char* text, uint32_t replyId = 0);
 // A direct message to a contact: the same packet with `to` set to the node.
 // Refused (false) when the contact's public key is unknown -- without it the
 // node cannot PKI-encrypt and fails the send.
-bool sendDirectText(uint32_t toNum, const char* text);
+bool sendDirectText(uint32_t toNum, const char* text, uint32_t replyId = 0);
 // Whether the node DB gave us this contact's public key (a DM prerequisite).
 bool contactHasKey(uint32_t num);
 // Minimum gap between two text writes, in ms. The node drops a second text

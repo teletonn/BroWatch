@@ -154,3 +154,24 @@ purple/white when pressed (used by the bottom `[SCAN][LOG][DESK]` bar and the
 message screens); `Theme::drawWin95Button` = silver 2-px bevel + black label
 (system dialogs). The panel must use `drawButton` to match, with pressed
 feedback and the red unread rim on the messages key.
+
+## 9. Delivery tracking, traceroute, incoming carousel
+
+- Outgoing texts file PENDING at queue time (loop task, pre-generated
+  `pid`), then SENT (ToRadio write) → QUEUED/IN_MESH (QueueStatus res=0;
+  broadcasts end at IN_MESH, no ack ever comes) → DELIVERED (Routing NONE)
+  or FAILED with the Routing/QueueStatus code. Inbox copies are mutated in
+  place by `findByPid`. Timestamps are `millis()`; shown via
+  `Clock::formatStamp` (wall clock when set, uptime otherwise).
+- Chat bubbles carry time + a status glyph (clock / ✓ / ✓✓ / ✕); tapping a
+  bubble opens MSG INFO with the transition timeline, hop info for
+  incoming (`hop_start - hop_limit`, last relay), and TRACE for DMs.
+- TRACE = empty `RouteDiscovery` on `TRACEROUTE_APP` (70) with
+  `want_response`, exactly like the official Python client's
+  `sendTraceRoute`. Replies parse packed/unpacked route+snr; a direct
+  neighbour may answer route-less (shown as "direct").
+- Reactions: LIKE/DISLIKE sends 👍/👎 (`F0 9F 91 8D/8E`) quoting the
+  message (`Data.reply_id` = sender's packet id, stored as `msgId`).
+- Incoming notify mail parks on CLEAR as a swipeable card stack (max 8)
+  until dismissed; LIKE/DISLIKE/CHAT/X act per card. Our font has no emoji
+  glyphs, so the thumbs are pixel-drawn; recipients see the real emoji.

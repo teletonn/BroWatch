@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "theme.h"
 #include "ui_scroll.h"
+#include "clock.h"
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
@@ -445,6 +446,128 @@ void uiMeshChatInit(TFT_eSPI& t) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
 
+// Delivery words, next to the link layer's codes.
+const char* meshStatusLabel(MeshLink::MsgStatus s) {
+    switch (s) {
+        case MeshLink::MsgStatus::PENDING:   return Theme::tr("Queued", "В очереди");
+        case MeshLink::MsgStatus::SENT:      return Theme::tr("Sent to node", "Ушло на ноду");
+        case MeshLink::MsgStatus::QUEUED:    return Theme::tr("At the node", "На ноде");
+        case MeshLink::MsgStatus::IN_MESH:   return Theme::tr("In the mesh", "В сети");
+        case MeshLink::MsgStatus::DELIVERED: return Theme::tr("Delivered", "Доставлено");
+        case MeshLink::MsgStatus::FAILED:    return Theme::tr("Failed", "Не ушло");
+    }
+    return "?";
+}
+const char* meshRouteErrLabel(uint8_t err) {
+    if (err >= 200) return Theme::tr("local queue full", "очередь полна");
+    if (err >= 100) {
+        static char b[28];
+        snprintf(b, sizeof b, "%s (%u)", Theme::tr("node refused", "нода отказала"), (unsigned)(err - 100));
+        return b;
+    }
+    switch (err) {
+        case 0:  return Theme::tr("delivered", "доставлено");
+        case 34:
+        case 35:
+        case 39: return Theme::tr("PKI failed (no key?)", "PKI: нет ключа");
+        case 38: return Theme::tr("rate limited, retry", "лимит, повтори");
+        default: break;
+    }
+    static char b2[28];
+    snprintf(b2, sizeof b2, "%s %u", Theme::tr("routing error", "ошибка"), (unsigned)err);
+    return b2;
+}
+
+// The delivery glyph in the bubble's corner: clock = waiting, one tick =
+// sent, two ticks = confirmed, cross = failed. 8x8, drawn with lines.
+static void drawMsgStatus(TFT_eSPI& t, int x, int y, MeshLink::MsgStatus s, bool direct) {
+    switch (s) {
+        case MeshLink::MsgStatus::PENDING:
+            t.drawCircle(x + 3, y + 3, 3, Theme::W95_SHADOW);
+            t.drawLine(x + 3, y + 3, x + 3, y + 1, Theme::W95_SHADOW);
+            t.drawLine(x + 3, y + 3, x + 5, y + 3, Theme::W95_SHADOW);
+            break;
+        case MeshLink::MsgStatus::SENT:
+            t.drawLine(x + 1, y + 4, x + 3, y + 6, Theme::W95_LIGHT);
+            t.drawLine(x + 3, y + 6, x + 7, y + 1, Theme::W95_LIGHT);
+            break;
+        case MeshLink::MsgStatus::QUEUED:
+            t.drawLine(x + 1, y + 4, x + 3, y + 6, Theme::CYAN);
+            t.drawLine(x + 3, y + 6, x + 7, y + 1, Theme::CYAN);
+            break;
+        case MeshLink::MsgStatus::IN_MESH:
+        case MeshLink::MsgStatus::DELIVERED: {
+            const uint16_t c = (s == MeshLink::MsgStatus::DELIVERED && direct) ? Theme::GREEN : Theme::CYAN;
+            t.drawLine(x + 0, y + 4, x + 2, y + 6, c);
+            t.drawLine(x + 2, y + 6, x + 5, y + 1, c);
+            t.drawLine(x + 4, y + 4, x + 6, y + 6, c);
+            t.drawLine(x + 6, y + 6, x + 9, y + 1, c);
+            break;
+        }
+        case MeshLink::MsgStatus::FAILED:
+            t.drawLine(x + 1, y + 1, x + 6, y + 6, Theme::RED);
+            t.drawLine(x + 6, y + 1, x + 1, y + 6, Theme::RED);
+            break;
+    }
+}
+
+// Shared bubble geometry: the tick draws it, the tap reads it back.
+struct ChatLayout {
+    const MeshLink::Message* msgs[MeshLink::MSG_MAX];
+    uint8_t n;
+    int hs[MeshLink::MSG_MAX];
+    int totalH;
+    int viewY0, viewY1, viewH, maxBW, lineH, w;
+    int bs[MeshLink::MSG_MAX];   // bubble x
+    int bw[MeshLink::MSG_MAX];   // bubble width
+};
+static int chatLayout(TFT_eSPI& t, int barTop, ChatLayout& L) {
+    L.w = t.width();
+    L.viewY0 = ROW_Y0;
+    L.viewY1 = barTop - 6;
+    L.viewH = L.viewY1 - L.viewY0;
+    L.lineH = t.fontHeight() + 3;
+    L.maxBW = L.w - 16 - 64;
+    L.n = 0;
+    for (int i = (int)MeshLink::inboxCount() - 1; i >= 0 && L.n < MeshLink::MSG_MAX; i--) {
+        const MeshLink::Message& m = MeshLink::inboxAt((uint8_t)i);
+        if (msgMatches(m)) L.msgs[L.n++] = &m;
+    }
+    L.totalH = 0;
+    for (uint8_t i = 0; i < L.n; i++) {
+        char lines[CHAT_LINE_MAX][CHAT_LINE_W];
+        int nl = chatWrap(t, L.msgs[i]->body, L.maxBW - 14, lines, CHAT_LINE_MAX);
+        if (!nl) nl = 1;
+        int bw = 0;
+        for (int k = 0; k < nl; k++) {
+            const int lw = Theme::textWidthRU(t, lines[k]);
+            if (lw > bw) bw = lw;
+        }
+        const int nw = Theme::textWidthRU(t, L.msgs[i]->from);
+        if (nw > bw) bw = nw;
+        int hh = 6 + L.lineH + nl * L.lineH + 6;
+        if (L.msgs[i]->outgoing) {
+            // Footer: clock time plus the delivery glyph, right-aligned.
+            char ts[16];
+            Clock::formatStamp(L.msgs[i]->at, ts, sizeof ts);
+            const int fw = Theme::textWidthRU(t, ts) + 4 + 10;
+            if (fw > bw) bw = fw;
+            hh += L.lineH;
+        }
+        bw += 14;
+        if (bw > L.maxBW) bw = L.maxBW;
+        L.bw[i] = bw;
+        L.bs[i] = L.msgs[i]->outgoing ? (L.w - 8 - bw) : 8;
+        L.hs[i] = hh;
+        L.totalH += hh + 6;
+    }
+    const int maxScroll = L.totalH > L.viewH ? L.totalH - L.viewH : 0;
+    if (s_chatStick) s_chatScrollPx = maxScroll;
+    if (s_chatScrollPx < 0) s_chatScrollPx = 0;
+    if (s_chatScrollPx > maxScroll) { s_chatScrollPx = maxScroll; s_chatStick = true; }
+    return maxScroll;
+}
+
 void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance) {
     (void)advance;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
@@ -456,54 +579,19 @@ void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance) {
     t.setTextWrap(false);
     const int w = t.width();
     const Bar b = bar(t, 3);
-    const int viewY0 = ROW_Y0;
-    const int viewY1 = b.y[0] - 6;
-    const int viewH = viewY1 - viewY0;
-    const int lineH = t.fontHeight() + 3;
 
-    // Collect the conversation oldest-first (inbox is newest-first).
-    const MeshLink::Message* msgs[MeshLink::MSG_MAX];
-    uint8_t matchN = 0;
-    for (int i = (int)MeshLink::inboxCount() - 1; i >= 0 && matchN < MeshLink::MSG_MAX; i--) {
-        const MeshLink::Message& m = MeshLink::inboxAt((uint8_t)i);
-        if (msgMatches(m)) msgs[matchN++] = &m;
-    }
-
-    const int maxBW = w - 16 - 64;   // bubble width ceiling, room to align
-    // Pass 1: heights (cached per frame; ≤24 short texts, cheap).
-    int hs[MeshLink::MSG_MAX];
-    int totalH = 0;
-    for (uint8_t i = 0; i < matchN; i++) {
-        char lines[CHAT_LINE_MAX][CHAT_LINE_W];
-        int nl = chatWrap(t, msgs[i]->body, maxBW - 14, lines, CHAT_LINE_MAX);
-        if (!nl) nl = 1;
-        hs[i] = 6 + lineH + nl * lineH + 6;   // pad + name + body + pad
-        totalH += hs[i] + 6;
-    }
-    const int maxScroll = totalH > viewH ? totalH - viewH : 0;
-    if (s_chatStick) s_chatScrollPx = maxScroll;
-    if (s_chatScrollPx < 0) s_chatScrollPx = 0;
-    if (s_chatScrollPx > maxScroll) { s_chatScrollPx = maxScroll; s_chatStick = true; }
-
+    ChatLayout L;
+    const int maxScroll = chatLayout(t, b.y[0], L);
     // Pass 2: draw visible bubbles.
-    int y = viewY0 - s_chatScrollPx;
-    for (uint8_t i = 0; i < matchN; i++) {
-        const MeshLink::Message* m = msgs[i];
-        const int bh = hs[i];
-        if (y + bh >= viewY0 && y <= viewY1) {
+    int y = L.viewY0 - s_chatScrollPx;
+    for (uint8_t i = 0; i < L.n; i++) {
+        const MeshLink::Message* m = L.msgs[i];
+        const int bh = L.hs[i];
+        if (y + bh >= L.viewY0 && y <= L.viewY1) {
             char lines[CHAT_LINE_MAX][CHAT_LINE_W];
-            int nl = chatWrap(t, m->body, maxBW - 14, lines, CHAT_LINE_MAX);
+            int nl = chatWrap(t, m->body, L.maxBW - 14, lines, CHAT_LINE_MAX);
             if (!nl) { lines[0][0] = '\0'; nl = 1; }
-            int bw = 0;
-            for (int k = 0; k < nl; k++) {
-                const int lw = Theme::textWidthRU(t, lines[k]);
-                if (lw > bw) bw = lw;
-            }
-            const int nw = Theme::textWidthRU(t, m->from);
-            if (nw > bw) bw = nw;
-            bw += 14;
-            if (bw > maxBW) bw = maxBW;
-            const int bx = m->outgoing ? (w - 8 - bw) : 8;
+            const int bx = L.bs[i], bw = L.bw[i];
             const uint16_t rim = m->outgoing ? Theme::CYAN : Theme::VAPOR_PURPLE;
             t.fillRoundRect(bx, y, bw, bh, 4, Theme::TASKBAR);
             t.drawRoundRect(bx, y, bw, bh, 4, rim);
@@ -512,19 +600,30 @@ void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance) {
             Theme::printRU(t, m->from);
             t.setTextColor(Theme::WHITE, Theme::TASKBAR);
             for (int k = 0; k < nl; k++) {
-                t.setCursor(bx + 7, y + 4 + lineH + k * lineH);
+                t.setCursor(bx + 7, y + 4 + L.lineH + k * L.lineH);
                 Theme::printRU(t, lines[k]);
+            }
+            if (m->outgoing) {
+                // Footer: when it went out, plus the delivery glyph.
+                char ts[16];
+                Clock::formatStamp(m->at, ts, sizeof ts);
+                const int fy = y + 4 + L.lineH + nl * L.lineH;
+                const int tw = Theme::textWidthRU(t, ts);
+                t.setTextColor(Theme::W95_LIGHT, Theme::TASKBAR);
+                t.setCursor(bx + bw - 7 - tw - 4 - 10, fy);
+                Theme::printRU(t, ts);
+                drawMsgStatus(t, bx + bw - 7 - 10, fy - 1, m->status, m->direct);
             }
         }
         y += bh + 6;
     }
-    if (!matchN) {
+    if (!L.n) {
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
         t.setCursor(8, ROW_Y0 + 4);
         Theme::printRU(t, Theme::tr("Nothing here yet. SEND writes the first line.",
                                     "Пока пусто. ОТПР напишет первую строку."));
     }
-    if (maxScroll > 0) Theme::drawScrollbar(t, w - 4, viewY0, viewH, totalH, viewH, s_chatScrollPx);
+    if (maxScroll > 0) Theme::drawScrollbar(t, w - 4, L.viewY0, L.viewH, L.totalH, L.viewH, s_chatScrollPx);
     static char chl[24];
     if (MeshLink::dmTarget()) snprintf(chl, sizeof chl, "%s", Theme::tr("CHANNELS", "КАНАЛЫ"));
     else                     snprintf(chl, sizeof chl, "%s", MeshLink::channelAt(MeshLink::sendChannel()).name);
@@ -540,6 +639,21 @@ MeshChatHit uiMeshChatHit(TFT_eSPI& t, int x, int y) {
     if (in(x, y, b.x[1], b.y[1], b.w, BTN_H)) return MeshChatHit::WRITE;
     if (in(x, y, b.x[2], b.y[2], b.w, BTN_H)) return MeshChatHit::BACK;
     return MeshChatHit::NONE;
+}
+
+bool uiMeshChatBubbleHit(TFT_eSPI& t, int x, int y, uint32_t* pktId) {
+    const Bar b = bar(t, 3);
+    ChatLayout L;
+    chatLayout(t, b.y[0], L);
+    int yy = L.viewY0 - s_chatScrollPx;
+    for (uint8_t i = 0; i < L.n; i++) {
+        if (x >= L.bs[i] && x < L.bs[i] + L.bw[i] && y >= yy && y < yy + L.hs[i]) {
+            if (pktId) *pktId = L.msgs[i]->outgoing ? L.msgs[i]->pktId : L.msgs[i]->msgId;
+            return true;
+        }
+        yy += L.hs[i] + 6;
+    }
+    return false;
 }
 
 // =====================================================================
@@ -616,6 +730,181 @@ MeshTplHit uiMeshTemplatesHit(TFT_eSPI& t, int x, int y, int* row) {
     }
     if (in(x, y, b.x[0], b.y[0], b.w, BTN_H)) return MeshTplHit::BACK;
     return MeshTplHit::NONE;
+}
+
+// =====================================================================
+//  MSG INFO (one message's delivery story)
+// =====================================================================
+namespace {
+uint32_t s_infoPid = 0;
+} // namespace
+
+void uiMeshMsgInfoShow(uint32_t pktId) { s_infoPid = pktId; }
+uint32_t uiMeshMsgInfoPeer() {
+    MeshLink::Message m;
+    memset(&m, 0, sizeof m);
+    if (!s_infoPid || !MeshLink::msgById(s_infoPid, m) || !m.direct) return 0;
+    return m.outgoing ? m.toNum : m.fromNum;
+}
+void uiMeshMsgInfoInit(TFT_eSPI& t) {
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+}
+
+static void infoName(uint32_t num, char* out, size_t cap) {
+    if (!num) { snprintf(out, cap, "?"); return; }
+    if (!MeshLink::contactName(num, out, cap)) snprintf(out, cap, "%04X", (unsigned)(num & 0xFFFF));
+}
+
+void uiMeshMsgInfoTick(TFT_eSPI& t, uint32_t now, bool advance) {
+    (void)advance;
+    MeshLink::tracePoll();
+    t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
+    Theme::drawTitleBar(t, ">> MSG INFO <<");
+    statusLine(t, now);
+    t.setTextSize(1);
+    t.setTextWrap(false);
+    const int w = t.width();
+    const Bar b = bar(t, 2);
+    MeshLink::Message m;
+    memset(&m, 0, sizeof m);
+    const bool have = s_infoPid && MeshLink::msgById(s_infoPid, m);
+    int y = ROW_Y0;
+    const int lh = t.fontHeight() + 3;
+    if (!have) {
+        t.setTextColor(Theme::W95_SHADOW, Theme::BG);
+        t.setCursor(8, y);
+        Theme::printRU(t, Theme::tr("Message scrolled away.", "Сообщение ушло из памяти."));
+    } else {
+        // State header: glyph + words.
+        drawMsgStatus(t, 10, y, m.outgoing ? m.status : MeshLink::MsgStatus::DELIVERED, m.direct);
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        t.setCursor(24, y);
+        Theme::printRU(t, m.outgoing ? meshStatusLabel(m.status)
+                                     : Theme::tr("Received", "Получено"));
+        y += lh + 2;
+        // What.
+        char lines[3][CHAT_LINE_W];
+        int nl = chatWrap(t, m.body, w - 32, lines, 3);
+        if (!nl) { lines[0][0] = '\0'; nl = 1; }
+        t.setTextColor(Theme::W95_LIGHT, Theme::BG);
+        for (int k = 0; k < nl && y < b.y[0] - lh; k++, y += lh) {
+            t.setCursor(10, y);
+            Theme::printRU(t, lines[k]);
+        }
+        y += 2;
+        char ts[16];
+        // Timeline: every step with its stamp, like a parcel tracker.
+        if (m.outgoing) {
+            struct Step { const char* txt; uint32_t at; };
+            char s0[24], s1[24], s2[24], s3[24];
+            Clock::formatStamp(m.at, ts, sizeof ts);
+            snprintf(s0, sizeof s0, "%s %s", Theme::tr("queued", "в очереди"), ts);
+            Step steps[4] = {{s0, m.at}, {"", 0}, {"", 0}, {"", 0}};
+            uint8_t sn = 1;
+            if (m.tSent) {
+                Clock::formatStamp(m.tSent, ts, sizeof ts);
+                snprintf(s1, sizeof s1, "%s %s", Theme::tr("to node", "на ноду"), ts);
+                steps[sn++] = {s1, m.tSent};
+            }
+            if (m.tQueued) {
+                Clock::formatStamp(m.tQueued, ts, sizeof ts);
+                snprintf(s2, sizeof s2, "%s %s", Theme::tr("node took it", "нода взяла"), ts);
+                steps[sn++] = {s2, m.tQueued};
+            }
+            if (m.tDone && m.status != MeshLink::MsgStatus::QUEUED) {
+                Clock::formatStamp(m.tDone, ts, sizeof ts);
+                if (m.status == MeshLink::MsgStatus::FAILED)
+                    snprintf(s3, sizeof s3, "%s: %s", meshRouteErrLabel(m.routeErr), ts);
+                else
+                    snprintf(s3, sizeof s3, "%s %s", meshStatusLabel(m.status), ts);
+                steps[sn++] = {s3, m.tDone};
+            }
+            for (uint8_t k = 0; k < sn && y < b.y[0] - lh; k++, y += lh) {
+                t.setTextColor(k + 1 < sn ? Theme::GREEN : Theme::VAPOR_YELLOW, Theme::BG);
+                t.setCursor(10, y);
+                Theme::printRU(t, k ? "  └ " : "  • ");
+                char row[64];
+                if (steps[k].at > m.at)
+                    snprintf(row, sizeof row, "%s (+%us)", steps[k].txt, (unsigned)((steps[k].at - m.at) / 1000));
+                else
+                    snprintf(row, sizeof row, "%s", steps[k].txt);
+                Theme::printRU(t, row);
+            }
+        } else {
+            Clock::formatStamp(m.at, ts, sizeof ts);
+            t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
+            t.setCursor(10, y);
+            char got[40];
+            snprintf(got, sizeof got, "%s %s", Theme::tr("got", "получено"), ts);
+            Theme::printRU(t, got);
+            y += lh;
+            if (y < b.y[0] - lh) {
+                t.setTextColor(Theme::W95_LIGHT, Theme::BG);
+                t.setCursor(10, y);
+                char via[48];
+                if (m.hops) {
+                    char rn[12];
+                    infoName(m.relayNode, rn, sizeof rn);
+                    snprintf(via, sizeof via, "%s %u, via %s",
+                             Theme::tr("hops:", "хопов:"), (unsigned)m.hops, m.relayNode ? rn : "?");
+                } else snprintf(via, sizeof via, "%s", Theme::tr("direct, no relays", "напрямую"));
+                Theme::printRU(t, via);
+                y += lh;
+            }
+        }
+        // Traceroute: the map of how packets reach the peer.
+        if (m.direct && y < b.y[0] - lh) {
+            const MeshLink::TraceResult& tr = MeshLink::traceResult();
+            const uint32_t peer = m.outgoing ? m.toNum : m.fromNum;
+            const bool ours = tr.active && tr.target == peer;
+            t.setTextColor(ours && !tr.waiting && tr.n ? Theme::GREEN
+                           : Theme::W95_SHADOW, Theme::BG);
+            t.setCursor(10, y);
+            if (!ours) Theme::printRU(t, Theme::tr("TRACE maps the path", "TRACE покажет путь"));
+            else if (tr.waiting) {
+                char wt[32];
+                snprintf(wt, sizeof wt, "%s %us…", Theme::tr("tracing…", "трассируем…"),
+                         (unsigned)((now - tr.at) / 1000));
+                Theme::printRU(t, wt);
+            } else if (!tr.replied) Theme::printRU(t, Theme::tr("no answer (30s)", "нет ответа (30с)"));
+            else if (!tr.n) Theme::printRU(t, Theme::tr("direct, no relays", "напрямую"));
+            else {
+                char path[96] = "YOU";
+                for (uint8_t k = 0; k < tr.n && k < 6; k++) {
+                    char nm[12];
+                    infoName(tr.route[k], nm, sizeof nm);
+                    strncat(path, ">", sizeof(path) - strlen(path) - 1);
+                    strncat(path, nm, sizeof(path) - strlen(path) - 1);
+                }
+                if (tr.n > 6) strncat(path, ">…", sizeof(path) - strlen(path) - 1);
+                Theme::printRU(t, path);
+                y += lh;
+                if (y < b.y[0] - lh) {
+                    char snr[96] = "";
+                    for (uint8_t k = 0; k < tr.n && k < 6; k++) {
+                        char s[10];
+                        snprintf(s, sizeof s, "%s%d", k ? " " : "", (int)tr.snr[k]);
+                        strncat(snr, s, sizeof(snr) - strlen(snr) - 1);
+                    }
+                    t.setTextColor(Theme::CYAN, Theme::BG);
+                    t.setCursor(10, y);
+                    Theme::printRU(t, snr);
+                }
+            }
+            y += lh;
+        }
+    }
+    const bool canTrace = have && m.direct && MeshLink::connected();
+    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, Theme::tr("TRACE", "ТРАССА"), !canTrace);
+    Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, BTN_H, Theme::tr("BACK", "НАЗАД"), false);
+    Theme::drawToast(t, now);
+}
+
+MeshInfoHit uiMeshMsgInfoHit(TFT_eSPI& t, int x, int y) {
+    const Bar b = bar(t, 2);
+    if (in(x, y, b.x[0], b.y[0], b.w, BTN_H)) return MeshInfoHit::TRACE;
+    if (in(x, y, b.x[1], b.y[1], b.w, BTN_H)) return MeshInfoHit::BACK;
+    return MeshInfoHit::NONE;
 }
 
 #endif // MESH_COMPANION

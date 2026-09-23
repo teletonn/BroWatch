@@ -3,6 +3,9 @@
 #include <TFT_eSPI.h>
 #include <stdint.h>
 #include "detection.h"
+#if MESH_COMPANION
+#include "mesh_link.h"
+#endif
 
 void uiClearInit(TFT_eSPI& t);
 // advance: see Squachy::tick()'s header comment -- gates state
@@ -43,13 +46,23 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
 enum class CompanionHit : uint8_t { NONE, CHANNELS, CONTACTS, MESSAGES };
 CompanionHit uiClearCompanionHit(int x, int y);
 // A companion message just arrived: the herald flies in across the main
-// screen carrying the letter, hovers, and leaves -- and a message bubble
-// slides in with it, showing who wrote and what, so the mail is readable
-// without leaving the main screen. Tapping the bubble opens that exact
-// conversation (uiClearHeraldHit); it hides itself after a few seconds.
+// screen carrying the letter, hovers, and leaves -- and a message card
+// parks under the title, showing who wrote and what, until the user deals
+// with it. Several cards stack: swipe the card (or tap its neighbors via
+// NEXT/PREV) to browse; LIKE/DISLIKE fires a 👍/👎 reply at that card's
+// sender; CHAT opens its thread; X dismisses it. Tapping the card body
+// also opens the thread.
 void uiClearHerald(uint32_t now);
-void uiClearHeraldMsg(uint32_t now, const char* from, const char* body, bool direct, const char* where);
+void uiClearHeraldPush(const MeshLink::Message& m);
+bool uiClearHeraldVisible();
+bool uiClearHeraldCurrent(MeshLink::Message& out);
+void uiClearHeraldNext();
+void uiClearHeraldPrev();
+void uiClearHeraldDismiss();
+void uiClearHeraldDismissMatch(bool direct, uint32_t peer, uint8_t channel);
 bool uiClearHeraldHit(int x, int y);
+enum class HeraldBtn : uint8_t { NONE, LIKE, DISLIKE, CHAT, CLOSE };
+HeraldBtn uiClearHeraldBtnHit(int x, int y);
 #endif
 
 #if SQUACH_MESH
