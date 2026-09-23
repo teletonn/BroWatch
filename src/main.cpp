@@ -4884,10 +4884,16 @@ void loop() {
         }
         case AppState::MESH_LINK_MSGINFO: {
             drawTwoBand([&](TFT_eSPI& t, bool advance) { uiMeshMsgInfoTick(t, now, advance); });
-            if (touchJustUp) {
+            // Hit-test with the press point, like every sibling screen: at
+            // release tp is {false,0,0}, so testing tp here can never hit.
+            static bool gDown = false;
+            static int  gx = 0, gy = 0;
+            if (touchJustDown) { gDown = true; gx = tp.x; gy = tp.y; }
+            if (touchJustUp && gDown) {
+                gDown = false;
                 lastTouch = now;
-                if (Theme::pinnedBackHit(tp.x, tp.y, canvas->width(), canvas->height())) { enterMeshChat(); break; }
-                switch (uiMeshMsgInfoHit(*canvas, tp.x, tp.y)) {
+                if (Theme::pinnedBackHit(gx, gy, canvas->width(), canvas->height())) { enterMeshChat(); break; }
+                switch (uiMeshMsgInfoHit(*canvas, gx, gy)) {
                     case MeshInfoHit::TRACE: {
                         const uint32_t peer = uiMeshMsgInfoPeer();
                         if (peer) MeshLink::traceStart(peer);

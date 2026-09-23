@@ -796,7 +796,9 @@ void uiMeshMsgInfoTick(TFT_eSPI& t, uint32_t now, bool advance) {
         // Timeline: every step with its stamp, like a parcel tracker.
         if (m.outgoing) {
             struct Step { const char* txt; uint32_t at; };
-            char s0[24], s1[24], s2[24], s3[24];
+            // Russian labels run 2 bytes per letter: keep room for the
+            // longest ("noda otkazala (NN): MMMM:SS").
+            char s0[48], s1[48], s2[48], s3[48];
             Clock::formatStamp(m.at, ts, sizeof ts);
             snprintf(s0, sizeof s0, "%s %s", Theme::tr("queued", "в очереди"), ts);
             Step steps[4] = {{s0, m.at}, {"", 0}, {"", 0}, {"", 0}};
@@ -823,7 +825,7 @@ void uiMeshMsgInfoTick(TFT_eSPI& t, uint32_t now, bool advance) {
                 t.setTextColor(k + 1 < sn ? Theme::GREEN : Theme::VAPOR_YELLOW, Theme::BG);
                 t.setCursor(10, y);
                 Theme::printRU(t, k ? "  └ " : "  • ");
-                char row[64];
+                char row[80];
                 if (steps[k].at > m.at)
                     snprintf(row, sizeof row, "%s (+%us)", steps[k].txt, (unsigned)((steps[k].at - m.at) / 1000));
                 else
