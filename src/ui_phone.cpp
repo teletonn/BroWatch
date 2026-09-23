@@ -102,10 +102,16 @@ uint8_t     s_forgotTaps  = 0;
 uint32_t    s_forgotAt    = 0;
 bool        s_pinForgotHit = false;
 const uint32_t FORGOT_ARM_MS = 5000;
-uint8_t  s_max    = Squachy::CUSTOM_NAME_MAX;
+uint16_t s_max    = Squachy::CUSTOM_NAME_MAX;
 bool     s_msgOk  = false;      // a message ended on OK, not BACK
+// On the companion's message board a Russian key appends the actual Cyrillic
+// (UTF-8, two bytes) instead of the SquachMesh transliteration: the network
+// this board is talking to carries UTF-8, and the point of the board is to
+// type Russian. Everywhere else the air alphabet is Latin, so the old
+// transliteration stands.
+bool     s_utf8   = false;
 
-char     s_buf[MeshMsg::TEXT_MAX + 1];
+char     s_buf[256];
 // Filled by the draw, read by the hit test, so the two cannot disagree about
 // where the button is -- the same reason every other row list here computes
 // its geometry once.
@@ -177,6 +183,13 @@ void appendTr(const char* tr) {
     commitPending();
     while (*tr && s_len < s_max) { s_buf[s_len++] = *tr++; }
     s_buf[s_len] = '\0';
+}
+// A whole UTF-8 sequence at once, so a two-byte Russian letter never lands
+// half-typed against the byte ceiling.
+void appendUtf8(const char* s) {
+    commitPending();
+    const size_t n = strlen(s);
+    if (s_len + n <= s_max) { memcpy(s_buf + s_len, s, n); s_len += (uint8_t)n; s_buf[s_len] = '\0'; }
 }
 
 // Both of these moved into Theme so the WiFi password board can have the
@@ -324,6 +337,21 @@ static void qwertyFollow(int x, int y) {
              (unsigned)s_filter.cn, traceKey(s_armed));
 }
 
+static void typeKey(int k) {
+    if (k < 0) return;
+    const char c = s_keys[k].ch;
+    if      (c == Qwerty::BKSP) deleteLast();
+    else if (c == Qwerty::CLR)  { commitPending(); s_len = 0; s_buf[0] = '\0'; }
+    else if (c == Qwerty::SHUF) shuffleName();
+    else if (c == Qwerty::OK)   saveAndClose();
+    else if (Qwerty::isRuKey(c)) {
+        const uint8_t ix = (uint8_t)(c - Qwerty::RU_BASE);
+        if (s_utf8) appendUtf8(Qwerty::ruGlyph(ix));
+        else        appendTr(Qwerty::ruTr(ix));
+    }
+    else                        appendChar(c);
+}
+
 static void qwertyRelease() {
     // Nothing is read from the touch here, deliberately. The finger has gone,
     // and the samples just before it went are the ones the filter exists to
@@ -333,19 +361,31 @@ static void qwertyRelease() {
     s_armed = -1;
     QW_TRACE("[qw] U %lu typed=%s\n", (unsigned long)millis(), traceKey(k));
     s_lastQwKey = (int8_t)k;
-    if (k < 0) return;
-    const char c = s_keys[k].ch;
-    if      (c == Qwerty::BKSP) deleteLast();
-    else if (c == Qwerty::CLR)  { commitPending(); s_len = 0; s_buf[0] = '\0'; }
-    else if (c == Qwerty::SHUF) shuffleName();
-    else if (c == Qwerty::OK)   saveAndClose();
-    else if (Qwerty::isRuKey(c)) appendTr(Qwerty::ruTr((uint8_t)(c - Qwerty::RU_BASE)));
-    else                        appendChar(c);
+    typeKey(k);
 }
+
+#if MESH_COMPANION_AUTOSTART
+// Bench only: tap the first Russian key through the real touch path, so the
+// companion message screen can be exercised without a finger on the panel.
+void uiPhoneDebugTypeRu() {
+    for (uint8_t i = 0; i < s_keyN; i++) {
+        if (!Qwerty::isRuKey(s_keys[i].ch)) continue;
+        const int cx = s_keys[i].x + s_keys[i].w / 2;
+        const int cy = s_keys[i].y + s_keys[i].h / 2;
+        const uint32_t t = millis();
+        uiPhoneTouch(cx, cy, t, PhoneTouch::DOWN);
+        uiPhoneTouch(cx, cy, t + 25, PhoneTouch::UP);
+        Serial.printf("[bench] tap RU key %u at %d,%d\n", (unsigned)i, cx, cy);
+        return;
+    }
+    Serial.println("[bench] no RU key on the board");
+}
+#endif
 
 void uiPhoneInit(TFT_eSPI& t) {
     (void)t;
     s_mode = Mode::NAME;
+    s_utf8 = false;
     s_max  = Squachy::CUSTOM_NAME_MAX;
     start(Squachy::customName());
 }
@@ -353,7 +393,18 @@ void uiPhoneInit(TFT_eSPI& t) {
 void uiPhoneInitMessage(TFT_eSPI& t, const char* text) {
     (void)t;
     s_mode = Mode::MESSAGE;
+    s_utf8 = false;
     s_max  = MeshMsg::TEXT_MAX;
+    start(text);
+}
+
+// The companion's board: the same screen, but the ceiling is the network's
+// (bytes, so a Russian letter costs two) and a Russian key types Cyrillic.
+void uiPhoneInitMeshMessage(TFT_eSPI& t, const char* text, uint16_t byteLimit) {
+    (void)t;
+    s_mode = Mode::MESSAGE;
+    s_utf8 = true;
+    s_max  = byteLimit;
     start(text);
 }
 
@@ -626,12 +677,12 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     // is what OK keeps, and what SHUFFLE changes.
     const bool curated = !msg() && s_len == 0;
     const char* shown = curated ? Squachy::nickname() : s_buf;
-    const int tw = t.textWidth(shown);
+    const int tw = Theme::textWidthRU(t, shown);
     int tx = dX + 7;
     if (tw > dW - 20) tx = dX + dW - 13 - tw;
     t.setCursor(tx, dY + (dH - 14) / 2);
     if (curated) t.setTextColor(STEEL_LT);
-    t.print(shown);
+    Theme::printRU(t, shown);
     t.setTextColor(Theme::GREEN);
     // A caret that stops blinking while a letter is still editable is one
     // glyph doing two jobs: it also says "this one can still change".

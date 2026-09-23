@@ -14,6 +14,15 @@
 void uiPhoneInit(TFT_eSPI& t);
 // A message, starting from `text` (nullptr or "" for a blank one).
 void uiPhoneInitMessage(TFT_eSPI& t, const char* text);
+// The companion's message board: the same screen, but `byteLimit` is the
+// external network's ceiling in UTF-8 BYTES (a Russian letter is two) and a
+// Russian key types Cyrillic rather than transliterating it.
+void uiPhoneInitMeshMessage(TFT_eSPI& t, const char* text, uint16_t byteLimit);
+#if MESH_COMPANION_AUTOSTART
+// Bench only: type the first Russian key, for driving the companion message
+// path from a test build with no finger on the panel.
+void uiPhoneDebugTypeRu();
+#endif
 // `advance` is false on the second of the 3.5"'s two band passes -- the
 // same frame drawn again -- so anything that steps by the call rather
 // than by the clock must sit still for it. Other boards draw once.

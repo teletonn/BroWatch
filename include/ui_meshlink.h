@@ -18,20 +18,35 @@ enum class MeshNodesHit : uint8_t { ROW, SCAN, CONNECT, DISCONNECT, BACK, NONE }
 MeshNodesHit uiMeshNodesHit(TFT_eSPI& t, int x, int y, int* row);
 void uiMeshNodesSelect(int row);
 int  uiMeshNodesSelected();
+void uiMeshNodesScroll(int delta);
 
 void uiMeshChannelsInit(TFT_eSPI& t);
 void uiMeshChannelsTick(TFT_eSPI& t, uint32_t now, bool advance = true);
 enum class MeshChannelsHit : uint8_t { ROW, BACK, NONE };
 MeshChannelsHit uiMeshChannelsHit(TFT_eSPI& t, int x, int y, int* row);
+void uiMeshChannelsScroll(int delta);
 
 void uiMeshContactsInit(TFT_eSPI& t);
 void uiMeshContactsTick(TFT_eSPI& t, uint32_t now, bool advance = true);
 enum class MeshContactsHit : uint8_t { ROW, BACK, NONE };
 MeshContactsHit uiMeshContactsHit(TFT_eSPI& t, int x, int y, int* row);
+void uiMeshContactsScroll(int delta);
 
 void uiMeshChatInit(TFT_eSPI& t);
 void uiMeshChatTick(TFT_eSPI& t, uint32_t now, bool advance = true);
 enum class MeshChatHit : uint8_t { CHANNEL, WRITE, BACK, NONE };
 MeshChatHit uiMeshChatHit(TFT_eSPI& t, int x, int y);
+void uiMeshChatScroll(int delta);
+
+// The SEND chooser: canned messages, and a MANUAL row that opens the keyboard.
+// Index 0 is MANUAL; 1.. are templates. uiMeshTemplateAt() returns the text of
+// row `i` (never null in range); uiMeshTemplateCount() is the row count.
+void        uiMeshTemplatesInit(TFT_eSPI& t);
+void        uiMeshTemplatesTick(TFT_eSPI& t, uint32_t now, bool advance = true);
+enum class MeshTplHit : uint8_t { ROW, BACK, NONE };
+MeshTplHit  uiMeshTemplatesHit(TFT_eSPI& t, int x, int y, int* row);
+uint8_t     uiMeshTemplateCount();
+const char* uiMeshTemplateAt(uint8_t i);
+void        uiMeshTemplatesScroll(int delta);
 
 #endif // MESH_COMPANION

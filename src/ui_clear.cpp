@@ -2651,6 +2651,10 @@ static int  s_cpX[3] = {0, 0, 0};
 static int  s_cpW[3] = {0, 0, 0};
 static int  s_cpY = 0, s_cpH = 0;
 static bool s_cpOn = false;
+// The key the finger is on, for pressed feedback like the bottom bar.
+static CompanionHit s_cpPressed = CompanionHit::NONE;
+static uint32_t s_cpPressedAt = 0;
+static const uint32_t CP_PRESS_MS = 250;
 
 static void drawCompanionPanel(TFT_eSPI& t, int w, int top, int bottom) {
     s_cpOn = false;
@@ -2682,18 +2686,25 @@ static void drawCompanionPanel(TFT_eSPI& t, int w, int top, int bottom) {
 
     const uint8_t unread = MeshLink::unreadCount();
     char l0[16], l1[16], l2[16];
-    snprintf(l0, sizeof l0, "%s%u", Theme::tr("CHAN", "КАН"), (unsigned)MeshLink::channelCount());
-    snprintf(l1, sizeof l1, "%s%u", Theme::tr("CONT", "КОН"), (unsigned)MeshLink::contactCount());
-    snprintf(l2, sizeof l2, "%s%u", Theme::tr("MSGS", "ЧАТ"), (unsigned)unread);
+    snprintf(l0, sizeof l0, "%s %u", Theme::tr("CHAN", "КАН"), (unsigned)MeshLink::channelCount());
+    snprintf(l1, sizeof l1, "%s %u", Theme::tr("CONT", "КОН"), (unsigned)MeshLink::contactCount());
+    snprintf(l2, sizeof l2, "%s %u", Theme::tr("MSGS", "ЧАТ"), (unsigned)unread);
     (void)ru;
 
     const int xs[3] = { margin, margin + bw + gap, margin + 2 * (bw + gap) };
     for (int i = 0; i < 3; i++) { s_cpX[i] = xs[i]; s_cpW[i] = bw; }
     s_cpY = btnY; s_cpH = btnH; s_cpOn = true;
 
-    Theme::drawWin95Button(t, xs[0], btnY, bw, btnH, l0, false);
-    Theme::drawWin95Button(t, xs[1], btnY, bw, btnH, l1, false);
-    Theme::drawWin95Button(t, xs[2], btnY, bw, btnH, l2, false);
+    // The app's own keys: purple 1-px border, BG fill, centred cyan label --
+    // the same Theme::drawButton the bottom [SCAN][LOG][DESK] bar uses, not
+    // the silver Win95 dialog buttons. Pressed = solid purple, like below.
+    const char* ls[3] = { l0, l1, l2 };
+    const uint32_t nowMs = millis();
+    for (int i = 0; i < 3; i++) {
+        const bool pressed = (s_cpPressed == (CompanionHit)((int)CompanionHit::CHANNELS + i) &&
+                              (nowMs - s_cpPressedAt) < CP_PRESS_MS);
+        Theme::drawButton(t, xs[i], btnY, bw, btnH, ls[i], pressed);
+    }
     // Unread mail: a red rim on the message key, so a message that arrived
     // while the screen was elsewhere is visible without opening anything.
     if (unread) t.drawRect(xs[2] - 1, btnY - 1, bw + 2, btnH + 2, Theme::RED);
@@ -2704,10 +2715,59 @@ CompanionHit uiClearCompanionHit(int x, int y) {
     const int slop = 6;
     for (int i = 0; i < 3; i++) {
         if (x >= s_cpX[i] - slop && x < s_cpX[i] + s_cpW[i] + slop &&
-            y >= s_cpY - slop && y < s_cpY + s_cpH + slop)
-            return (CompanionHit)((int)CompanionHit::CHANNELS + i);
+            y >= s_cpY - slop && y < s_cpY + s_cpH + slop) {
+            CompanionHit hit = (CompanionHit)((int)CompanionHit::CHANNELS + i);
+            s_cpPressed = hit;
+            s_cpPressedAt = millis();
+            return hit;
+        }
     }
     return CompanionHit::NONE;
+}
+
+// ---- the herald --------------------------------------------------------------
+// A pigeon with a letter in its beak, for a message that arrived while the
+// main screen was up. It flies in from the right, hovers over the mascot with
+// a slow bob while the envelope dips below it, then carries on out to the
+// left. Drawn last so it passes in front of everything, the way the pet does.
+// Deliberately small and quick: a sighting, not a takeover.
+static uint32_t s_heraldStart = 0;
+static const uint32_t HERALD_MS = 4200;
+
+void uiClearHerald(uint32_t now) { s_heraldStart = now; }
+
+static void drawHerald(TFT_eSPI& t, uint32_t now) {
+    if (!s_heraldStart) return;
+    const uint32_t e = now - s_heraldStart;
+    if (e > HERALD_MS) { s_heraldStart = 0; return; }
+    const int w = t.width();
+    const int hx = w / 2 + 40;          // where it hovers
+    int x;
+    if (e < 1200)       x = (w + 30) - (int)((int32_t)(w + 30 - hx) * (int)e / 1200);
+    else if (e < 2900)  x = hx;
+    else                x = hx - (int)((int32_t)(hx + 40) * (int)(e - 2900) / (HERALD_MS - 2900));
+    // A triangular bob, no float math: 0,2,4,2 repeating every 600ms.
+    const int bob = (int)((now / 150) % 4);
+    const int y = 58 + (bob > 1 ? 3 - bob : bob) * 2;
+    const int flap = ((now / 90) % 2) ? 1 : -1;   // wing up or down
+
+    const uint16_t bodyC = Theme::W95_LIGHT;
+    const uint16_t wingC = Theme::VAPOR_PINK;
+    // trail: three fading dots behind the bird
+    for (int i = 1; i <= 3; i++)
+        t.drawPixel(x + i * 9, y + (i & 1 ? 1 : -1), i == 1 ? Theme::CYAN : Theme::VAPOR_PURPLE);
+    // wing behind the body
+    t.fillTriangle(x + 1, y - 1, x - 4, y - 9 * flap, x + 6, y - 2, wingC);
+    // body + head
+    t.fillEllipse(x, y, 8, 5, bodyC);
+    t.fillCircle(x + 7, y - 4, 3, bodyC);
+    t.fillTriangle(x + 10, y - 5, x + 15, y - 4, x + 10, y - 3, Theme::AMBER);  // beak
+    t.drawPixel(x + 8, y - 5, Theme::BG);                                        // eye
+    // the letter, hanging under the beak
+    t.fillRect(x + 3, y + 5, 12, 9, Theme::WHITE);
+    t.drawRect(x + 3, y + 5, 12, 9, Theme::W95_SHADOW);
+    t.drawLine(x + 3, y + 5, x + 9, y + 10, Theme::W95_SHADOW);
+    t.drawLine(x + 14, y + 5, x + 9, y + 10, Theme::W95_SHADOW);
 }
 #endif
 
@@ -3296,6 +3356,10 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     if (DrawBand::has(bar.y, bar.y + bar.h))
         Theme::drawButtonBar(t, ButtonId::NONE,
                              scanMenu ? Theme::ButtonBarMode::SCAN_PICKER : Theme::ButtonBarMode::MAIN);
+#if MESH_COMPANION
+    // The herald, over everything: a companion message arrived.
+    if (DrawBand::has(0, h)) drawHerald(t, now);
+#endif
 #if SQUACH_MESH
     // Last, so it sits over the counters and the buttons -- which it has
     // taken over for as long as it runs; main.cpp routes every tap to it.

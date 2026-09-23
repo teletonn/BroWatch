@@ -42,6 +42,10 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
 // rectangles are filled in by the draw; this reads them.
 enum class CompanionHit : uint8_t { NONE, CHANNELS, CONTACTS, MESSAGES };
 CompanionHit uiClearCompanionHit(int x, int y);
+// A companion message just arrived: the herald flies in across the main
+// screen carrying the letter, hovers, and leaves. Purely a sighting -- the
+// message itself is the toast and the inbox.
+void uiClearHerald(uint32_t now);
 #endif
 
 #if SQUACH_MESH

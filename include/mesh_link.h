@@ -102,6 +102,8 @@ struct Channel {
     char    name[13];         // ChannelSettings.name; empty is the "Default" one
     uint8_t role;             // 0 DISABLED, 1 PRIMARY, 2 SECONDARY
     bool    hasPsk;
+    uint8_t psk[32];          // the pre-shared key itself, for the chat's sake
+    uint8_t pskLen;           // 0, 1 (simple/default), 16 or 32
     bool    present;
 };
 uint8_t        channelCount();
@@ -119,6 +121,8 @@ struct Contact {
     char     longName[25];
     uint8_t  role;
     bool     hasKey;          // has a public key, so a DM can be encrypted
+    uint8_t  key[32];         // the public key itself, kept for the chat's sake
+    uint8_t  keyLen;          // 0, or 32 for a Meshtastic X25519 key
     uint32_t lastHeard;
     bool     used;
 };
@@ -130,6 +134,11 @@ void     setDmTarget(uint32_t num);
 uint32_t dmTarget();
 
 // ---- messages ----
+// The network's own ceiling on a text message, in BYTES of UTF-8: Meshtastic
+// caps a text at 200 (its clients show that count), and a Russian letter is
+// two of them. The compose screen counts bytes against this, so the number it
+// shows is the number the radio will actually accept.
+constexpr uint16_t TEXT_LIMIT = 200;
 constexpr uint8_t TEXT_MAX = 200;
 constexpr uint8_t MSG_MAX  = 24;
 struct Message {
@@ -156,10 +165,24 @@ uint8_t        unreadCount();
 void           markInboxRead();
 
 // Queue a channel text for the task to send. Returns false when not READY or
-// the text is empty. The copy is bounded by TEXT_MAX.
+// the text is empty. The copy is bounded by TEXT_MAX. Texts go out paced
+// (see SEND_PACE_MS): the task holds them so the node never sees two texts
+// inside its 2-second rate window.
 bool sendChannelText(uint8_t channel, const char* text);
 // A direct message to a contact: the same packet with `to` set to the node.
+// Refused (false) when the contact's public key is unknown -- without it the
+// node cannot PKI-encrypt and fails the send.
 bool sendDirectText(uint32_t toNum, const char* text);
+// Whether the node DB gave us this contact's public key (a DM prerequisite).
+bool contactHasKey(uint32_t num);
+// Minimum gap between two text writes, in ms. The node drops a second text
+// inside 2 s with RATE_LIMIT_EXCEEDED; we stay well clear of it.
+constexpr uint32_t SEND_PACE_MS = 2200;
+// The outcome of the last send, for the UI. Written by the task when a
+// QueueStatus or Routing reply names one of our packet ids; the loop takes it
+// (clearing to NONE) and toasts failures.
+enum class SendResult : uint8_t { NONE, QUEUED, SENT, RATE_LIMITED, PKI_FAILED, NO_KEY, NOT_READY, FAILED };
+SendResult takeSendResult();
 
 // Called from the shared BLE scan callback (host task). detection.cpp only
 // calls this while COMPANION mode is on and the advert looks like a node.

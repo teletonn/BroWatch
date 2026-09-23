@@ -23,6 +23,9 @@ const char* kMeshSvc  = "6ba1b218-15a8-461f-9fa8-5dcae273eafd";
 const char* kToRadio  = "f75c76d2-129e-4dad-a1dd-7866124401e7";
 const char* kFromRadio= "2c55e69e-4993-11ed-b878-0242ac120002";
 const char* kFromNum  = "ed9da18c-a800-4f66-a670-aa7547e34453";
+#if MESH_COMPANION_AUTOSTART
+const char* kLogRadio = "5a3d6e49-06e6-4423-9944-e9de8cdf9547";
+#endif
 
 constexpr uint32_t WANT_CONFIG_ID = 0x50C0FFEE;
 constexpr uint32_t BROADCAST_TO   = 0xFFFFFFFFu;
@@ -99,6 +102,7 @@ TaskHandle_t  s_task = nullptr;
 volatile uint32_t s_fromNum   = 0;
 volatile bool     s_fromNumNew= false;
 uint32_t          s_lastRead  = 0;
+uint32_t          s_lastPoll  = 0;
 
 NimBLEClient*              s_client = nullptr;
 NimBLERemoteCharacteristic* s_toRadio = nullptr;
@@ -106,6 +110,32 @@ NimBLERemoteCharacteristic* s_fromRadio = nullptr;
 
 uint32_t s_ownNodeNum = 0;
 bool     s_haveComplete = false;
+
+// -------- send pacing + delivery tracking (task writes, loop takes) --------
+// The node drops a second text inside 2 s and only has a 3-slot BLE intake
+// queue, so the task spaces text writes (SEND_PACE_MS) and remembers the ids
+// it put on the air. QueueStatus and Routing replies name those ids back.
+uint32_t s_lastTextAt = 0;
+volatile SendResult s_sendResult = SendResult::NONE;
+uint32_t s_pendingIds[8] = {0};
+uint8_t  s_pendingN = 0;
+static void pendingRemember(uint32_t id) {
+    if (!id) return;
+    for (uint8_t i = 0; i < s_pendingN; i++) if (s_pendingIds[i] == id) return;
+    if (s_pendingN < 8) s_pendingIds[s_pendingN++] = id;
+    else { memmove(s_pendingIds, s_pendingIds + 1, 7 * sizeof(uint32_t)); s_pendingIds[7] = id; }
+}
+static bool pendingMatches(uint32_t id) {
+    if (!id) return false;
+    for (uint8_t i = 0; i < s_pendingN; i++) if (s_pendingIds[i] == id) return true;
+    return false;
+}
+static void pendingDrop(uint32_t id) {
+    for (uint8_t i = 0; i < s_pendingN; i++) if (s_pendingIds[i] == id) {
+        if (i + 1 < s_pendingN) memmove(s_pendingIds + i, s_pendingIds + i + 1, (s_pendingN - i - 1) * sizeof(uint32_t));
+        s_pendingN--; return;
+    }
+}
 
 // -------- the bound node (auto-reconnect) --------
 // `s_auto` is the standing instruction to be connected; it survives attempts
@@ -206,7 +236,15 @@ static void parseUser(Pb b, Contact& c) {
         if (f == 2 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) { size_t n = l < sizeof(c.longName) - 1 ? l : sizeof(c.longName) - 1; memcpy(c.longName, d, n); c.longName[n] = '\0'; } }
         else if (f == 3 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) { size_t n = l < sizeof(c.shortName) - 1 ? l : sizeof(c.shortName) - 1; memcpy(c.shortName, d, n); c.shortName[n] = '\0'; } }
         else if (f == 7 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; c.role = (uint8_t)v; }
-        else if (f == 8 && w == 2) { const uint8_t* d; size_t l; if (pbBytes(b, d, l)) c.hasKey = (l > 0); }
+        else if (f == 8 && w == 2) {
+            const uint8_t* d; size_t l;
+            if (pbBytes(b, d, l)) {
+                c.hasKey = (l > 0);
+                size_t n = l < sizeof(c.key) ? l : sizeof(c.key);
+                memcpy(c.key, d, n);
+                c.keyLen = (uint8_t)n;
+            }
+        }
         else if (!pbSkip(b, w)) break;
     }
 }
@@ -226,13 +264,17 @@ static void parseNodeInfo(Pb b) {
     if (tmp.shortName[0]) { strncpy(c->shortName, tmp.shortName, sizeof(c->shortName) - 1); c->shortName[sizeof(c->shortName) - 1] = '\0'; }
     if (tmp.longName[0])  { strncpy(c->longName,  tmp.longName,  sizeof(c->longName)  - 1); c->longName[sizeof(c->longName) - 1] = '\0'; }
     c->role = tmp.role;
-    if (tmp.hasKey) c->hasKey = true;
+    if (tmp.hasKey) {
+        c->hasKey = true;
+        if (tmp.keyLen) { memcpy(c->key, tmp.key, tmp.keyLen); c->keyLen = tmp.keyLen; }
+    }
     if (lastHeard) c->lastHeard = lastHeard;
 }
 // Channel: index=1, settings=2, role=3. ChannelSettings: channel_num=1,
 // psk=2, name=3.
 static void parseChannel(Pb b) {
     uint32_t index = 0, role = 0; char name[13] = ""; bool hasPsk = false;
+    uint8_t psk[32] = {0}; size_t pskLen = 0;
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
@@ -245,17 +287,32 @@ static void parseChannel(Pb b) {
                     uint32_t sf, sw;
                     if (!pbTag(s, sf, sw)) break;
                     if (sf == 3 && sw == 2) { const uint8_t* d; size_t l; if (pbBytes(s, d, l)) { size_t n = l < sizeof(name) - 1 ? l : sizeof(name) - 1; memcpy(name, d, n); name[n] = '\0'; } }
-                    else if (sf == 2 && sw == 2) { const uint8_t* d; size_t l; if (pbBytes(s, d, l)) hasPsk = (l > 0); }
+                    else if (sf == 2 && sw == 2) {
+                        const uint8_t* d; size_t l;
+                        if (pbBytes(s, d, l)) {
+                            hasPsk = (l > 0);
+                            pskLen = l < sizeof(psk) ? l : sizeof(psk);
+                            memcpy(psk, d, pskLen);
+                        }
+                    }
                     else if (!pbSkip(s, sw)) break;
                 }
             }
         }
         else if (!pbSkip(b, w)) break;
     }
+    // The PRIMARY channel's universal public key. Meshtastic's default primary
+    // channel is the shared "LongFast" one, and its PSK is the single byte 0x01
+    // (base64 "AQ==") -- what every stock node ships with. A node reports it as
+    // an empty psk when the default is in force, so fill it in: without it the
+    // channel would read as unencrypted, which it is not.
+    if (role == 1 && pskLen == 0) { psk[0] = 0x01; pskLen = 1; hasPsk = true; }
     if (index < CHAN_MAX) {
         s_chans[index].index = (uint8_t)index;
         s_chans[index].role = (uint8_t)role;
         s_chans[index].hasPsk = hasPsk;
+        s_chans[index].pskLen = (uint8_t)pskLen;
+        if (pskLen) memcpy(s_chans[index].psk, psk, pskLen);
         s_chans[index].present = true;
         if (name[0]) { strncpy(s_chans[index].name, name, sizeof(s_chans[index].name) - 1); s_chans[index].name[sizeof(s_chans[index].name) - 1] = '\0'; }
         else if (role == 1) snprintf(s_chans[index].name, sizeof(s_chans[index].name), "PRIMARY");
@@ -285,12 +342,14 @@ static void pushIncoming(uint32_t fromNum, uint32_t toNum, uint8_t channel, cons
 static void parseMeshPacket(Pb b) {
     uint32_t fromNum = 0, toNum = 0; uint8_t channel = 0;
     uint32_t portnum = 0; const uint8_t* payload = nullptr; size_t plen = 0;
+    uint32_t reqId = 0, reqOf = 0;
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
         if (f == 1 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; fromNum = (uint32_t)v; }
         else if (f == 2 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; toNum = (uint32_t)v; }
         else if (f == 3 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; channel = (uint8_t)v; }
+        else if (f == 6 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; reqId = (uint32_t)v; }
         else if (f == 4 && w == 2) {  // Data
             Pb d;
             if (pbSub(b, d)) {
@@ -299,6 +358,7 @@ static void parseMeshPacket(Pb b) {
                     if (!pbTag(d, df, dw)) break;
                     if (df == 1 && dw == 0) { uint64_t v; if (!pbVarint(d, v)) break; portnum = (uint32_t)v; }
                     else if (df == 2 && dw == 2) { if (!pbBytes(d, payload, plen)) break; }
+                    else if (df == 6 && dw == 0) { uint64_t v; if (!pbVarint(d, v)) break; reqOf = (uint32_t)v; }
                     else if (!pbSkip(d, dw)) break;
                 }
             }
@@ -307,13 +367,54 @@ static void parseMeshPacket(Pb b) {
     }
     if (portnum == 1 /* TEXT_MESSAGE_APP */ && payload && plen)
         pushIncoming(fromNum, toNum, channel, payload, plen);
+    else if (portnum == 5 /* ROUTING_APP */) {
+        // A want_ack send comes back as a Routing packet addressed to us. An
+        // error_reason of NONE means the mesh took it; anything else is the
+        // reason it did not. decoded.request_id names the text it answers,
+        // so match it against what we put on the air.
+        uint32_t err = 0;
+        if (payload && plen) {
+            Pb r{ payload, plen, 0, true };
+            while (r.ok && r.i < r.n) {
+                uint32_t rf, rw;
+                if (!pbTag(r, rf, rw)) break;
+                if (rf == 3 && rw == 0) { uint64_t v; if (!pbVarint(r, v)) break; err = (uint32_t)v; }
+                else if (!pbSkip(r, rw)) break;
+            }
+        }
+        // Routing error codes (mesh.proto): NONE 0, PKI_FAILED 34,
+        // PKI_UNKNOWN_PUBKEY 35, RATE_LIMIT_EXCEEDED 38,
+        // PKI_SEND_FAIL_PUBLIC_KEY 39.
+        if (pendingMatches(reqOf)) {
+            pendingDrop(reqOf);
+            if (err == 0) s_sendResult = SendResult::SENT;
+            else if (err == 38) s_sendResult = SendResult::RATE_LIMITED;
+            else if (err == 34 || err == 35 || err == 39) s_sendResult = SendResult::PKI_FAILED;
+            else s_sendResult = SendResult::FAILED;
+        }
+        Serial.printf("[meshlink] ROUTING ack id=%08X err=%u%s\n", (unsigned)reqId, (unsigned)err,
+                      err ? " (NOT delivered)" : " (ok)");
+    }
 }
 static void parseFromRadio(const uint8_t* d, size_t n) {
     Pb b{ d, n, 0, true };
     while (b.ok && b.i < b.n) {
         uint32_t f, w;
         if (!pbTag(b, f, w)) break;
-        if (f == 2 && w == 2) { Pb p; if (pbSub(b, p)) parseMeshPacket(p); }
+#if MESH_COMPANION_AUTOSTART
+        Serial.printf("[meshlink] FromRadio field=%u wire=%u len=%u\n", (unsigned)f, (unsigned)w, (unsigned)n);
+#endif
+        if (f == 2 && w == 2) {
+            Pb p;
+            if (pbSub(b, p)) {
+#if MESH_COMPANION_AUTOSTART
+                Serial.printf("[meshlink] PKT hex:");
+                for (size_t k = 0; k < p.n && k < 40; k++) Serial.printf(" %02X", p.p[k]);
+                Serial.println();
+#endif
+                parseMeshPacket(p);
+            }
+        }
         else if (f == 3 && w == 2) {  // MyNodeInfo
             Pb m;
             if (pbSub(b, m)) {
@@ -328,6 +429,31 @@ static void parseFromRadio(const uint8_t* d, size_t n) {
         else if (f == 4 && w == 2) { Pb ni; if (pbSub(b, ni)) parseNodeInfo(ni); }
         else if (f == 7 && w == 0) { uint64_t v; if (!pbVarint(b, v)) break; s_haveComplete = true; }
         else if (f == 10 && w == 2) { Pb c; if (pbSub(b, c)) parseChannel(c); }
+        else if (f == 11 && w == 2) {  // QueueStatus: the node took (or refused) a send
+            Pb q;
+            if (pbSub(b, q)) {
+                uint32_t freeSlots = 0, maxlen = 0, res = 0, pid = 0;
+                while (q.ok && q.i < q.n) {
+                    uint32_t qf, qw;
+                    if (!pbTag(q, qf, qw)) break;
+                    uint64_t v = 0;
+                    if (qf == 1 && qw == 0) { if (!pbVarint(q, v)) break; res = (uint32_t)v; }
+                    else if (qf == 2 && qw == 0) { if (!pbVarint(q, v)) break; freeSlots = (uint32_t)v; }
+                    else if (qf == 3 && qw == 0) { if (!pbVarint(q, v)) break; maxlen = (uint32_t)v; }
+                    else if (qf == 4 && qw == 0) { if (!pbVarint(q, v)) break; pid = (uint32_t)v; }
+                    else if (!pbSkip(q, qw)) break;
+                }
+                // mesh_packet_id names the send this answers. A nonzero res is
+                // the node refusing it outright; drop the pending id so a late
+                // ack cannot resurrect it as delivered.
+                if (pendingMatches(pid)) {
+                    if (res == 0) s_sendResult = SendResult::QUEUED;
+                    else { s_sendResult = SendResult::FAILED; pendingDrop(pid); }
+                }
+                Serial.printf("[meshlink] QUEUE res=%u free=%u/%u id=%08X\n",
+                              (unsigned)res, (unsigned)freeSlots, (unsigned)maxlen, (unsigned)pid);
+            }
+        }
         else if (!pbSkip(b, w)) break;
     }
 }
@@ -341,8 +467,24 @@ void fromNumNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool)
                      ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
         s_fromNum = v;
         s_fromNumNew = true;
+#if MESH_COMPANION_AUTOSTART
+        Serial.printf("[meshlink] FromNum notify=%u\n", (unsigned)v);
+#endif
     }
 }
+
+#if MESH_COMPANION_AUTOSTART
+// The node mirrors its own firmware log to us over BLE. Reading it here is how
+// we see *why* the node drops something, without a serial console on the node.
+void logRadioNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
+    if (!len) return;
+    char buf[256];
+    size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
+    memcpy(buf, data, n); buf[n] = '\0';
+    for (size_t i = 0; i < n; i++) if (buf[i] == '\n' || buf[i] == '\r') buf[i] = ' ';
+    Serial.printf("[nodelog] %s\n", buf);
+}
+#endif
 
 // Meshtastic's Bluetooth pairing mode is FIXED_PIN (or RANDOM_PIN) by default:
 // the node requires a bonded, encrypted link before it will hand over the mesh
@@ -397,35 +539,70 @@ void sendWantConfig() {
     if (s_toRadio) s_toRadio->writeValue(buf, w.i, true);
 }
 
+// ToRadio.heartbeat (field 7, Heartbeat{nonce=1}). nonce 0 is a plain
+// keepalive the node answers with a QueueStatus; nonce 1 asks it to re-broadcast
+// our NodeInfo. Either way it proves the ToRadio write path end to end.
+void sendHeartbeat(uint32_t nonce) {
+    if (!s_toRadio) return;
+    uint8_t hb[4]; Pbw h{ hb, sizeof hb, 0 };
+    wVarintField(h, 1, nonce);                // Heartbeat.nonce
+    uint8_t buf[8]; Pbw w{ buf, sizeof buf, 0 };
+    wBytesField(w, 7, hb, h.i);               // ToRadio.heartbeat
+    s_toRadio->writeValue(buf, w.i, true);
+}
+
+// A byte cap that never splits a UTF-8 character: back off the continuation
+// bytes so a Russian letter is either sent whole or not at all.
+static size_t utf8SafeLen(const char* s, size_t cap) {
+    size_t n = strlen(s);
+    if (n <= cap) return n;
+    n = cap;
+    while (n > 0 && ((uint8_t)s[n] & 0xC0) == 0x80) n--;
+    return n;
+}
+
 bool sendChannelTextNow(uint32_t toNum, uint8_t channel, const char* text) {
     if (!s_toRadio || !text || !text[0]) return false;
+    const size_t tlen = utf8SafeLen(text, TEXT_LIMIT);
+    if (!tlen) return false;
     // ToRadio{ packet: MeshPacket{ to, channel, decoded: Data{ portnum=1, payload }, id, want_ack } }
     uint8_t data[8 + TEXT_MAX]; Pbw d{ data, sizeof data, 0 };
     wVarintField(d, 1, 1);                     // Data.portnum = TEXT_MESSAGE_APP
-    wBytesField(d, 2, (const uint8_t*)text, strlen(text));  // Data.payload
+    wBytesField(d, 2, (const uint8_t*)text, tlen);  // Data.payload
 
     uint8_t pkt[16 + sizeof data]; Pbw p{ pkt, sizeof pkt, 0 };
+    wVarintField(p, 1, s_ownNodeNum);          // MeshPacket.from (needed for local routing acks)
+    const uint32_t pid = esp_random() ? esp_random() : 1;
     wVarintField(p, 2, toNum);                 // MeshPacket.to (broadcast or a node)
     wVarintField(p, 3, channel);               // MeshPacket.channel
     wBytesField(p, 4, data, d.i);              // MeshPacket.decoded
-    wVarintField(p, 6, esp_random());          // MeshPacket.id
+    wVarintField(p, 6, pid);                   // MeshPacket.id
     wVarintField(p, 9, 3);                     // MeshPacket.hop_limit
     wVarintField(p, 10, 1);                    // MeshPacket.want_ack
 
     uint8_t out[8 + sizeof pkt]; Pbw o{ out, sizeof out, 0 };
     wBytesField(o, 1, pkt, p.i);               // ToRadio.packet
+#if MESH_COMPANION_AUTOSTART
+    Serial.printf("[meshlink] TXRAW id=%08X len=%u\n", (unsigned)pid, (unsigned)o.i);
+#endif
     bool ok = s_toRadio->writeValue(out, o.i, true);
     if (ok) {
+        pendingRemember(pid);
+        s_lastTextAt = millis();
         Message m; memset(&m, 0, sizeof m);
         m.have = true; m.unread = false; m.outgoing = true;
         m.channel = channel; m.toNum = toNum; m.fromNum = s_ownNodeNum;
         m.direct = (toNum != BROADCAST_TO && toNum != 0);
         m.at = millis();
         strncpy(m.from, "YOU", sizeof(m.from) - 1);
-        strncpy(m.body, text, TEXT_MAX);
+        memcpy(m.body, text, tlen); m.body[tlen] = '\0';
         s_last = m;
         inboxPush(m);
         if (s_inboxQ) xQueueSendToFront(s_inboxQ, &m, 0);
+        Serial.printf("[meshlink] TX %s ch%u to=%08X: %s\n",
+                      m.direct ? "DM" : "ch", (unsigned)channel, (unsigned)toNum, m.body);
+    } else {
+        Serial.println("[meshlink] TX failed: write to ToRadio refused");
     }
     return ok;
 }
@@ -504,14 +681,22 @@ void doConnect(uint8_t index) {
     }
 
     if (wasScanning) sc->start(0, false, false);
-    Serial.println("[meshlink] discovering GATT");
+    Serial.printf("[meshlink] discovering GATT (MTU=%u)\n", (unsigned)s_client->getMTU());
     NimBLERemoteService* svc = s_client->getService(NimBLEUUID(kMeshSvc));
     if (!svc) { snprintf(s_reason, sizeof s_reason, "no mesh service"); s_client->disconnect(); s_state = State::ERROR; return; }
     s_toRadio   = svc->getCharacteristic(NimBLEUUID(kToRadio));
     s_fromRadio = svc->getCharacteristic(NimBLEUUID(kFromRadio));
     NimBLERemoteCharacteristic* fromNum = svc->getCharacteristic(NimBLEUUID(kFromNum));
+#if MESH_COMPANION_AUTOSTART
+    NimBLERemoteCharacteristic* logRadio = svc->getCharacteristic(NimBLEUUID(kLogRadio));
+    Serial.printf("[meshlink] chars: to=%p from=%p num=%p log=%p\n", (void*)s_toRadio, (void*)s_fromRadio, (void*)fromNum, (void*)logRadio);
+#else
     Serial.printf("[meshlink] chars: to=%p from=%p num=%p\n", (void*)s_toRadio, (void*)s_fromRadio, (void*)fromNum);
+#endif
     if (!s_toRadio || !s_fromRadio) { snprintf(s_reason, sizeof s_reason, "no chars"); s_client->disconnect(); s_state = State::ERROR; return; }
+#if MESH_COMPANION_AUTOSTART
+    if (logRadio) logRadio->subscribe(true, logRadioNotify);
+#endif
 
     // Baseline the doorbell so the READY drain knows what is new.
     if (fromNum) {
@@ -540,11 +725,26 @@ void doDisconnect() {
 void taskLoop(void*) {
     Req r;
     for (;;) {
-        while (s_reqQ && xQueueReceive(s_reqQ, &r, 0) == pdTRUE) {
+        bool paced = false;
+        while (!paced && s_reqQ && xQueueReceive(s_reqQ, &r, 0) == pdTRUE) {
             switch (r.kind) {
                 case Req::CONNECT:    doConnect(r.channel); break;
                 case Req::DISCONNECT: doDisconnect(); break;
-                case Req::SEND:       sendChannelTextNow(r.to, r.channel, r.text); break;
+                case Req::SEND: {
+                    // Pace texts: the node drops a second text inside 2 s and
+                    // its BLE intake holds three writes. Requeue to the front
+                    // so order is kept, then yield so other work still runs.
+                    if (s_lastTextAt) {
+                        int32_t wait = (int32_t)(s_lastTextAt + SEND_PACE_MS - millis());
+                        if (wait > 0) {
+                            xQueueSendToFront(s_reqQ, &r, 0);
+                            paced = true;
+                            break;
+                        }
+                    }
+                    sendChannelTextNow(r.to, r.channel, r.text);
+                    break;
+                }
                 case Req::SCAN_ON:    s_scanning = true;  if (s_state == State::OFF) s_state = State::SCANNING; break;
                 case Req::SCAN_OFF:   s_scanning = false; if (s_state == State::SCANNING) s_state = State::OFF; break;
             }
@@ -575,14 +775,24 @@ void taskLoop(void*) {
 #endif
             }
         } else if (s_state == State::READY) {
-            if (s_fromNumNew) {
+            // Drain whenever the doorbell rang, or on a slow poll. The notify
+            // is an optimisation, not the only way in: a missed notification
+            // must not strand a message, and after the config dump this is the
+            // only place incoming texts and routing acks are read.
+            if (s_fromNumNew || (millis() - s_lastPoll) > 400) {
                 s_fromNumNew = false;
-                uint32_t diff = s_fromNum - s_lastRead;
-                if (diff > 8) diff = 8;          // bound the work per tick
-                for (uint32_t i = 0; i < diff; i++) {
+                s_lastPoll   = millis();
+                for (int i = 0; i < 16; i++) {
                     if (!readOneFromRadio()) break;
                     s_lastRead++;
                 }
+            }
+            // A periodic keepalive: the node answers with a QueueStatus, which
+            // proves the ToRadio path and keeps the session alive.
+            static uint32_t s_lastBeat = 0;
+            if ((millis() - s_lastBeat) > 30000) {
+                s_lastBeat = millis();
+                sendHeartbeat(0);
             }
             if (s_client && !s_client->isConnected()) {
                 s_reason[0] = '\0';
@@ -666,6 +876,7 @@ void begin() {
     NimBLEDevice::setSecurityIOCap(4 /* BLE_HS_IO_KEYBOARD_DISPLAY */);
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityPasskey(kPairPin);
+    NimBLEDevice::setMTU(517);   // long ToRadio writes need a big ATT MTU
     xTaskCreatePinnedToCore(taskLoop, "meshlink", 8192, nullptr, 1, &s_task, 0);
 #if MESH_COMPANION_AUTOSTART
     Serial.println("[meshlink] AUTOSTART: scanning + auto-connect");
@@ -757,7 +968,8 @@ void           setSendChannel(uint8_t i) { s_sendChan = i; }
 uint8_t        sendChannel() { return s_sendChan; }
 
 bool sendChannelText(uint8_t channel, const char* text) {
-    if (s_state != State::READY || !text || !text[0] || !s_reqQ) return false;
+    if (s_state != State::READY || !s_reqQ) { s_sendResult = SendResult::NOT_READY; return false; }
+    if (!text || !text[0]) return false;
     Req r; memset(&r, 0, sizeof r);
     r.kind = Req::SEND; r.channel = channel; r.to = BROADCAST_TO;
     strncpy(r.text, text, TEXT_MAX);
@@ -765,11 +977,26 @@ bool sendChannelText(uint8_t channel, const char* text) {
 }
 
 bool sendDirectText(uint32_t toNum, const char* text) {
-    if (s_state != State::READY || !text || !text[0] || !s_reqQ || !toNum) return false;
+    if (s_state != State::READY || !s_reqQ) { s_sendResult = SendResult::NOT_READY; return false; }
+    if (!text || !text[0] || !toNum) return false;
+    // No public key, no PKI: the node cannot encrypt a DM to this contact and
+    // fails it outright. Refuse early so the UI can say why.
+    if (!contactHasKey(toNum)) { s_sendResult = SendResult::NO_KEY; return false; }
     Req r; memset(&r, 0, sizeof r);
     r.kind = Req::SEND; r.channel = 0; r.to = toNum;   // DMs go on the primary channel
     strncpy(r.text, text, TEXT_MAX);
     return xQueueSend(s_reqQ, &r, 0) == pdTRUE;
+}
+
+bool contactHasKey(uint32_t num) {
+    Contact* c = findContact(num);
+    return c && c->hasKey && c->keyLen > 0;
+}
+
+SendResult takeSendResult() {
+    SendResult r = s_sendResult;
+    s_sendResult = SendResult::NONE;
+    return r;
 }
 
 uint8_t        contactCount() { return s_contactN; }

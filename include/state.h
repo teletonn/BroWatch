@@ -200,6 +200,7 @@ enum class AppState : uint8_t {
     ,MESH_LINK_CHANNELS = 39, // COMPANION: pick the channel a message goes to
     MESH_LINK_CONTACTS = 40,  // COMPANION: nodes heard; pick one for a DM
     MESH_LINK_COMPOSE  = 41   // COMPANION: the payphone keyboard, for a message
+    ,MESH_LINK_TEMPLATE = 42   // COMPANION: the SEND chooser (templates + MANUAL)
 #endif
 };
 
